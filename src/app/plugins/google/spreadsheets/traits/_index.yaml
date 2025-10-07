@@ -1,0 +1,119 @@
+version: "1.0"
+namespace: app.plugins.google.spreadsheets.traits
+
+entries:
+  # app.plugins.google.spreadsheets.traits:google_sheets
+  - name: google_sheets
+    kind: function.lua
+    meta:
+      type: tool
+      title: Google Sheets Operations
+      tags:
+        - google
+        - sheets
+        - spreadsheets
+        - data
+      description: Comprehensive Google Sheets operations including read, write, append, clear, and create
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "enum": ["get_info", "read", "write", "append", "clear", "create", "list"],
+              "description": "Operation to perform"
+            },
+            "spreadsheet_id": {
+              "type": "string",
+              "description": "Google Sheets spreadsheet ID (required for all except create)"
+            },
+            "range": {
+              "type": "string",
+              "description": "A1 notation range (required for read, write, append, clear)"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "description": "2D array of values (required for write, append)"
+            },
+            "title": {
+              "type": "string",
+              "description": "Title for new spreadsheet (required for create)"
+            },
+            "value_input_option": {
+              "type": "string",
+              "enum": ["RAW", "USER_ENTERED"],
+              "description": "How values should be interpreted (for write, append)",
+              "default": "USER_ENTERED"
+            },
+            "value_render_option": {
+              "type": "string",
+              "enum": ["FORMATTED_VALUE", "UNFORMATTED_VALUE", "FORMULA"],
+              "description": "How values should be rendered (for read)",
+              "default": "FORMATTED_VALUE"
+            },
+            "page_size": {
+              "type": "integer",
+              "description": "Number of spreadsheets to return (for list command, max 1000)",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          "required": ["command"],
+          "additionalProperties": false
+        }
+      llm_alias: GoogleSheets
+      llm_description: Comprehensive Google Sheets operations. Use get_info to see spreadsheet details, read to get data, write to update cells, append to add rows, clear to remove data, create to make new spreadsheets, list to browse spreadsheets.
+    source: file://google_sheets.lua
+    modules:
+      - json
+    imports:
+      sheets_client: app.plugins.google.spreadsheets:sheets_client
+    method: handler
+    
+  # app.plugins.google.spreadsheets.traits:spreadsheets_manager
+  - name: spreadsheets_manager
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      comment: Adds Google Sheets capabilities to agents
+      tags:
+        - google
+        - sheets
+        - spreadsheets
+        - data
+        - trait
+      icon: tabler:table
+    prompt: |-
+      You have access to Google Sheets tools. Use these to help users manage their Google Spreadsheets.
+    
+      **Available capabilities:**
+      - Get spreadsheet metadata and sheet information
+      - Read data from ranges using A1 notation (e.g., "Sheet1!A1:C10")
+      - Write data to specific ranges
+      - Append new rows to spreadsheets
+      - Clear ranges of data
+      - Create new spreadsheets
+      - List user's Google Spreadsheets
+      - Perform batch operations
+    
+      **Important guidelines:**
+      - Use A1 notation for ranges (e.g., "Sheet1!A1:B10", "Data!A:C")
+      - When reading data, consider if you need the whole sheet or specific range
+      - Be careful with write operations - they modify user data
+      - Always confirm before making changes to existing data
+      - Use appropriate value input options (USER_ENTERED for formulas, RAW for literal text)
+    
+      **Usage examples:**
+      - "Show me the spreadsheet info" → Use google_sheets with command "get_info"
+      - "Read data from A1 to C10" → Use google_sheets with command "read", range "Sheet1!A1:C10"
+      - "Add a new row" → Use google_sheets with command "append"
+      - "Update cell B2" → Use google_sheets with command "write", range "Sheet1!B2"
+      - "List my spreadsheets" → Use google_sheets with command "list"
+    tools:
+      - app.plugins.google.spreadsheets.traits:google_sheets
+    

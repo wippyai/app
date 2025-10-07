@@ -1,0 +1,20 @@
+version: "1.0"
+namespace: app.plugins.google.docs
+
+entries:
+  # app.plugins.google.docs:docs_client
+  - name: docs_client
+    kind: library.lua
+    meta:
+      comment: Google Docs API client library with document operations
+      tags:
+        - google
+        - docs
+        - documents
+        - client
+    source: file://docs_client.lua
+    modules:
+      - json
+    imports:
+      google_client: app.plugins.google:google_client
+    

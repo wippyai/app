@@ -1,0 +1,628 @@
+version: "1.0"
+namespace: app.drafling.strategy
+
+entries:
+  # app.drafling.strategy:strategic_decision
+  - name: strategic_decision
+    kind: registry.entry
+    meta:
+      name: Strategic Decision Framework
+      type: drafling.template
+      comment: Comprehensive template for strategic decision-making and execution planning
+      tags:
+        - drafling
+        - strategy
+        - decision
+        - framework
+        - planning
+      icon: tabler:chess-king
+      description: Advanced template for strategic decisions with structured analysis, options evaluation, and implementation tracking
+    template:
+      agent_id: app.drafling.strategy:strategy_agent
+      categories:
+        - name: context_assessment
+          icon: tabler:compass
+          display_name: Context & Assessment
+          entry_types:
+            - situation_analysis
+            - stakeholder_map
+            - constraints
+            - assumptions
+        - name: strategic_options
+          icon: tabler:git-branch
+          display_name: Strategic Options
+          entry_types:
+            - option
+            - comparison_matrix
+            - pros_cons
+            - scenario
+            - risk
+            - mitigation
+        - name: decision_framework
+          icon: tabler:scale
+          display_name: Decision Framework
+          entry_types:
+            - criteria
+            - evaluation
+            - recommendation
+            - decision
+        - name: implementation
+          icon: tabler:rocket
+          display_name: Implementation & Monitoring
+          entry_types:
+            - action_plan
+            - milestone
+            - resource_allocation
+            - communication_plan
+            - success_metric
+            - monitoring_plan
+            - review_checkpoint
+            - lessons_learned
+      entry_types:
+        action_plan:
+          icon: tabler:list-check
+          content_type: text/markdown
+          color: green
+          default_status: draft
+          display_name: Action Plan
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Approved
+              value: approved
+            - color: yellow
+              display_name: In Progress
+              value: in_progress
+            - color: green
+              display_name: Completed
+              value: completed
+            - color: red
+              display_name: Blocked
+              value: blocked
+        assumptions:
+          icon: tabler:help-hexagon
+          content_type: text/markdown
+          color: purple
+          default_status: draft
+          display_name: Key Assumptions
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: green
+              display_name: Validated
+              value: validated
+            - color: yellow
+              display_name: Challenged
+              value: challenged
+            - color: red
+              display_name: Invalidated
+              value: invalidated
+        communication_plan:
+          icon: tabler:speakerphone
+          content_type: text/markdown
+          color: cyan
+          default_status: draft
+          display_name: Communication Plan
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Ready
+              value: ready
+            - color: green
+              display_name: Active
+              value: active
+            - color: gray
+              display_name: Completed
+              value: completed
+        comparison_matrix:
+          icon: tabler:table
+          content_type: text/markdown
+          color: indigo
+          default_status: draft
+          display_name: Comparison Matrix
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: green
+              display_name: Complete
+              value: complete
+            - color: blue
+              display_name: Updated
+              value: updated
+        constraints:
+          icon: tabler:lock
+          content_type: text/markdown
+          color: red
+          default_status: draft
+          display_name: Constraints
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: yellow
+              display_name: Identified
+              value: identified
+            - color: blue
+              display_name: Accepted
+              value: accepted
+            - color: green
+              display_name: Resolved
+              value: resolved
+        criteria:
+          icon: tabler:checklist
+          content_type: text/markdown
+          color: teal
+          default_status: draft
+          display_name: Decision Criteria
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Defined
+              value: defined
+            - color: green
+              display_name: Weighted
+              value: weighted
+            - color: indigo
+              display_name: Applied
+              value: applied
+        decision:
+          icon: tabler:gavel
+          content_type: text/markdown
+          color: red
+          default_status: draft
+          display_name: Strategic Decision
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: yellow
+              display_name: Proposed
+              value: proposed
+            - color: orange
+              display_name: Under Review
+              value: under_review
+            - color: green
+              display_name: Approved
+              value: approved
+            - color: red
+              display_name: Rejected
+              value: rejected
+            - color: gray
+              display_name: Deferred
+              value: deferred
+            - color: blue
+              display_name: Implemented
+              value: implemented
+        evaluation:
+          icon: tabler:adjustments
+          content_type: text/markdown
+          color: blue
+          default_status: draft
+          display_name: Option Evaluation
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: yellow
+              display_name: In Progress
+              value: in_progress
+            - color: green
+              display_name: Complete
+              value: complete
+            - color: orange
+              display_name: Revised
+              value: revised
+        lessons_learned:
+          icon: tabler:book
+          content_type: text/markdown
+          color: emerald
+          default_status: draft
+          display_name: Lessons Learned
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Documented
+              value: documented
+            - color: green
+              display_name: Reviewed
+              value: reviewed
+            - color: indigo
+              display_name: Applied
+              value: applied
+        milestone:
+          icon: tabler:flag-3
+          content_type: text/markdown
+          color: yellow
+          default_status: draft
+          display_name: Milestone
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Planned
+              value: planned
+            - color: yellow
+              display_name: Upcoming
+              value: upcoming
+            - color: green
+              display_name: Achieved
+              value: achieved
+            - color: red
+              display_name: Missed
+              value: missed
+            - color: orange
+              display_name: Revised
+              value: revised
+        mitigation:
+          icon: tabler:shield-check
+          content_type: text/markdown
+          color: lime
+          default_status: draft
+          display_name: Risk Mitigation
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Planned
+              value: planned
+            - color: green
+              display_name: Active
+              value: active
+            - color: gray
+              display_name: Completed
+              value: completed
+        monitoring_plan:
+          icon: tabler:eye
+          content_type: text/markdown
+          color: indigo
+          default_status: draft
+          display_name: Monitoring Plan
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: green
+              display_name: Active
+              value: active
+            - color: yellow
+              display_name: Paused
+              value: paused
+            - color: gray
+              display_name: Archived
+              value: archived
+        option:
+          icon: tabler:route
+          content_type: text/markdown
+          color: blue
+          default_status: draft
+          display_name: Strategic Option
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: yellow
+              display_name: Under Consideration
+              value: under_consideration
+            - color: blue
+              display_name: Shortlisted
+              value: shortlisted
+            - color: green
+              display_name: Selected
+              value: selected
+            - color: red
+              display_name: Rejected
+              value: rejected
+            - color: orange
+              display_name: Backup Option
+              value: backup
+        pros_cons:
+          icon: tabler:arrows-left-right
+          content_type: text/markdown
+          color: amber
+          default_status: draft
+          display_name: Pros & Cons
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: green
+              display_name: Complete
+              value: complete
+            - color: blue
+              display_name: Revised
+              value: revised
+        recommendation:
+          icon: tabler:thumb-up
+          content_type: text/markdown
+          color: green
+          default_status: draft
+          display_name: Recommendation
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Submitted
+              value: submitted
+            - color: green
+              display_name: Accepted
+              value: accepted
+            - color: red
+              display_name: Rejected
+              value: rejected
+            - color: yellow
+              display_name: Modified
+              value: modified
+        resource_allocation:
+          icon: tabler:users-group
+          content_type: text/markdown
+          color: teal
+          default_status: draft
+          display_name: Resource Allocation
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: yellow
+              display_name: Proposed
+              value: proposed
+            - color: green
+              display_name: Approved
+              value: approved
+            - color: blue
+              display_name: Allocated
+              value: allocated
+        review_checkpoint:
+          icon: tabler:calendar-check
+          content_type: text/markdown
+          color: purple
+          default_status: draft
+          display_name: Review Checkpoint
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Scheduled
+              value: scheduled
+            - color: yellow
+              display_name: In Progress
+              value: in_progress
+            - color: green
+              display_name: Completed
+              value: completed
+            - color: red
+              display_name: Overdue
+              value: overdue
+        risk:
+          icon: tabler:alert-triangle
+          content_type: text/markdown
+          color: red
+          default_status: draft
+          display_name: Risk Assessment
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: yellow
+              display_name: Identified
+              value: identified
+            - color: orange
+              display_name: Assessed
+              value: assessed
+            - color: green
+              display_name: Mitigated
+              value: mitigated
+            - color: blue
+              display_name: Accepted
+              value: accepted
+            - color: red
+              display_name: Realized
+              value: realized
+        scenario:
+          icon: tabler:timeline-event
+          content_type: text/markdown
+          color: violet
+          default_status: draft
+          display_name: Scenario Analysis
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Modeled
+              value: modeled
+            - color: yellow
+              display_name: Tested
+              value: tested
+            - color: green
+              display_name: Validated
+              value: validated
+        situation_analysis:
+          icon: tabler:analyze
+          content_type: text/markdown
+          color: blue
+          default_status: draft
+          display_name: Situation Analysis
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: yellow
+              display_name: In Progress
+              value: in_progress
+            - color: green
+              display_name: Complete
+              value: complete
+            - color: blue
+              display_name: Updated
+              value: updated
+        stakeholder_map:
+          icon: tabler:network
+          content_type: text/markdown
+          color: cyan
+          default_status: draft
+          display_name: Stakeholder Map
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Mapped
+              value: mapped
+            - color: green
+              display_name: Analyzed
+              value: analyzed
+            - color: indigo
+              display_name: Engaged
+              value: engaged
+        success_metric:
+          icon: tabler:target-arrow
+          content_type: text/markdown
+          color: green
+          default_status: draft
+          display_name: Success Metric
+          statuses:
+            - color: gray
+              display_name: Draft
+              value: draft
+            - color: blue
+              display_name: Defined
+              value: defined
+            - color: yellow
+              display_name: Baselined
+              value: baselined
+            - color: green
+              display_name: Tracking
+              value: tracking
+            - color: emerald
+              display_name: Achieved
+              value: achieved
+            - color: red
+              display_name: Missed
+              value: missed
+    
+  # app.drafling.strategy:strategy_agent
+  - name: strategy_agent
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Strategic Decision Assistant
+      comment: AI assistant specialized in strategic decision-making and framework application
+      group: Strategy
+      tags:
+        - drafling
+        - strategy
+        - decision
+        - analysis
+        - framework
+      icon: tabler:chess-king
+      class:
+        - contextual
+    prompt: |-
+      You are a Strategic Decision Assistant, an AI expert in strategic thinking, decision-making frameworks, and implementation planning.
+    
+      ## Your Expertise Includes:
+    
+      **Strategic Analysis:**
+      - Situation assessment (SWOT, PESTLE, Porter's Five Forces)
+      - Stakeholder mapping and analysis
+      - Constraint identification and management
+      - Assumption validation and testing
+    
+      **Decision Frameworks:**
+      - Options generation and evaluation
+      - Decision criteria development and weighting
+      - Comparison matrices and scoring models
+      - Scenario planning and sensitivity analysis
+      - Risk-return tradeoffs
+    
+      **Implementation Excellence:**
+      - Action planning with clear accountability
+      - Resource allocation and optimization
+      - Milestone tracking and dependency management
+      - Communication strategy and change management
+    
+      **Strategic Thinking Approaches:**
+      - First Principles thinking - break down complex problems to fundamental truths
+      - Systems thinking - understand interdependencies and feedback loops
+      - Probabilistic thinking - work with uncertainty and multiple scenarios
+      - Inversion - consider what could go wrong and work backwards
+      - Strategic paradoxes - balance competing priorities (e.g., efficiency vs innovation)
+    
+      ## Your Process:
+    
+      1. **Clarify the Decision Context:**
+         - What is the strategic question or opportunity?
+         - What are the constraints and non-negotiables?
+         - Who are the key stakeholders and decision makers?
+         - What is the timeline for decision and implementation?
+    
+      2. **Structure the Analysis:**
+         - Break down complex decisions into manageable components
+         - Identify key uncertainties and assumptions
+         - Map dependencies and interconnections
+         - Prioritize analysis efforts based on impact
+    
+      3. **Generate and Evaluate Options:**
+         - Use creative techniques to generate diverse options
+         - Apply consistent evaluation criteria
+         - Consider second and third-order effects
+         - Test options against multiple scenarios
+    
+      4. **Make Recommendations:**
+         - Present clear, evidence-based recommendations
+         - Highlight key trade-offs and risks
+         - Provide contingency plans
+         - Define success metrics and monitoring approach
+    
+      5. **Support Implementation:**
+         - Create detailed action plans
+         - Identify quick wins and long-term initiatives
+         - Establish review checkpoints
+         - Document lessons learned
+    
+      ## Key Principles:
+    
+      - **Avoid Analysis Paralysis:** Balance thoroughness with timeliness. Use the 80/20 rule.
+      - **Challenge Assumptions:** Question "why" repeatedly. Test critical assumptions early.
+      - **Consider Reversibility:** Prefer reversible decisions when uncertainty is high.
+      - **Think in Bets:** Frame decisions probabilistically, not as binary outcomes.
+      - **Embrace Optionality:** Preserve flexibility where valuable.
+      - **Learn Fast:** Build in rapid feedback loops to course-correct.
+    
+      ## Common Strategic Pitfalls to Avoid:
+    
+      - Confirmation bias - seeking only supporting evidence
+      - Sunk cost fallacy - throwing good money after bad
+      - False dichotomies - missing creative third options
+      - Short-term thinking - optimizing for immediate gains
+      - Groupthink - lack of diverse perspectives
+      - Perfect being enemy of good - over-optimizing
+    
+      When working on strategic decisions:
+      - Start by understanding the real problem, not just symptoms
+      - Use structured frameworks but adapt them to context
+      - Quantify where possible, but don't ignore qualitative factors
+      - Document reasoning for future reference
+      - Build consensus through transparent process
+    
+      Remember: Good strategy is about making coherent choices that create sustainable competitive advantage. Focus on what truly matters and be willing to say no to good opportunities that don't fit the strategic direction.
+    model: claude-4-sonnet
+    temperature: 0.2
+    max_tokens: 8192
+    traits:
+      - userspace.drafling.traits:drafling_editor
+    

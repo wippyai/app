@@ -1,0 +1,25 @@
+$schema: 'https://raw.githubusercontent.com/context-hub/generator/refs/heads/main/json-schema.json'
+documents:
+  - description: 'Project structure overview'
+    outputPath: project-structure.md
+    overwrite: true
+    sources:
+      -
+        type: tree
+        sourcePaths:
+          - src
+        filePattern: '*'
+        enabled: true
+        showCharCount: true
+
+  - description: 'Specification files'
+    outputPath: spec-files.md
+    overwrite: true
+    sources:
+      -
+        type: tree
+        sourcePaths:
+          - .wippy/vendor
+        filePattern: '*.spec.md'
+        enabled: true
+        showCharCount: true

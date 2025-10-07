@@ -1,0 +1,150 @@
+version: "1.0"
+namespace: app.plugins.google
+
+entries:
+  # app.plugins.google:client_id
+  - name: client_id
+    kind: env.variable
+    meta:
+      comment: Google OAuth client ID
+      icon: tabler:brand-google
+    storage: app.env:router
+    variable: GOOGLE_CLIENT_ID
+    
+  # app.plugins.google:client_secret
+  - name: client_secret
+    kind: env.variable
+    meta:
+      comment: Google OAuth client secret
+      icon: tabler:brand-google
+    storage: app.env:router
+    variable: GOOGLE_CLIENT_SECRET
+    
+  # app.plugins.google:google
+  - name: google
+    kind: registry.entry
+    meta:
+      name: Google
+      type: component
+      title: Google Services
+      comment: OAuth connection to Google services (Gmail, Drive, Calendar, etc.)
+      group: Productivity
+      tags:
+        - email
+        - cloud-storage
+        - calendar
+        - productivity
+        - documents
+      class:
+        - connection
+        - oauth_connection
+        - google_services
+        - productivity
+        - email_provider
+        - storage_provider
+      component:
+        icon: tabler:brand-google
+        create_ui_id: userspace.oauth.views:create_oauth_connection/google
+        manage_ui_id: userspace.oauth.views:manage_oauth_connection
+      oauth_provider: google
+    description: Connect to Google services to access your Gmail, Google Drive, and Google Calendar
+    depends_on:
+      - app.plugins.google:client_id
+      - app.plugins.google:client_secret
+      - app.plugins.google:client_id
+      - app.plugins.google:client_secret
+      - app.plugins.google:client_id
+      - app.plugins.google:client_secret
+      - app.plugins.google:client_id
+      - app.plugins.google:client_secret
+      - app.plugins.google:client_id
+      - app.plugins.google:client_secret
+    available_scopes:
+      - name: Email Address
+        description: Access your email address
+        scope: https://www.googleapis.com/auth/userinfo.email
+      - name: Basic Profile
+        description: View your basic profile information (name, photo)
+        scope: https://www.googleapis.com/auth/userinfo.profile
+      - name: Sign In
+        description: Sign you in securely
+        scope: openid
+      - name: Read Gmail
+        description: Read your email messages and settings
+        scope: https://www.googleapis.com/auth/gmail.readonly
+      - name: Manage Gmail
+        description: Read, send, and manage your email messages
+        scope: https://www.googleapis.com/auth/gmail.modify
+      - name: Compose Gmail
+        description: Draft and send new email messages
+        scope: https://www.googleapis.com/auth/gmail.compose
+      - name: View Google Drive Files
+        description: View and download your Google Drive files
+        scope: https://www.googleapis.com/auth/drive.readonly
+      - name: Manage Google Drive Files
+        description: View, edit, create, and delete your Google Drive files
+        scope: https://www.googleapis.com/auth/drive
+      - name: Read Google Docs
+        description: Read your Google Docs for AI analysis and processing
+        scope: https://www.googleapis.com/auth/documents.readonly
+      - name: Manage Google Docs
+        description: Create, edit, and manage your Google Docs
+        scope: https://www.googleapis.com/auth/documents
+      - name: Read Google Sheets
+        description: Read your Google Sheets data for analysis
+        scope: https://www.googleapis.com/auth/spreadsheets.readonly
+      - name: Manage Google Sheets
+        description: Create, edit, and manage your Google Sheets
+        scope: https://www.googleapis.com/auth/spreadsheets
+      - name: Read Google Slides
+        description: Read your Google Slides presentations
+        scope: https://www.googleapis.com/auth/presentations.readonly
+      - name: Manage Google Slides
+        description: Create, edit, and manage your Google Slides presentations
+        scope: https://www.googleapis.com/auth/presentations
+      - name: View Calendar
+        description: View your calendar events and details
+        scope: https://www.googleapis.com/auth/calendar.readonly
+      - name: Manage Calendar
+        description: View, create, and edit your calendar events
+        scope: https://www.googleapis.com/auth/calendar
+      - name: View Calendar Events
+        description: View your calendar events (lighter access than full calendar)
+        scope: https://www.googleapis.com/auth/calendar.events.readonly
+      - name: Manage Calendar Events
+        description: Create and edit calendar events
+        scope: https://www.googleapis.com/auth/calendar.events
+    component_contract_id: userspace.oauth:oauth_connection
+    connector_contract:
+      context_values:
+        oauth_authorization_endpoint: https://accounts.google.com/o/oauth2/v2/auth
+        oauth_client_id_env: app.plugins.google:client_id
+        oauth_client_secret_env: app.plugins.google:client_secret
+        oauth_token_endpoint: https://oauth2.googleapis.com/token
+        oauth_userinfo_endpoint: https://www.googleapis.com/oauth2/v2/userinfo
+      implementation_id: userspace.oauth:base_connector
+    default_scopes:
+      - openid
+      - https://www.googleapis.com/auth/userinfo.profile
+      - https://www.googleapis.com/auth/userinfo.email
+    
+  # app.plugins.google:google_client
+  - name: google_client
+    kind: library.lua
+    meta:
+      name: Google Client
+      comment: Google API client library for OAuth connection discovery and HTTP requests
+      tags:
+        - google
+        - client
+        - library
+        - oauth
+        - api
+      description: Provides interface for opening Google OAuth connections and making authenticated API requests
+    source: file://google_client.lua
+    modules:
+      - json
+      - http_client
+    imports:
+      component: userspace.component:component
+    

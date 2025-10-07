@@ -1,0 +1,497 @@
+version: "1.0"
+namespace: app.plugins.jira
+
+entries:
+  # app.plugins.jira:jira
+  - name: jira
+    kind: registry.entry
+    meta:
+      name: Jira
+      type: component
+      title: Jira
+      comment: Connection to Jira for issue tracking and project management
+      group: Project Management
+      tags:
+        - issues
+        - project-management
+        - tracking
+        - agile
+        - tickets
+      class:
+        - connection
+        - credential_connection
+        - jira_services
+      component:
+        icon: tabler:bug
+        create_ui_id: userspace.credentials.views:create_credential_connection/jira
+        manage_ui_id: userspace.credentials.views:manage_credential_connection
+      credential_provider: jira
+    component_contract_id: app.plugins.jira.service:jira_rest_service
+    credential_schema:
+      type: object
+      properties:
+        api_token:
+          type: string
+          title: API Token
+          description: Jira API token for Cloud authentication
+          min_length: 10
+          placeholder: Generated from Atlassian account settings
+        email:
+          type: string
+          title: Email Address
+          description: Your Jira account email address (for Cloud instances ending with .atlassian.net)
+          format: email
+          placeholder: your.email@company.com
+        personal_access_token:
+          type: string
+          title: Personal Access Token
+          description: Personal Access Token for Server/Data Center authentication
+          min_length: 10
+          placeholder: Generated from Jira user profile
+        server_url:
+          type: string
+          title: Jira Server URL
+          description: Your Jira instance URL
+          format: uri
+          pattern: ^https?://.+
+          placeholder: https://company.atlassian.net or https://jira.company.com
+        username:
+          type: string
+          title: Username
+          description: Your Jira username (for self-hosted Server/Data Center instances)
+          min_length: 2
+          placeholder: Your Jira username
+      required:
+        - server_url
+    ui_config:
+      description: |-
+        Connect to your Jira instance for seamless issue tracking and project management integration. This connector supports both Jira Cloud and self-hosted Server/Data Center instances.
+    
+        Authentication Guide:
+    
+        For Jira Cloud (URLs ending with .atlassian.net):
+        • Use your email address and an API token
+        • Generate tokens using the API Token Generation link below
+    
+        For Jira Server/Data Center (self-hosted instances):
+        • Use your username and a Personal Access Token
+        • Create PATs in your Jira user profile → Personal access tokens
+    
+        Capabilities:
+        • Create, read, update, and delete Jira issues
+        • Search and filter issues with JQL queries
+        • Manage issue transitions and workflows
+        • Access project and board information
+        • Retrieve user and permission data
+      field_groups:
+        - name: connection
+          title: Connection Details
+          icon: tabler:server
+          description: Enter your Jira server URL
+          fields:
+            - server_url
+        - name: cloud_auth
+          title: Cloud Authentication
+          icon: tabler:cloud
+          description: For Jira Cloud instances (*.atlassian.net) - use email + API token
+          fields:
+            - email
+            - api_token
+        - name: server_auth
+          title: Server Authentication
+          icon: tabler:building
+          description: For self-hosted Jira Server/Data Center - use username + Personal Access Token
+          fields:
+            - username
+            - personal_access_token
+      field_order:
+        - server_url
+        - email
+        - api_token
+        - username
+        - personal_access_token
+      reference_urls:
+        - name: api_token_generation
+          type: setup
+          title: Generate API Tokens
+          icon: tabler:key
+          description: Create API tokens for Jira Cloud authentication
+          url: https://id.atlassian.com/manage-profile/security/api-tokens
+        - name: api_documentation
+          type: documentation
+          title: Jira REST API Documentation
+          icon: tabler:book
+          description: Complete API reference and integration guides
+          url: https://developer.atlassian.com/cloud/jira/platform/rest/v3/
+        - name: setup_help
+          type: help
+          title: API Token Setup Guide
+          icon: tabler:help-circle
+          description: Step-by-step guide for managing Atlassian API tokens
+          url: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
+      sensitive_fields:
+        - api_token
+        - personal_access_token
+    validation_contract_id: app.plugins.jira:jira_validator
+    
+  # app.plugins.jira:jira_client
+  - name: jira_client
+    kind: library.lua
+    meta:
+      name: Jira Client
+      comment: Minimal Jira client library for contract opening with auto-discovery
+      tags:
+        - jira
+        - client
+        - library
+        - minimal
+      description: Provides minimal interface for opening Jira REST contract with automatic component discovery
+    source: file://jira_client.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+    
+  # app.plugins.jira:jira_rest_contract
+  - name: jira_rest_contract
+    kind: contract.definition
+    meta:
+      comment: Low-level Jira REST API contract - handles auth and HTTP mechanics
+      tags:
+        - jira
+        - rest
+        - http
+        - low-level
+      description: Provides low-level HTTP access to Jira REST API with authentication handling
+    methods:
+      - name: get
+        description: |
+          Perform authenticated GET request to Jira REST API.
+          Calling: get(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/api/2/issue/PROJ-123')"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: post
+        description: |
+          Perform authenticated POST request to Jira REST API. Requires WRITE access.
+          Calling: post(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/api/2/issue')"
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "Request body (will be JSON encoded)"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: put
+        description: |
+          Perform authenticated PUT request to Jira REST API. Requires WRITE access.
+          Calling: put(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/api/2/issue/PROJ-123')"
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "Request body (will be JSON encoded)"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: patch
+        description: |
+          Perform authenticated PATCH request to Jira REST API. Requires WRITE access.
+          Calling: patch(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/api/2/issue/PROJ-123')"
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "Request body (will be JSON encoded)"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: delete
+        description: |
+          Perform authenticated DELETE request to Jira REST API. Requires WRITE access.
+          Calling: delete(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/api/2/issue/PROJ-123')"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: get_info
+        description: |
+          Get Jira server information and connection metadata.
+          Calling: get_info(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {},
+                "default": {}
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "server_url": {
+                    "type": "string",
+                    "description": "Jira server URL"
+                  },
+                  "auth_type": {
+                    "type": "string",
+                    "description": "Authentication type (cloud or server)"
+                  },
+                  "server_info": {
+                    "type": "object",
+                    "description": "Server information from connection test",
+                    "properties": {
+                      "version": {"type": "string"},
+                      "server_title": {"type": "string"},
+                      "api_version": {"type": "string"}
+                    }
+                  },
+                  "connection_name": {
+                    "type": "string",
+                    "description": "Connection name"
+                  },
+                  "user_info": {
+                    "type": "object",
+                    "description": "User information",
+                    "properties": {
+                      "email": {"type": "string"},
+                      "username": {"type": "string"},
+                      "display_name": {"type": "string"}
+                    }
+                  }
+                },
+                "required": ["server_url", "auth_type"]
+              }
+            format: application/schema+json
+    
+  # app.plugins.jira:jira_validator
+  - name: jira_validator
+    kind: contract.binding
+    meta:
+      comment: Standalone Jira credential validator - no component_id context required
+      tags:
+        - credentials
+        - validation
+        - jira
+        - standalone
+    contracts:
+      - contract: userspace.credentials:credential_validator
+        methods:
+          normalize_and_validate: app.plugins.jira:normalize_credentials
+    
+  # app.plugins.jira:normalize_credentials
+  - name: normalize_credentials
+    kind: function.lua
+    meta:
+      comment: Validates and normalizes Jira credential form data
+      tags:
+        - credentials
+        - validation
+        - normalization
+        - jira
+    source: file://normalize_credentials.lua
+    modules:
+      - http_client
+      - json
+      - base64
+    method: normalize_and_validate
+    

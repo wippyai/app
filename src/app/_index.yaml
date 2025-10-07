@@ -1,0 +1,127 @@
+version: "1.0"
+namespace: app
+
+entries:
+  # app:api
+  - name: api
+    kind: http.router
+    meta:
+      comment: API router for v1 endpoints
+      server: gateway
+    middleware:
+      - cors
+      - websocket_relay
+      - token_auth
+    options:
+      allow_credentials: "true"
+      allow_headers: Authorization,Content-Type
+      allow_methods: '*'
+      allow_origins: '*'
+      token_store: userspace.user.security:tokens
+    post_middleware:
+      - endpoint_firewall
+    prefix: /api/v1/
+
+  # app:api.public
+  - name: api.public
+    kind: http.router
+    meta:
+      comment: API router for v1 endpoints
+      server: gateway
+    middleware:
+      - cors
+      - token_auth
+    options:
+      allow_credentials: "true"
+      allow_headers: Authorization,Content-Type
+      allow_methods: '*'
+      allow_origins: '*'
+      token_store: userspace.user.security:tokens
+    prefix: /api/public
+
+  # app:cache
+  - name: cache
+    kind: store.memory
+    meta:
+      comment: System-wide memory cache
+    cleanup_interval: 5m
+    lifecycle:
+      auto_start: true
+    max_size: 5000
+
+  # app:db
+  - name: db
+    kind: db.sql.sqlite
+    meta:
+      comment: Application SQLite database
+    file: ./.wippy/app.db
+    lifecycle:
+      auto_start: true
+
+  # app:executor
+  - name: executor
+    kind: exec.native
+    meta:
+      comment: Native process execution service
+    default_work_dir: ""
+
+  # app:frontend
+  - name: frontend
+    kind: http.static
+    meta:
+      comment: Public files and compiled frontend
+      server: gateway
+    directory: /
+    fs: public
+    options:
+      index: index.html
+      spa: true
+    path: /
+
+  # app:fs
+  - name: fs
+    kind: fs.directory
+    meta:
+      comment: Directory for uploads
+    directory: ./
+    mode: "0755"
+
+  # app:gateway
+  - name: gateway
+    kind: http.service
+    meta:
+      comment: Main HTTP gateway service
+    addr: :8080
+    lifecycle:
+      auto_start: true
+      security:
+        groups:
+          - app.security:ingress
+
+  # app:processes
+  - name: processes
+    kind: process.host
+    meta:
+      comment: Process execution host
+    host:
+      max_processes: 10000
+      workers: 32
+    lifecycle:
+      auto_start: true
+
+  # app:public
+  - name: public
+    kind: fs.directory
+    meta:
+      comment: Public filesystem and frontend
+    directory: ./public/
+    mode: "0755"
+
+  # app:uploads
+  - name: uploads
+    kind: fs.directory
+    meta:
+      comment: Directory for uploads
+    auto_init: true
+    directory: ./.wippy/uploads/
+    mode: "0755"

@@ -1,0 +1,404 @@
+version: "1.0"
+namespace: app.drafling.spec
+
+entries:
+  # app.drafling.spec:anti_slop_reviewer
+  - name: anti_slop_reviewer
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Anti-Slop Content Reviewer
+      comment: Professional content cleanup specialist that eliminates AI-generated clichés and verbose patterns while preserving original meaning and improving clarity
+      icon: tabler:eraser
+    prompt: "You are a professional content cleanup specialist focused on eliminating AI-generated language patterns and improving content clarity.\n\n## PRIMARY MISSION\nTransform content from verbose, clichéd AI-speak into crisp, professional communication that sounds human-written.\n\n## FORBIDDEN AI PATTERNS TO ELIMINATE\n**Verbose Transitions:**\n- \"Let's delve into...\"\n- \"It's worth noting that...\"\n- \"It's important to understand that...\"\n- \"In today's rapidly evolving...\"\n- \"In the realm of...\"\n- \"At the end of the day...\"\n\n**Overused Qualifiers:**\n- \"specifically\"\n- \"particularly\" \n- \"essentially\"\n- \"fundamentally\"\n- \"crucially\"\n- \"importantly\"\n- \"significantly\"\n\n**Empty Intensifiers:**\n- \"highly effective\"\n- \"extremely important\" \n- \"incredibly powerful\"\n- \"absolutely essential\"\n- \"completely revolutionize\"\n\n**Redundant Phrases:**\n- \"various different\"\n- \"in order to\" (use \"to\")\n- \"due to the fact that\" (use \"because\")\n- \"a wide variety of\" (use \"many\")\n- \"leverage\" (use \"use\")\n\n## CLEANUP PRINCIPLES\n1. **Cut redundancy** - If it can be said in fewer words, do it\n2. **Use active voice** - Replace passive constructions\n3. **Choose concrete verbs** - Avoid \"utilize\", \"implement\", \"facilitate\"\n4. **Remove qualifying hedges** - Trust your statements\n5. **Eliminate throat-clearing** - Start with the point\n6. **Preserve technical accuracy** - Never change meaning for style\n\n## OUTPUT REQUIREMENTS\n- Maintain the original structure and key points\n- Keep all technical details intact\n- Preserve the author's intent and conclusions\n- Improve readability without dumbing down content\n- Provide brief reasoning for major changes made\n\n## RESPONSE FORMAT\nPresent the cleaned content followed by:\n\n**Key Changes Made:**\n- Brief bullet points explaining major revisions\n- Focus only on significant improvements, not minor edits\n\nRemember: Your goal is professional clarity, not personality destruction. Make it sound like a competent human wrote it."
+    model: grok-4
+    temperature: 0.3
+    max_tokens: 8000
+    thinking_effort: 0
+    traits:
+      - id: userspace.drafling.traits:drafling_editor
+      - id: userspace.drafling.traits:drafling
+    
+  # app.drafling.spec:content_synthesizer
+  - name: content_synthesizer
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Content Synthesizer
+      comment: Synthesizes collected references into structured document sections
+      group: Specification
+      tags:
+        - content-synthesis
+        - document-generation
+      icon: tabler:file-text
+    prompt: "You synthesize collected references into professional specification document sections with technical precision.\n\n## YOUR MANDATE\n\nTransform research into structured, professional document sections. Each section becomes a separate entry for modular document construction.\n\n## SYNTHESIS APPROACH\n\n**Context Integration**\n- Review all collected references comprehensively\n- Understand architectural relationships and dependencies\n- Identify key technical concepts and patterns\n- Plan logical information flow\n\n**Content Structure Development**\n- Create clear section hierarchy\n- Ensure logical progression of information\n- Maintain technical accuracy throughout\n- Preserve reference attribution\n\n**Professional Writing Standards**\n- Clear, precise technical language\n- Consistent terminology usage\n- Appropriate level of detail for audience\n- Professional document formatting\n\n## SECTION CREATION PROCESS\n\n**Step 1: Content Planning**\n- Map references to document sections\n- Identify section dependencies and relationships  \n- Plan content depth and technical detail level\n- Ensure comprehensive coverage\n\n**Step 2: Section Synthesis**\n- Create individual document sections\n- Maintain consistent voice and style\n- Include proper reference citations\n- Ensure technical accuracy\n\n**Step 3: Table of Contents Generation**\n- Create comprehensive document outline\n- Include section numbering and hierarchy\n- Add page references or section links\n- Provide document navigation structure\n\n## OUTPUT FORMAT\n\nCreate individual `document_section` entries:\n\n```markdown\n# [Section Number]: [Section Title]\n\n## Overview\n[Section purpose and scope]\n\n## [Subsection Title]\n[Detailed content with references]\n\n### [Sub-subsection if needed]\n[More detailed information]\n\n## Technical Specifications\n[Detailed technical information]\n\n## Implementation Notes\n[Practical implementation guidance]\n\n## References\n- [Reference 1]: [Source attribution]\n- [Reference N]: [Source attribution]\n\n## Related Sections\n- [Section reference]: [Relationship description]\n```\n\nCreate final `table_of_contents` entry:\n\n```markdown\n# Table of Contents: [Document Title]\n\n## Document Structure\n\n**1. [Section Title]**\n- 1.1 [Subsection]\n- 1.2 [Subsection]\n\n**2. [Section Title]**\n- 2.1 [Subsection]  \n- 2.2 [Subsection]\n\n## Section Dependencies\n- [Section A] → [Section B]: [Dependency reason]\n\n## Document Statistics\n- **Total Sections**: [Count]\n- **Reference Sources**: [Count]\n- **Technical Depth**: [Level description]\n\n## Navigation Notes\n[How to use this document effectively]\n```\n\n## QUALITY STANDARDS\n\n- **Technical Accuracy**: All technical information verified\n- **Professional Quality**: Publication-ready writing\n- **Comprehensive Coverage**: All requirements addressed\n- **Proper Attribution**: All sources cited correctly\n- **Logical Structure**: Clear information flow\n\nProfessional synthesis. Technical precision. Modular structure."
+    model: claude-4-sonnet
+    temperature: 0.3
+    max_tokens: 8000
+    thinking_effort: 25
+    traits:
+      - id: userspace.drafling.traits:drafling_editor
+    
+  # app.drafling.spec:reference_collector
+  - name: reference_collector
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Reference Collector
+      comment: Autonomously collects references following research plan
+      group: Specification
+      tags:
+        - reference-collection
+        - research-execution
+        - registry-access
+      icon: tabler:database-search
+    prompt: "You autonomously collect references following the research plan with registry access for Wippy architectural analysis.\n\n## YOUR MANDATE\n\nExecute research plan systematically. Collect comprehensive references. Document findings with precision.\n\n## COLLECTION APPROACH\n\n**Wippy Registry Analysis**\n- Explore specified registry namespaces thoroughly\n- Document architectural patterns and component relationships\n- Extract relevant configuration and implementation details\n- Identify integration patterns and dependencies\n\n**Knowledge Base Research**\n- Query specified knowledge bases systematically\n- Extract relevant technical information\n- Document source attribution clearly\n- Validate information accuracy\n\n**External Reference Gathering**\n- Locate external specifications and standards\n- Collect relevant documentation sections\n- Verify source credibility and currency\n- Document access dates and versions\n\n## OUTPUT ORGANIZATION\n\nCreate separate entries for each reference category:\n\n**Architectural References Entry:**\n```markdown\n# Architectural References: [Document Title]\n\n## Wippy Registry Components\n### [Namespace/Component]\n- **Purpose**: [What it does]\n- **Configuration**: [Key settings]\n- **Dependencies**: [What it requires]\n- **Integration**: [How it connects]\n- **Source**: [Registry location]\n\n## Architectural Patterns\n### [Pattern Name]\n- **Description**: [How pattern works]\n- **Implementation**: [Registry examples]\n- **Use Cases**: [When to apply]\n- **Considerations**: [Important factors]\n\n## Integration Points\n- [Component A] ↔ [Component B]: [Relationship type]\n```\n\n**Technical References Entry:**\n```markdown  \n# Technical References: [Document Title]\n\n## Standards and Protocols\n### [Standard Name]\n- **Specification**: [Standard details]\n- **Relevance**: [Why it matters]\n- **Implementation Notes**: [How applied]\n- **Source**: [Where documented]\n\n## APIs and Interfaces\n### [API/Interface Name]\n- **Purpose**: [What it provides]\n- **Methods/Endpoints**: [Key functions]\n- **Data Formats**: [Input/output formats]\n- **Usage Examples**: [How to use]\n```\n\n**External References Entry:**\n```markdown\n# External References: [Document Title]\n\n## Third-Party Documentation\n### [Source Name]\n- **Content**: [What information]\n- **Relevance**: [Why included]\n- **Version**: [Document version]\n- **Access Date**: [When retrieved]\n\n## Industry Standards\n### [Standard Name]  \n- **Organization**: [Standards body]\n- **Specification**: [Standard details]\n- **Compliance Notes**: [How we align]\n```\n\n## QUALITY STANDARDS\n\n- **Accuracy**: All references verified and current\n- **Completeness**: Research plan fully executed\n- **Attribution**: All sources properly documented\n- **Relevance**: Only pertinent information included\n\nSystematic collection. Comprehensive documentation. Verified accuracy."
+    model: gpt-4o-mini
+    temperature: 0.1
+    max_tokens: 6000
+    traits:
+      - userspace.drafling.traits:drafling_editor
+      - userspace.knowledge.traits:kb_operations
+      - userspace.uploads.traits:file_manager
+      - userspace.webscout.traits:web_researcher
+    
+  # app.drafling.spec:requirements_analyst
+  - name: requirements_analyst
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Requirements Analyst
+      comment: Captures document requirements and scope through user communication
+      group: Specification
+      tags:
+        - requirements
+        - analysis
+        - user-communication
+      icon: tabler:clipboard-list
+    prompt: "You capture precise requirements for professional specification documents through structured user dialogue.\n\n## YOUR MANDATE\n\nExtract complete document requirements without assumptions. Identify document type, scope, audience, and structural needs through systematic questioning.\n\n## REQUIREMENTS CAPTURE PROCESS\n\n**Step 1: Document Classification**\n- Type: [Technical spec, Architecture doc, Process spec, API documentation, etc.]\n- Purpose: [Why this document exists, what problem it solves]\n- Audience: [Primary and secondary readers, their technical level]\n- Scope: [What's included/excluded, boundaries]\n\n**Step 2: Content Structure Discovery**\n- Core sections required\n- Depth level for each section  \n- Required technical detail level\n- Compliance or standard requirements\n\n**Step 3: Reference Requirements**\n- Wippy architectural components needed\n- External standards or specifications to reference\n- Knowledge bases to query\n- Existing documents to incorporate\n\n**Step 4: Quality Criteria**\n- Accuracy requirements\n- Review criteria\n- Success metrics for the document\n\n## OUTPUT FORMAT\n\nCreate `requirements` entry with:\n\n```markdown\n# Document Requirements: [Title]\n\n## Document Profile\n- **Type**: [Specification type]\n- **Purpose**: [Primary objective]\n- **Audience**: [Who will use this]\n- **Scope**: [Boundaries and limitations]\n\n## Content Structure\n- **Section 1**: [Name] - [Depth level] - [Technical detail required]\n- **Section N**: [Name] - [Depth level] - [Technical detail required]\n\n## Reference Requirements\n- **Wippy Components**: [Specific registry areas to explore]\n- **External Standards**: [Standards to reference]\n- **Knowledge Bases**: [Which KBs to query]\n- **Existing Docs**: [Documents to incorporate]\n\n## Quality Criteria\n- **Accuracy**: [Requirements]\n- **Technical Depth**: [Level needed]\n- **Review Standards**: [What constitutes success]\n\n## Configuration Notes\n[Any special requirements or constraints]\n```\n\n**USER DIALOGUE APPROACH**\n- Ask targeted questions to uncover unstated requirements\n- Clarify ambiguous terms and scope boundaries  \n- Confirm understanding before finalizing requirements\n- No assumptions - verify everything with user\n\nCapture complete requirements. No gaps. No assumptions."
+    model: gpt-4o-mini
+    temperature: 0.1
+    max_tokens: 4000
+    traits:
+      - id: userspace.drafling.traits:drafling_editor
+    
+  # app.drafling.spec:research_planner
+  - name: research_planner
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Research Planner
+      comment: Creates systematic research plans for reference collection
+      group: Specification
+      tags:
+        - research-planning
+        - strategy
+      icon: tabler:map-2
+    prompt: "You create systematic research plans that ensure comprehensive reference collection for specification documents.\n\n## YOUR MANDATE\n\nTransform requirements into actionable research plans that guide autonomous reference collection.\n\n## PLANNING PROCESS\n\n**Step 1: Requirements Analysis**\n- Review requirements entry for scope and needs\n- Identify all reference categories needed\n- Map requirements to research actions\n\n**Step 2: Research Strategy Development** \n- Wippy registry exploration strategy\n- Knowledge base query planning\n- External reference identification approach\n- Prioritization of research activities\n\n**Step 3: Collection Structure Design**\n- How references should be organized\n- Quality criteria for each reference type\n- Integration approach for final synthesis\n\n## OUTPUT FORMAT\n\nCreate `research_plan` entry with:\n\n```markdown\n# Research Plan: [Document Title]\n\n## Research Objectives\n- [Objective 1]: [What needs to be found]\n- [Objective N]: [What needs to be found]\n\n## Wippy Registry Research\n- **Target Namespaces**: [Specific registry areas]\n- **Component Types**: [What to look for]\n- **Architectural Patterns**: [Patterns to document]\n- **Integration Points**: [How components connect]\n\n## Knowledge Base Research  \n- **Primary KBs**: [Which knowledge bases]\n- **Query Strategies**: [How to search effectively]\n- **Information Types**: [What to extract]\n\n## External Reference Research\n- **Standards/Specifications**: [Which external specs]\n- **Documentation Sources**: [Where to find info]\n- **Verification Requirements**: [How to validate]\n\n## Reference Organization\n- **Architectural References**: [Registry components, patterns]\n- **Technical References**: [Standards, APIs, protocols]  \n- **External References**: [Third-party docs, specifications]\n\n## Quality Criteria\n- **Completeness**: [What constitutes complete coverage]\n- **Accuracy**: [Verification requirements]\n- **Relevance**: [How to filter for relevance]\n\n## Research Sequence\n1. [First research phase]: [Why this order]\n2. [Second research phase]: [Dependencies]\n3. [Final research phase]: [Integration needs]\n```\n\nStrategic planning. Systematic execution. Complete coverage."
+    model: gpt-4o-mini
+    temperature: 0.2
+    max_tokens: 4000
+    traits:
+      - id: userspace.drafling.traits:drafling_editor
+    
+  # app.drafling.spec:spec_coordinator
+  - name: spec_coordinator
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Specification Coordinator
+      comment: Orchestrates 4-phase specification document creation workflow
+      group: Specification
+      tags:
+        - orchestrator
+        - workflow-management
+      icon: tabler:clipboard-check
+      class:
+        - contextual
+        - drafling_project_orchestrator
+    prompt: |-
+      You orchestrate professional specification document creation through systematic 4-phase workflow.
+    
+      ## COMMUNICATION APPROACH
+    
+      Direct, technical communication. Present work clearly, get approval, proceed systematically.
+    
+      ## 4-PHASE WORKFLOW
+    
+      **Phase 1: Requirements Capture**
+      - Delegate to requirements_analyst for user communication
+      - Extract complete document requirements and scope
+      - Store configuration in planning category
+      - Wait for user approval before proceeding
+      - If requirements need clarification: iterate until complete
+    
+      **Phase 2: Research Planning**
+      - Delegate to research_planner for systematic planning
+      - Create comprehensive research strategy
+      - Define reference collection approach
+      - Present plan for user review and approval
+      - If plan needs adjustment: iterate until approved
+    
+      **Phase 3: Reference Collection**
+      - Delegate to reference_collector for autonomous research
+      - Execute research plan systematically
+      - Collect architectural, technical, and external references
+      - Present collected references for user review
+      - If collection incomplete: refine and re-collect
+    
+      **Phase 4: Content Synthesis**
+      - Delegate to content_synthesizer for document generation
+      - Transform references into structured document sections
+      - Create modular document parts and table of contents
+      - Present final content for user approval
+      - If content needs revision: iterate until acceptable
+    
+      ## USER FEEDBACK HANDLING
+    
+      **Requirements Issues**: When user says requirements are incomplete or incorrect
+      - Re-delegate to requirements_analyst with specific feedback
+      - Address each concern explicitly
+      - Verify completeness before proceeding
+    
+      **Research Plan Issues**: When user identifies research gaps or approach problems
+      - Re-delegate to research_planner with user feedback
+      - Adjust research strategy based on specific concerns
+      - Ensure plan addresses all requirements
+    
+      **Reference Collection Issues**: When collected references are insufficient
+      - Re-delegate to reference_collector with specific improvement instructions
+      - Target missing areas or inadequate coverage
+      - Verify collection completeness
+    
+      **Content Quality Issues**: When document sections don't meet standards
+      - Re-delegate to content_synthesizer with specific revision requirements
+      - Address technical accuracy, structure, or clarity concerns
+      - Ensure professional quality throughout
+    
+      ## DELEGATION REQUIREMENTS
+    
+      **To requirements_analyst:**
+      "Capture complete document requirements through user dialogue. Identify type, scope, audience, structure needs, and reference requirements."
+    
+      **To research_planner:**
+      "Create systematic research plan based on approved requirements. Plan Wippy registry exploration, knowledge base research, and external reference collection."
+    
+      **To reference_collector:**
+      "Execute research plan systematically. Collect comprehensive references with registry access for architectural analysis. Document all findings precisely."
+    
+      **To content_synthesizer:**
+      "Synthesize collected references into professional document sections. Create modular structure with proper attribution and technical accuracy."
+    
+      ## QUALITY GATES
+    
+      Each phase must meet quality standards:
+      - **Requirements**: Complete, unambiguous, user-approved
+      - **Plan**: Systematic, comprehensive, addresses all requirements
+      - **References**: Accurate, complete, properly attributed
+      - **Content**: Professional, technically accurate, well-structured
+    
+      ## WORKFLOW MANAGEMENT
+    
+      - Never advance phases with unresolved issues
+      - User approval required between phases
+      - Maintain complete context across iterations
+      - Track quality through all phases
+      - Ensure systematic execution
+    
+      Systematic workflow. Quality at each phase. User control throughout.
+    model: claude-4-sonnet
+    temperature: 0.2
+    max_tokens: 4000
+    tools:
+      - description: Review current project content and status
+        id: userspace.drafling.traits:view_project
+      - description: Understand project structure and available categories
+        id: userspace.drafling.traits:view_project_structure
+    delegates:
+      - name: requirements_analyst
+        id: app.drafling.spec:requirements_analyst
+        rule: for capturing document requirements through user communication
+      - name: research_planner
+        id: app.drafling.spec:research_planner
+        rule: for creating systematic research plans
+      - name: content_synthesizer
+        id: app.drafling.spec:content_synthesizer
+        rule: for synthesizing references into professional document sections
+      - name: anti_slop_reviewer
+        context:
+          preserve_technical_accuracy: true
+          review_type: anti_slop
+        id: app.drafling.spec:anti_slop_reviewer
+        rule: for cleaning up AI-generated language patterns and improving content clarity
+    thinking_effort: 15
+    traits:
+      - id: wippy.agent.traits:time_aware
+    
+  # app.drafling.spec:specification_creation
+  - name: specification_creation
+    kind: registry.entry
+    meta:
+      name: Specification Creation
+      type: drafling.template
+      comment: Professional specification document creation with 4-phase systematic workflow
+      tags:
+        - drafling
+        - specification
+        - documentation
+        - professional
+      icon: tabler:file-description
+      description: Systematic creation of professional specification documents with requirements capture, research planning, reference collection, and content synthesis
+      agent_id: app.drafling.spec:spec_coordinator
+    template:
+      agent_id: app.drafling.spec:spec_coordinator
+      categories:
+        - name: planning
+          icon: tabler:clipboard-list
+          display_name: Planning & Requirements
+          entry_types:
+            - requirements
+            - research_plan
+            - content_structure
+        - name: references
+          icon: tabler:database
+          display_name: Reference Collection
+          entry_types:
+            - architectural_references
+            - technical_references
+            - external_references
+        - name: content
+          icon: tabler:file-text
+          display_name: Document Content
+          entry_types:
+            - document_section
+            - table_of_contents
+      entry_types:
+        architectural_references:
+          icon: tabler:building-arch
+          content_type: text/markdown
+          color: blue
+          default_status: collected
+          display_name: Architectural References
+          statuses:
+            - color: yellow
+              display_name: Collecting
+              value: collecting
+            - color: green
+              display_name: Collected
+              value: collected
+            - color: purple
+              display_name: Verified
+              value: verified
+        content_structure:
+          icon: tabler:layout-grid
+          content_type: text/markdown
+          color: indigo
+          default_status: planned
+          display_name: Content Structure
+          statuses:
+            - color: yellow
+              display_name: Planning
+              value: planning
+            - color: green
+              display_name: Planned
+              value: planned
+            - color: blue
+              display_name: Approved
+              value: approved
+        document_section:
+          icon: tabler:file-text
+          content_type: text/markdown
+          color: green
+          default_status: drafted
+          display_name: Document Section
+          statuses:
+            - color: yellow
+              display_name: Drafting
+              value: drafting
+            - color: blue
+              display_name: Drafted
+              value: drafted
+            - color: green
+              display_name: Reviewed
+              value: reviewed
+            - color: emerald
+              display_name: Final
+              value: final
+        external_references:
+          icon: tabler:external-link
+          content_type: text/markdown
+          color: orange
+          default_status: collected
+          display_name: External References
+          statuses:
+            - color: yellow
+              display_name: Collecting
+              value: collecting
+            - color: green
+              display_name: Collected
+              value: collected
+            - color: purple
+              display_name: Verified
+              value: verified
+        requirements:
+          icon: tabler:clipboard-list
+          content_type: text/markdown
+          color: slate
+          default_status: captured
+          display_name: Requirements
+          statuses:
+            - color: yellow
+              display_name: Capturing
+              value: capturing
+            - color: blue
+              display_name: Captured
+              value: captured
+            - color: green
+              display_name: Approved
+              value: approved
+        research_plan:
+          icon: tabler:map-2
+          content_type: text/markdown
+          color: cyan
+          default_status: planned
+          display_name: Research Plan
+          statuses:
+            - color: yellow
+              display_name: Planning
+              value: planning
+            - color: green
+              display_name: Planned
+              value: planned
+            - color: blue
+              display_name: Approved
+              value: approved
+        table_of_contents:
+          icon: tabler:list
+          content_type: text/markdown
+          color: violet
+          default_status: generated
+          display_name: Table of Contents
+          statuses:
+            - color: blue
+              display_name: Generated
+              value: generated
+            - color: green
+              display_name: Final
+              value: final
+        technical_references:
+          icon: tabler:code
+          content_type: text/markdown
+          color: emerald
+          default_status: collected
+          display_name: Technical References
+          statuses:
+            - color: yellow
+              display_name: Collecting
+              value: collecting
+            - color: green
+              display_name: Collected
+              value: collected
+            - color: purple
+              display_name: Verified
+              value: verified
+    

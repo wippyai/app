@@ -1,0 +1,486 @@
+version: "1.0"
+namespace: app.models.openrouter
+
+entries:
+  # app.models.openrouter:api_key
+  - name: api_key
+    kind: env.variable
+    meta:
+      comment: OpenRouter API key for authentication
+      icon: tabler:key
+    storage: app.env:router
+    variable: OPENROUTER_API_KEY
+    
+  # app.models.openrouter:claude-3-5-haiku
+  - name: claude-3-5-haiku
+    kind: registry.entry
+    meta:
+      name: claude-3-5-haiku
+      type: llm.model
+      title: Claude 3.5 Haiku
+      comment: Updated fast model with improved coding and reasoning capabilities while maintaining speed and cost efficiency
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+        - coding
+      class:
+        - fast
+        - cost-effective
+        - coding
+      priority: 75
+    max_tokens: 200000
+    output_tokens: 8192
+    pricing:
+      input: 1
+      output: 5
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: anthropic/claude-3.5-haiku
+    
+  # app.models.openrouter:claude-3-5-sonnet
+  - name: claude-3-5-sonnet
+    kind: registry.entry
+    meta:
+      name: claude-3-5-sonnet
+      type: llm.model
+      title: Claude 3.5 Sonnet
+      comment: Balanced model with strong performance in coding, analysis, and general tasks
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+        - coding
+      class:
+        - balanced
+        - coding
+        - default
+      priority: 85
+    max_tokens: 200000
+    output_tokens: 8192
+    pricing:
+      input: 3
+      output: 15
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: anthropic/claude-3.5-sonnet
+    
+  # app.models.openrouter:claude-4-sonnet
+  - name: claude-4-sonnet
+    kind: registry.entry
+    meta:
+      name: claude-4-sonnet
+      type: llm.model
+      title: Claude 4 Sonnet
+      comment: Anthropic's flagship Claude 4 model with advanced reasoning, vision, and thinking capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - caching
+        - generate
+        - structured_output
+      class:
+        - coding
+        - flagship
+      priority: 105
+    max_tokens: 200000
+    output_tokens: 64000
+    pricing:
+      input: 3
+      output: 15
+    providers:
+      - id: app.models.openrouter:provider
+        options:
+          reasoning_model_request: true
+        provider_model: anthropic/claude-sonnet-4
+    
+  # app.models.openrouter:claude-opus-4
+  - name: claude-opus-4
+    kind: registry.entry
+    meta:
+      name: claude-opus-4
+      type: llm.model
+      title: Claude Opus 4
+      comment: Most advanced model with state-of-art performance in complex agent workflows, autonomous research, and enterprise tasks
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - structured_output
+        - coding
+        - reasoning
+        - agentic
+      class:
+        - flagship
+        - reasoning
+        - enterprise
+        - agentic
+      priority: 110
+    max_tokens: 200000
+    output_tokens: 64000
+    pricing:
+      input: 15
+      output: 75
+    providers:
+      - id: app.models.openrouter:provider
+        options:
+          reasoning_model_request: true
+        provider_model: anthropic/claude-opus-4
+    
+  # app.models.openrouter:deepseek-r1
+  - name: deepseek-r1
+    kind: registry.entry
+    meta:
+      name: deepseek-r1
+      type: llm.model
+      title: DeepSeek R1
+      comment: 671B parameter open source reasoning model with performance comparable to OpenAI o1, MIT licensed, chain-of-thought reasoning
+      capabilities:
+        - tool_use
+        - thinking
+        - generate
+        - structured_output
+        - reasoning
+      class:
+        - reasoning
+        - open-source
+        - flagship
+      priority: 110
+    max_tokens: 163840
+    output_tokens: 32768
+    pricing:
+      input: 0.27
+      output: 1.35
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: deepseek/deepseek-r1
+    
+  # app.models.openrouter:gemini-2-5-pro
+  - name: gemini-2-5-pro
+    kind: registry.entry
+    meta:
+      name: gemini-2-5-pro
+      type: llm.model
+      title: Gemini 2.5 Pro
+      comment: Google's latest flagship model with 1M context window and multimodal capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - flagship
+        - multimodal
+        - long-context
+      priority: 95
+    max_tokens: 1e+06
+    output_tokens: 32768
+    pricing:
+      input: 2.5
+      output: 10
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: google/gemini-2.5-pro
+    
+  # app.models.openrouter:gpt-4.1
+  - name: gpt-4.1
+    kind: registry.entry
+    meta:
+      name: gpt-4.1
+      type: llm.model
+      title: GPT-4.1
+      comment: Flagship GPT model for complex tasks with advanced reasoning and multimodal capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+      priority: 10
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 2
+      output: 8
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: openai/gpt-4.1
+    
+  # app.models.openrouter:gpt-4.1-mini
+  - name: gpt-4.1-mini
+    kind: registry.entry
+    meta:
+      name: gpt-4.1-mini
+      type: llm.model
+      title: GPT-4.1-mini
+      comment: Flagship GPT model for complex tasks with advanced reasoning and multimodal capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+        - test-model
+      priority: 10
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 2
+      output: 8
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: openai/gpt-4.1-mini
+    
+  # app.models.openrouter:gpt-4o
+  - name: gpt-4o
+    kind: registry.entry
+    meta:
+      name: gpt-4o
+      type: llm.model
+      title: GPT-4o
+      comment: OpenAI's multimodal flagship model with vision, audio, and fast performance
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+        - multimodal
+      priority: 12
+    max_tokens: 128000
+    output_tokens: 16384
+    pricing:
+      input: 2.5
+      output: 10
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: openai/gpt-4o
+    
+  # app.models.openrouter:gpt-4o-mini
+  - name: gpt-4o-mini
+    kind: registry.entry
+    meta:
+      name: gpt-4o-mini
+      type: llm.model
+      title: GPT-4o-mini
+      comment: Efficient GPT model for complex tasks with advanced reasoning and multimodal capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+        - test-model
+        - cost-effective
+      priority: 10
+    max_tokens: 128000
+    output_tokens: 16384
+    pricing:
+      input: 0.15
+      output: 0.6
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: openai/gpt-4o-mini
+    
+  # app.models.openrouter:gpt-5
+  - name: gpt-5
+    kind: registry.entry
+    meta:
+      name: gpt-5
+      type: llm.model
+      title: GPT-5
+      comment: Next-generation GPT model with enhanced reasoning, thinking capabilities, and multimodal understanding
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - coding
+        - structured_output
+      class:
+        - coding
+        - default
+        - flagship
+      priority: 15
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 3
+      output: 12
+    providers:
+      - id: app.models.openrouter:provider
+        options:
+          reasoning_model_request: true
+        provider_model: openai/gpt-5
+    thinking_effort: 10
+    
+  # app.models.openrouter:grok-3
+  - name: grok-3
+    kind: registry.entry
+    meta:
+      name: grok-3
+      type: llm.model
+      title: Grok 3
+      comment: xAI's flagship model excelling at enterprise use cases like data extraction, coding, and text summarization
+      capabilities:
+        - tool_use
+        - thinking
+        - generate
+        - structured_output
+      class:
+        - enterprise
+        - coding
+        - default
+      priority: 95
+    max_tokens: 131072
+    output_tokens: 32768
+    pricing:
+      input: 2.5
+      output: 10
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: x-ai/grok-3
+    
+  # app.models.openrouter:grok-3-mini
+  - name: grok-3-mini
+    kind: registry.entry
+    meta:
+      name: grok-3-mini
+      type: llm.model
+      title: Grok 3 Mini
+      comment: Lightweight thinking model that contemplates before responding, optimized for reasoning-heavy tasks
+      capabilities:
+        - thinking
+        - generate
+        - structured_output
+      class:
+        - reasoning
+        - mini
+        - cost-effective
+      priority: 85
+    max_tokens: 131072
+    output_tokens: 16384
+    pricing:
+      input: 1.1
+      output: 4.4
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: x-ai/grok-3-mini
+    
+  # app.models.openrouter:grok-4
+  - name: grok-4
+    kind: registry.entry
+    meta:
+      name: grok-4
+      type: llm.model
+      title: Grok 4
+      comment: xAI's latest reasoning model with 256k context window, parallel tool calling, and structured outputs
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - structured_output
+      class:
+        - reasoning
+        - flagship
+      priority: 100
+    max_tokens: 256000
+    output_tokens: 32768
+    pricing:
+      input: 10
+      output: 40
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: x-ai/grok-4
+    
+  # app.models.openrouter:grok-code-fast-1
+  - name: grok-code-fast-1
+    kind: registry.entry
+    meta:
+      name: grok-code-fast-1
+      type: llm.model
+      title: Grok Code Fast 1
+      comment: xAI's specialized fast coding model optimized for rapid code generation and programming tasks
+      capabilities:
+        - tool_use
+        - generate
+        - structured_output
+        - coding
+      class:
+        - coding
+        - fast
+        - specialized
+      priority: 90
+    max_tokens: 131072
+    output_tokens: 32768
+    pricing:
+      input: 1.5
+      output: 6
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: x-ai/grok-code-fast-1
+    
+  # app.models.openrouter:kimi-k2
+  - name: kimi-k2
+    kind: registry.entry
+    meta:
+      name: kimi-k2
+      type: llm.model
+      title: Kimi K2
+      comment: 1T parameter MoE model (32B active), SOTA open source model optimized for agentic capabilities and tool use, 65.8% SWE-bench
+      capabilities:
+        - tool_use
+        - generate
+        - structured_output
+        - coding
+        - agentic
+      class:
+        - open-source
+        - flagship
+        - coding
+        - agentic
+      priority: 106
+    max_tokens: 128000
+    output_tokens: 32768
+    pricing:
+      input: 0.14
+      output: 2.49
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: moonshotai/kimi-k2
+    
+  # app.models.openrouter:provider
+  - name: provider
+    kind: registry.entry
+    meta:
+      name: openrouter
+      type: llm.provider
+      title: OpenRouter
+      comment: OpenRouter API provider for accessing multiple LLM models
+      tags:
+        - llm
+        - provider
+        - openrouter
+    driver:
+      id: wippy.llm.openai:driver
+      options:
+        api_key_env: OPENROUTER_API_KEY
+        base_url: https://openrouter.ai/api/v1
+        headers:
+          HTTP-Referer: https://wippy.ai
+          X-Title: Wippy
+        organization: ""
+        timeout: "600"
+    

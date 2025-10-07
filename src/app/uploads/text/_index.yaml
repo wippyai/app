@@ -1,0 +1,19 @@
+version: "1.0"
+namespace: app.uploads.text
+
+entries:
+  # app.uploads.text:processor
+  - name: processor
+    kind: function.lua
+    meta:
+      type: processor
+      comment: Process text and code files
+    source: file://processor.lua
+    modules:
+      - fs
+      - text
+      - json
+    imports:
+      content_repo: userspace.uploads:content_repo
+    method: process
+    

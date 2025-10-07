@@ -1,0 +1,112 @@
+version: "1.0"
+namespace: app.plugins.google.docs.traits
+
+entries:
+  # app.plugins.google.docs.traits:docs_manager
+  - name: docs_manager
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      comment: Adds Google Docs capabilities to agents
+      tags:
+        - google
+        - docs
+        - documents
+        - create
+        - write
+        - trait
+      icon: tabler:file-text
+    prompt: |-
+      You have access to Google Docs tools. Use these to help users create and edit Google Documents.
+    
+      **Available capabilities:**
+      - Create new Google Docs with custom titles and optional initial content
+      - Read document content from existing Google Docs
+      - Write content to existing Google Docs
+      - Get document metadata and information
+      - List user's Google Documents (optional)
+      - Choose between appending to or replacing existing content
+      - Handle document access and authentication automatically
+    
+      **Important guidelines:**
+      - Always provide meaningful document titles when creating new docs
+      - Use document IDs for writing to existing documents
+      - By default, content is appended to preserve existing text
+      - Set append=false only when user explicitly wants to replace all content
+      - Confirm destructive operations (content replacement) before proceeding
+      - Handle authentication errors gracefully and guide users to re-authenticate
+    
+      **Usage examples:**
+      - "Create a new document" → Use google_docs with command "create" and appropriate title
+      - "Read document content" → Use google_docs with command "read" and document_id
+      - "Add content to document ID abc123" → Use google_docs with command "write", document_id, and content
+      - "Replace all content in document" → Use google_docs with command "write" and append=false
+      - "Get document info" → Use google_docs with command "get_info" and document_id
+      - "List my documents" → Use google_docs with command "list"
+      - "Write a report about sales data" → Create new doc with title "Sales Report" and write content
+    
+      **Document ID Format:**
+      - Document IDs are found in Google Docs URLs: docs.google.com/document/d/{DOCUMENT_ID}/edit
+      - Always use the exact document ID provided by users or from document creation responses
+    tools:
+      - app.plugins.google.docs.traits:google_docs
+    
+  # app.plugins.google.docs.traits:google_docs
+  - name: google_docs
+    kind: function.lua
+    meta:
+      type: tool
+      title: Google Docs Operations
+      tags:
+        - google
+        - docs
+        - documents
+        - create
+        - write
+      description: Comprehensive Google Docs operations including create, read, write, get_info, and list
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "enum": ["create", "read", "write", "get_info", "list"],
+              "description": "Operation to perform"
+            },
+            "title": {
+              "type": "string",
+              "description": "Title for new document (required for create command)"
+            },
+            "document_id": {
+              "type": "string",
+              "description": "Google Docs document ID (required for read, write, get_info commands)"
+            },
+            "content": {
+              "type": "string",
+              "description": "Content to write (required for write command, optional for create)"
+            },
+            "append": {
+              "type": "boolean",
+              "description": "Whether to append content (true) or replace existing content (false) for write command",
+              "default": true
+            },
+            "page_size": {
+              "type": "integer",
+              "description": "Number of documents to return (for list command, max 1000)",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          "required": ["command"],
+          "additionalProperties": false
+        }
+      llm_alias: GoogleDocs
+      llm_description: Comprehensive Google Docs operations. Use 'create' to make new docs, 'read' to get document content, 'write' to add/replace content, 'get_info' for metadata, 'list' to browse documents.
+    source: file://google_docs.lua
+    modules:
+      - json
+    imports:
+      docs_client: app.plugins.google.docs:docs_client
+    method: handler
+    

@@ -1,0 +1,46 @@
+version: "1.0"
+namespace: app.models.openai
+
+entries:
+  # app.models.openai:text-embedding-3-large
+  - name: text-embedding-3-large
+    kind: registry.entry
+    meta:
+      name: text-embedding-3-large
+      type: llm.model
+      title: Text Embedding 3 Large
+      comment: OpenAI's most capable embedding model with higher dimensional output
+      capabilities:
+        - embed
+      class:
+        - embedding
+      priority: 10
+    max_tokens: 8192
+    dimensions: 3072
+    pricing:
+      input: 0.13
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: text-embedding-3-large
+    
+  # app.models.openai:text-embedding-3-small
+  - name: text-embedding-3-small
+    kind: registry.entry
+    meta:
+      name: text-embedding-3-small
+      type: llm.model
+      title: Text Embedding 3 Small
+      comment: OpenAI's efficient embedding model optimized for speed and cost
+      capabilities:
+        - embed
+      class:
+        - embedding
+      priority: 8
+    max_tokens: 8192
+    dimensions: 1536
+    pricing:
+      input: 0.02
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: text-embedding-3-small
+    

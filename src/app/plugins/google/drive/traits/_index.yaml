@@ -1,0 +1,112 @@
+version: "1.0"
+namespace: app.plugins.google.drive.traits
+
+entries:
+  # app.plugins.google.drive.traits:drive_manager
+  - name: drive_manager
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      comment: Adds Google Drive capabilities to agents
+      tags:
+        - google
+        - drive
+        - files
+        - cloud-storage
+        - trait
+      icon: tabler:brand-google-drive
+    prompt: |-
+      You have access to Google Drive tools. Use these to help users manage their Google Drive files.
+    
+      **Available capabilities:**
+      - List files and folders from Google Drive
+      - Read file content from Google Drive
+      - Create new folders in Google Drive
+      - Upload files to Google Drive
+      - Get file/folder metadata and information
+      - Search files using Drive query syntax
+      - Handle various file types (Google Docs, PDFs, images, etc.)
+    
+      **Important guidelines:**
+      - Use appropriate query filters for file searches
+      - Handle different MIME types appropriately
+      - Respect Google Drive API rate limits
+      - Always provide helpful context about what you're doing
+      - For Google Docs/Sheets/Slides, content will be exported as plain text
+    
+      **Usage examples:**
+      - "List my Drive files" → Use google_drive with command "list"
+      - "Find all PDFs" → Use google_drive with command "list" and query "mimeType='application/pdf'"
+      - "Read that document" → Use google_drive with command "read" and specific file_id
+      - "Create a new folder" → Use google_drive with command "create" and name, optionally parent_id
+      - "Upload a file" → Use google_drive with command "write" with name, content, and mime_type
+      - "Get file details" → Use google_drive with command "get_info" and file_id
+    tools:
+      - app.plugins.google.drive.traits:google_drive
+    
+  # app.plugins.google.drive.traits:google_drive
+  - name: google_drive
+    kind: function.lua
+    meta:
+      type: tool
+      title: Google Drive Operations
+      tags:
+        - google
+        - drive
+        - files
+        - cloud-storage
+      description: Comprehensive Google Drive operations including list, read, create, write, and get_info
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "enum": ["list", "read", "create", "write", "get_info"],
+              "description": "Operation to perform"
+            },
+            "query": {
+              "type": "string",
+              "description": "Drive search query (for list command)"
+            },
+            "page_size": {
+              "type": "integer",
+              "description": "Number of files to return (for list command, max 1000)",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "file_id": {
+              "type": "string",
+              "description": "Google Drive file ID (for read, get_info commands)"
+            },
+            "name": {
+              "type": "string",
+              "description": "Name for new folder or file (for create, write commands)"
+            },
+            "parent_id": {
+              "type": "string",
+              "description": "Parent folder ID for new items (optional for create, write commands)"
+            },
+            "content": {
+              "type": "string",
+              "description": "File content for upload (required for write command)"
+            },
+            "mime_type": {
+              "type": "string",
+              "description": "MIME type for uploaded file (for write command)",
+              "default": "text/plain"
+            }
+          },
+          "required": ["command"],
+          "additionalProperties": false
+        }
+      llm_alias: GoogleDrive
+      llm_description: Comprehensive Google Drive operations. Use 'list' to browse files, 'read' to get file content, 'create' to make folders, 'write' to upload files, 'get_info' to get file metadata.
+    source: file://google_drive.lua
+    modules:
+      - json
+    imports:
+      drive_client: app.plugins.google.drive:drive_client
+    method: handler
+    

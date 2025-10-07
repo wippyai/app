@@ -1,0 +1,470 @@
+version: "1.0"
+namespace: app.plugins.bamboohr
+
+entries:
+  # app.plugins.bamboohr:bamboohr
+  - name: bamboohr
+    kind: registry.entry
+    meta:
+      name: BambooHR
+      type: component
+      title: BambooHR HRIS
+      comment: Connection to BambooHR for employee data management and HR processes
+      group: Human Resources
+      tags:
+        - hris
+        - hr
+        - employees
+        - bamboohr
+        - human-resources
+        - payroll
+        - time-tracking
+      class:
+        - connection
+        - credential_connection
+        - bamboohr_services
+      component:
+        icon: tabler:users
+        create_ui_id: userspace.credentials.views:create_credential_connection/bamboohr
+        manage_ui_id: userspace.credentials.views:manage_credential_connection
+      credential_provider: bamboohr
+    component_contract_id: app.plugins.bamboohr.service:bamboohr_rest_service
+    credential_schema:
+      type: object
+      properties:
+        api_key:
+          type: string
+          title: API Key
+          description: BambooHR API key for authentication
+          min_length: 32
+          placeholder: Generated from your BambooHR account settings
+        server_url:
+          type: string
+          title: Server URL
+          description: BambooHR API base URL
+          default: https://api.bamboohr.com/api/gateway.php
+          format: uri
+          placeholder: https://api.bamboohr.com/api/gateway.php
+        subdomain:
+          type: string
+          title: Company Subdomain
+          description: Your BambooHR subdomain (from https://[subdomain].bamboohr.com)
+          min_length: 2
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9]$
+          placeholder: yourcompany
+      required:
+        - subdomain
+        - api_key
+    ui_config:
+      description: |-
+        Connect to your BambooHR HRIS system for comprehensive employee data management and HR process automation. BambooHR is a leading cloud-based HR platform that helps organizations manage their workforce effectively.
+    
+        Authentication Guide:
+    
+        For BambooHR API access:
+        • Generate an API key from your BambooHR account settings
+        • Navigate to your name (lower left) → API Keys in your BambooHR account
+        • Your subdomain is found in your BambooHR URL: https://[subdomain].bamboohr.com
+        • Each user can have one or more API keys with different permissions
+    
+        Capabilities:
+        • Manage employee records and personal information
+        • Track time and attendance data
+        • Handle time-off requests and approvals
+        • Access organizational structure and reporting
+        • Generate custom reports and analytics
+        • Manage job postings and applicant tracking
+        • Handle benefits administration
+        • Process payroll integration data
+      field_groups:
+        - name: connection
+          title: Connection Details
+          icon: tabler:server
+          description: Enter your BambooHR instance information
+          fields:
+            - subdomain
+            - server_url
+        - name: auth
+          title: Authentication
+          icon: tabler:key
+          description: BambooHR API key authentication
+          fields:
+            - api_key
+      field_order:
+        - subdomain
+        - server_url
+        - api_key
+      reference_urls:
+        - name: api_key_generation
+          type: setup
+          title: Generate API Keys
+          icon: tabler:key
+          description: Create API keys for BambooHR authentication
+          url: https://help.bamboohr.com/hc/en-us/articles/229307107-BambooHR-API
+        - name: api_documentation
+          type: documentation
+          title: BambooHR API Documentation
+          icon: tabler:book
+          description: Complete API reference and integration guides
+          url: https://documentation.bamboohr.com/docs
+        - name: getting_started
+          type: help
+          title: API Getting Started Guide
+          icon: tabler:help-circle
+          description: Step-by-step guide for getting started with BambooHR API
+          url: https://documentation.bamboohr.com/docs/getting-started
+      sensitive_fields:
+        - api_key
+    validation_contract_id: app.plugins.bamboohr:bamboohr_validator
+    
+  # app.plugins.bamboohr:bamboohr_client
+  - name: bamboohr_client
+    kind: library.lua
+    meta:
+      name: BambooHR Client
+      comment: Minimal BambooHR client library for contract opening with auto-discovery
+      tags:
+        - bamboohr
+        - client
+        - library
+        - minimal
+      description: Provides minimal interface for opening BambooHR REST contract with automatic component discovery
+    source: file://bamboohr_client.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+    
+  # app.plugins.bamboohr:bamboohr_rest_contract
+  - name: bamboohr_rest_contract
+    kind: contract.definition
+    meta:
+      comment: Low-level BambooHR REST API contract - handles auth and HTTP mechanics
+      tags:
+        - bamboohr
+        - rest
+        - http
+        - low-level
+      description: Provides low-level HTTP access to BambooHR REST API with authentication handling
+    methods:
+      - name: get
+        description: |
+          Perform authenticated GET request to BambooHR REST API.
+          Calling: get(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/employees/directory' or '/employees/123')"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: post
+        description: |
+          Perform authenticated POST request to BambooHR REST API. Requires WRITE access.
+          Calling: post(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/employees' or '/time_off/requests')"
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "Request body (will be JSON encoded)"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: put
+        description: |
+          Perform authenticated PUT request to BambooHR REST API. Requires WRITE access.
+          Calling: put(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/employees/123' or '/company/fields/123')"
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "Request body (will be JSON encoded)"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: patch
+        description: |
+          Perform authenticated PATCH request to BambooHR REST API. Requires WRITE access.
+          Calling: patch(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/employees/123' or '/benefits/settings')"
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "Request body (will be JSON encoded)"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: delete
+        description: |
+          Perform authenticated DELETE request to BambooHR REST API. Requires WRITE access.
+          Calling: delete(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/employees/123' or '/company/fields/456')"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: get_info
+        description: |
+          Get BambooHR account information and connection metadata.
+          Calling: get_info(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {},
+                "default": {}
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "server_url": {
+                    "type": "string",
+                    "description": "BambooHR API server URL"
+                  },
+                  "subdomain": {
+                    "type": "string",
+                    "description": "Company subdomain"
+                  },
+                  "connection_name": {
+                    "type": "string",
+                    "description": "Connection name"
+                  },
+                  "api_info": {
+                    "type": "object",
+                    "description": "API version and path information",
+                    "properties": {
+                      "version": {"type": "string"},
+                      "base_path": {"type": "string"}
+                    }
+                  }
+                },
+                "required": ["server_url", "subdomain"]
+              }
+            format: application/schema+json
+    
+  # app.plugins.bamboohr:bamboohr_validator
+  - name: bamboohr_validator
+    kind: contract.binding
+    meta:
+      comment: Standalone BambooHR credential validator - no component_id context required
+      tags:
+        - credentials
+        - validation
+        - bamboohr
+        - standalone
+    contracts:
+      - contract: userspace.credentials:credential_validator
+        methods:
+          normalize_and_validate: app.plugins.bamboohr:normalize_credentials
+    
+  # app.plugins.bamboohr:normalize_credentials
+  - name: normalize_credentials
+    kind: function.lua
+    meta:
+      comment: Validates and normalizes BambooHR credential form data
+      tags:
+        - credentials
+        - validation
+        - normalization
+        - bamboohr
+    source: file://normalize_credentials.lua
+    modules:
+      - http_client
+      - json
+      - base64
+    method: normalize_and_validate
+    

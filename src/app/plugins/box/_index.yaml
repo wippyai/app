@@ -1,0 +1,108 @@
+version: "1.0"
+namespace: app.plugins.box
+
+entries:
+  # app.plugins.box:box
+  - name: box
+    kind: registry.entry
+    meta:
+      name: Box
+      type: component
+      title: Box Cloud Storage
+      comment: OAuth connection to Box cloud storage services
+      group: Productivity
+      tags:
+        - cloud-storage
+        - file-sharing
+        - collaboration
+        - productivity
+      class:
+        - connection
+        - oauth_connection
+        - box_services
+      component:
+        icon: tabler:box
+        create_ui_id: userspace.oauth.views:create_oauth_connection/box
+        manage_ui_id: userspace.oauth.views:manage_oauth_connection
+      oauth_provider: box
+    description: Connect to Box cloud storage services
+    depends_on:
+      - app.plugins.box:client_id
+      - app.plugins.box:client_secret
+      - app.plugins.box:client_id
+      - app.plugins.box:client_secret
+      - app.plugins.box:client_id
+      - app.plugins.box:client_secret
+      - app.plugins.box:client_id
+      - app.plugins.box:client_secret
+      - app.plugins.box:client_id
+      - app.plugins.box:client_secret
+      - app.plugins.box:client_id
+      - app.plugins.box:client_secret
+    available_scopes:
+      - name: Root Read/Write Access
+        description: Full access to all files and folders in your Box account
+        scope: root_readwrite
+      - name: Root Read Only
+        description: Read-only access to all files and folders in your Box account
+        scope: root_readonly
+      - name: Manage Enterprise
+        description: Enterprise management permissions
+        scope: manage_enterprise
+      - name: Manage Users
+        description: Manage enterprise users
+        scope: manage_managed_users
+      - name: Manage Groups
+        description: Manage enterprise groups
+        scope: manage_groups
+      - name: Manage Enterprise Properties
+        description: Manage enterprise-wide properties and settings
+        scope: manage_enterprise_properties
+    component_contract_id: userspace.oauth:oauth_connection
+    connector_contract:
+      context_values:
+        oauth_authorization_endpoint: https://app.box.com/api/oauth2/authorize
+        oauth_client_id_env: app.plugins.box:client_id
+        oauth_client_secret_env: app.plugins.box:client_secret
+        oauth_token_endpoint: https://api.box.com/oauth2/token
+        oauth_userinfo_endpoint: https://api.box.com/2.0/users/me
+      implementation_id: userspace.oauth:base_connector
+    
+  # app.plugins.box:box_client
+  - name: box_client
+    kind: library.lua
+    meta:
+      name: Box Client
+      comment: Box API client library for OAuth connection discovery and HTTP requests
+      tags:
+        - box
+        - client
+        - library
+        - oauth
+        - api
+      description: Provides interface for opening Box OAuth connections and making authenticated API requests
+    source: file://box_client.lua
+    modules:
+      - json
+      - http_client
+    imports:
+      component: userspace.component:component
+    
+  # app.plugins.box:client_id
+  - name: client_id
+    kind: env.variable
+    meta:
+      comment: Box OAuth client ID
+      icon: tabler:brand-box
+    storage: app.env:router
+    variable: BOX_CLIENT_ID
+    
+  # app.plugins.box:client_secret
+  - name: client_secret
+    kind: env.variable
+    meta:
+      comment: Box OAuth client secret
+      icon: tabler:brand-box
+    storage: app.env:router
+    variable: BOX_CLIENT_SECRET
+    
