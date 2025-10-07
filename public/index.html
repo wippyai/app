@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" class="dark" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wippy App</title>
+</head>
+<style>
+    html, body {
+        padding: 0;
+    }
+
+    iframe {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+        border: none;
+        z-index: 100;
+    }
+</style>
+<body>
+
+<script type="module">
+    const LOCAL_STORAGE_WIPPY_KEY = '@wippy_token_info';
+    // API configuration
+    const API_DOMAIN = `localhost:8085`;
+    const APP_API_URL = `http://${API_DOMAIN}`;
+    const APP_WEBSOCKET_URL = `ws://${API_DOMAIN}`;
+
+    const IFRAME_ORIGIN = 'https://front.wippy.ai';
+    const IFRAME_URL = `${IFRAME_ORIGIN}/iframe.html?waitForCustomConfig`;
+
+    const IFRAME_MESSAGE_TYPE = '@gen2-chat'
+
+    const redirectToLogin = () => {
+        // Redirect to the login page
+        window.location.href = '/login.html';
+    };
+
+    function buildUrlWithoutHostAndProtocol() {
+        // Start with the pathname (e.g., /path/to/page)
+        let url = window.location.pathname;
+
+        // Add search parameters if they exist (e.g., ?param1=value1&param2=value2)
+        if (window.location.search) {
+            url += window.location.search;
+        }
+
+        // Add hash if it exists (e.g., #section1)
+        if (window.location.hash) {
+            url += window.location.hash;
+        }
+
+        return url;
+    }
+
+    const init = async (token) => {
+        // Redirect to the UI with the token
+        // window.location.href = REDIRECT_URL + encodeURIComponent(result.token);
+
+        localStorage.removeItem(LOCAL_STORAGE_WIPPY_KEY); // Consume token till next launch when we'll need new one
+
+        const config = {
+            path: buildUrlWithoutHostAndProtocol(), // Starting path, i.e. '/chat/<session-id>'
+            auth: {
+                token: token,
+                expiresAt: (new Date(Date.now() + 24 * 3600 * 1000)).toISOString(), // 24 hour
+            },
+            feature: {
+                session: {
+                    type: 'non-persistent',
+                },
+                history: 'hash',
+                env: {
+                    APP_API_URL,
+                    APP_WEBSOCKET_URL,
+                },
+                routePrefix: APP_API_URL,
+                showAdmin: true,
+                startNavOpen: false,
+            },
+            customization: {
+                customCSS: `
+                      @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+                    `,
+                cssVariables: {},
+                i18n: {
+                   app: {
+                       title: 'Wippy',
+                       icon: 'wippy:logo',
+                       appName: 'Wippy AI'
+                   },
+                },
+            },
+        }
+
+        const iframe = document.createElement('iframe')
+        iframe.src = IFRAME_URL
+        let routingActive = false;
+
+        window.addEventListener('message', (e) => {
+            if (e.origin !== IFRAME_ORIGIN) return;
+            try {
+                const payload = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
+                if (payload.type === IFRAME_MESSAGE_TYPE) {
+                    const action = payload.action;
+
+                    switch (action) {
+                        case 'cmd-handle-error':
+                            console.error('Error from iframe:', payload.error);
+                            if (payload.code === 'auth-expired') {
+                                redirectToLogin();
+                            }
+                            return;
+
+                        case 'get-config':
+                            console.log('Config requested from iframe', config);
+                            e.source.postMessage(JSON.stringify({
+                                type: IFRAME_MESSAGE_TYPE,
+                                action: 'set-config',
+                                ...config
+                            }), '*');
+                            return;
+                        case 'ready':
+                            console.log('Iframe is ready');
+                            return;
+                        case 'history':
+                            routingActive = true;
+                            window.history.pushState({}, '', payload.path);
+                            requestAnimationFrame(() => {
+                                routingActive = false;
+                            });
+                            return;
+                        default:
+                            console.log('Unknown action from iframe:', action);
+                            return;
+                    }
+                }
+            } catch (e) {
+                console.error('Invalid message format:', e);
+                return;
+            }
+        })
+
+        iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-presentation');
+        iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
+
+        document.body.appendChild(iframe)
+
+        window.addEventListener('popstate', () => {
+            if (routingActive) return;
+            const path = window.location.pathname + window.location.search + window.location.hash;
+            iframe.contentWindow.postMessage(JSON.stringify({
+                type: IFRAME_MESSAGE_TYPE,
+                action: 'history',
+                path
+            }), '*');
+        })
+
+    };
+
+
+    try {
+        const storedToken = localStorage.getItem(LOCAL_STORAGE_WIPPY_KEY);
+        if (storedToken) {
+            const tokenInfo = JSON.parse(storedToken);
+            init(tokenInfo.token);
+        } else {
+            redirectToLogin();
+        }
+    } catch (e) {
+        console.error('Error parsing token from local storage:', e);
+        redirectToLogin();
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starting Application...</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/iconify-icon@3.0.0/dist/iconify-icon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+</head>
+<body class="bg-white min-h-screen flex items-center justify-center w-full">
+<div class="mx-auto px-4 py-8 flex flex-col items-center justify-center">
+    <iconify-icon id="loading" icon="svg-spinners:gooey-balls-2" style="font-size: 40px"></iconify-icon>
+    <div class="bg-white p-6">
+        <div id="error-message" class="rounded p-4 h-[200px] overflow-hidden text-sm flex flex-col">
+            Preparing environment...
+        </div>
+    </div>
+</div>
+
+<script>
+    const init = async () => {
+        // API configuration
+        const vars = (await import('/api/public/env/public.js')).default
+        const API_URL = '/api/public/user/token';
+        const LOCAL_STORAGE_WIPPY_KEY = '@wippy_token_info';
+        const REDIRECT_URL = '/';
+        const login = vars?.PUBLIC_LOGIN || 'initial@admin';
+        const password = vars?.PUBLIC_PASSWORD || 'd018fd06eJhfuyg';
+
+        const errorMessage = document.getElementById('error-message');
+        const loading = document.getElementById('loading');
+
+        // Retry interceptor function
+        const retryWrapper = (axios, options) => {
+            const max_time = options.retry_time;
+            let counter = 0;
+            axios.interceptors.response.use(null, (error) => {
+                console.log("==================");
+                console.log(`Counter: ${counter}`);
+                console.log("Error: ", error.response?.statusText || error.message);
+                console.log("==================");
+
+                const config = error.config
+                if (counter < max_time) {
+                    counter++
+                    return new Promise((resolve) => {
+                        setTimeout(() => {
+                            resolve(axios(config))
+                        }, 1000);
+                    })
+                }
+                return Promise.reject(error)
+            })
+        }
+
+        // Configure retry interceptor
+        retryWrapper(axios, {
+            retry_time: 10,
+        });
+
+        // Show error message
+        function showError(message) {
+            errorMessage.textContent = message;
+            loading.classList.add('hidden');
+            errorMessage.classList.add('text-red-500');
+        }
+
+        // Show loading state
+        loading.classList.remove('hidden');
+
+        try {
+            const response = await axios.post(API_URL, {
+                user_id: login,
+                password: password,
+                metadata: { role: "user" }
+            });
+
+            const result = response.data;
+
+            if (!result.success) {
+                showError('Application setup failed. Please contact support.');
+                return;
+            }
+
+            if (result.token) {
+                // Redirect to the UI with the token
+                localStorage.setItem(LOCAL_STORAGE_WIPPY_KEY, JSON.stringify(result));
+                window.location.href = REDIRECT_URL;
+            } else {
+                showError('Application setup failed. Please contact support.');
+            }
+
+        } catch (error) {
+            console.error('Login request failed:', error);
+            showError('Application setup failed. Please contact support.');
+        }
+    };
+
+    init();
+</script>
+</body>
+</html>
