@@ -7,6 +7,9 @@
 # Wippy runtime directory
 /.wippy
 
+# CTX directory
+/.context
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

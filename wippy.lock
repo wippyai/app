@@ -3,11 +3,11 @@ directories:
   src: src
 modules:
 - name: keeper/keeper
-  version: 0.1.11
-  hash: 0199560b-0f72-7f0c-9b5f-770b0333cdc4
+  version: 0.1.19
+  hash: 01995fec-83a9-7618-a8b4-109ec7ae68c9
 - name: userspace/userspace
-  version: 0.1.8
-  hash: 0199505b-2762-7661-b4c7-190ac8e3ecee
+  version: 0.1.14
+  hash: 01995ac5-b2f5-7c6d-ba9d-e7d2c9cdc629
 - name: wippy/actor
   version: v0.2.1
   hash: 019914eb-4861-75aa-a18f-a4219f281f4d
@@ -24,8 +24,8 @@ modules:
   version: v0.2.4
   hash: 01995162-4765-7b28-85ce-34605ce4195a
 - name: wippy/llm
-  version: v0.2.9
-  hash: 01995109-9155-7159-a7d5-3b5fd33f007d
+  version: v0.2.10
+  hash: 01996390-fc14-7028-99dc-1cc0a2456c43
 - name: wippy/migration
   version: v0.0.10
   hash: 01984114-e585-7da1-b6ab-ea45ca51ddc6
