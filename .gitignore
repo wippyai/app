@@ -4,9 +4,8 @@
 /dist
 /build
 
-# Dependency directories
-/node_modules
-/vendor
+# Wippy runtime directory
+/.wippy
 
 # Binaries for programs and plugins
 *.exe
