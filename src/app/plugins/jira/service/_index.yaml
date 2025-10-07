@@ -1,0 +1,191 @@
+version: "1.0"
+namespace: app.plugins.jira.service
+
+entries:
+  # app.plugins.jira.service:get_service_status_func
+  - name: get_service_status_func
+    kind: function.lua
+    meta:
+      comment: Get status function for Jira REST service component
+      tags:
+        - jira
+        - status
+        - component
+    source: file://get_service_status_func.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+      jira_internal: app.plugins.jira.service:jira_internal
+    method: handle
+    
+  # app.plugins.jira.service:jira_delete_func
+  - name: jira_delete_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated DELETE request to Jira REST API
+      tags:
+        - jira
+        - delete
+        - http
+        - rest
+    source: file://jira_delete_func.lua
+    modules:
+      - http_client
+    imports:
+      component: userspace.component:component
+      jira_internal: app.plugins.jira.service:jira_internal
+    method: handle
+    
+  # app.plugins.jira.service:jira_get_func
+  - name: jira_get_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated GET request to Jira REST API
+      tags:
+        - jira
+        - get
+        - http
+        - rest
+    source: file://jira_get_func.lua
+    modules:
+      - http_client
+    imports:
+      component: userspace.component:component
+      jira_internal: app.plugins.jira.service:jira_internal
+    method: handle
+    
+  # app.plugins.jira.service:jira_get_info_func
+  - name: jira_get_info_func
+    kind: function.lua
+    meta:
+      comment: Get Jira server info and connection metadata
+      tags:
+        - jira
+        - info
+        - metadata
+    source: file://jira_get_info_func.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+      jira_internal: app.plugins.jira.service:jira_internal
+    method: handle
+    
+  # app.plugins.jira.service:jira_internal
+  - name: jira_internal
+    kind: library.lua
+    meta:
+      comment: Internal library for Jira functions to reduce code duplication
+      tags:
+        - jira
+        - internal
+        - library
+    source: file://jira_internal.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+    
+  # app.plugins.jira.service:jira_patch_func
+  - name: jira_patch_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated PATCH request to Jira REST API
+      tags:
+        - jira
+        - patch
+        - http
+        - rest
+    source: file://jira_patch_func.lua
+    modules:
+      - http_client
+      - json
+    imports:
+      component: userspace.component:component
+      jira_internal: app.plugins.jira.service:jira_internal
+    method: handle
+    
+  # app.plugins.jira.service:jira_post_func
+  - name: jira_post_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated POST request to Jira REST API
+      tags:
+        - jira
+        - post
+        - http
+        - rest
+    source: file://jira_post_func.lua
+    modules:
+      - http_client
+      - json
+    imports:
+      component: userspace.component:component
+      jira_internal: app.plugins.jira.service:jira_internal
+    method: handle
+    
+  # app.plugins.jira.service:jira_put_func
+  - name: jira_put_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated PUT request to Jira REST API
+      tags:
+        - jira
+        - put
+        - http
+        - rest
+    source: file://jira_put_func.lua
+    modules:
+      - http_client
+      - json
+    imports:
+      component: userspace.component:component
+      jira_internal: app.plugins.jira.service:jira_internal
+    method: handle
+    
+  # app.plugins.jira.service:jira_rest_service
+  - name: jira_rest_service
+    kind: contract.binding
+    meta:
+      name: Jira REST Service
+      type: component
+      comment: Low-level Jira REST API service - handles HTTP and authentication
+      tags:
+        - jira
+        - implementation
+        - rest
+        - http
+      class: jira_rest_service
+      component:
+        icon: tabler:bug
+        create_ui_id: app.plugins.jira.views:create_jira_rest_service
+        manage_ui_id: app.plugins.jira.views:manage_jira_rest_service
+    contracts:
+      - contract: app.plugins.jira:jira_rest_contract
+        context_required:
+          - component_id
+        default: true
+        methods:
+          delete: app.plugins.jira.service:jira_delete_func
+          get: app.plugins.jira.service:jira_get_func
+          get_info: app.plugins.jira.service:jira_get_info_func
+          patch: app.plugins.jira.service:jira_patch_func
+          post: app.plugins.jira.service:jira_post_func
+          put: app.plugins.jira.service:jira_put_func
+      - contract: userspace.contract:deletable
+        context_required:
+          - component_id
+        methods:
+          delete: userspace.credentials:delete_func
+      - contract: userspace.contract:component
+        context_required:
+          - component_id
+        methods:
+          get_status: app.plugins.jira.service:get_service_status_func
+      - contract: userspace.credentials:credential_validator
+        context_required:
+          - component_id
+        methods:
+          normalize_and_validate: app.plugins.jira:normalize_credentials
+    

@@ -1,0 +1,29 @@
+version: "1.0"
+namespace: app.uploads.markitdown
+
+entries:
+  # app.uploads.markitdown:api_url
+  - name: api_url
+    kind: env.variable
+    meta:
+      comment: Base URL for MarkItDown API service (auto-appends /process_file). Converts documents (PDF, Word, Excel, PowerPoint, images, audio) to Markdown.
+      icon: tabler:file-text
+    storage: app.env:router
+    
+  # app.uploads.markitdown:processor.markdown
+  - name: processor.markdown
+    kind: function.lua
+    meta:
+      type: processor
+      comment: Process documents using MarkItDown API service into Markdown format
+    source: file://processor.markdown.lua
+    modules:
+      - fs
+      - text
+      - json
+      - http_client
+      - env
+    imports:
+      content_repo: userspace.uploads:content_repo
+    method: process
+    

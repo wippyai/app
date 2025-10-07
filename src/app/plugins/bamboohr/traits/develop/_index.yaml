@@ -1,0 +1,71 @@
+version: "1.0"
+namespace: app.plugins.bamboohr.traits
+
+entries:
+  # app.plugins.bamboohr.traits:bamboohr
+  - name: bamboohr
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      comment: Adds BambooHR read-only capabilities for HR data access
+      tags:
+        - bamboohr
+        - hr
+        - employees
+        - readonly
+      icon: tabler:users
+    prompt: |-
+      You have access to BambooHR HR data through a read-only API connection. Use the bamboohr_get tool to access employee information, organizational data, and HR reports.
+    
+      Available endpoints include:
+      - /employees/directory - Employee directory
+      - /employees/{id} - Specific employee details
+      - /time_off/requests - Time off requests
+      - /reports/custom - Custom reports
+      - /meta/fields - Available fields
+      - /meta/users - User information
+    
+      The BambooHR connection context is automatically available.
+    tools:
+      - app.plugins.bamboohr.traits:bamboohr_get
+    
+  # app.plugins.bamboohr.traits:bamboohr_get
+  - name: bamboohr_get
+    kind: function.lua
+    meta:
+      type: tool
+      title: BambooHR Request
+      tags:
+        - bamboohr
+        - get
+        - api
+      description: Make GET requests to BambooHR API endpoints
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "API path (e.g., '/employees/directory', '/employees/123', '/time_off/requests')"
+            },
+            "query": {
+              "type": "object",
+              "description": "Query parameters as key-value pairs (optional)"
+            },
+            "component_id": {
+              "type": "string",
+              "description": "Optional BambooHR component ID (auto-discovered if not provided)"
+            }
+          },
+          "required": ["path"]
+        }
+      llm_alias: BambooHRGet
+      llm_description: Make GET requests to BambooHR API. Provide the API path and optional query parameters. Connection is automatically handled.
+    source: file://bamboohr_get.lua
+    modules:
+      - ctx
+      - json
+    imports:
+      bamboohr: app.plugins.bamboohr:bamboohr_client
+    method: handle
+    

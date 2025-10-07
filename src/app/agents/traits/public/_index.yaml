@@ -1,0 +1,64 @@
+version: "1.0"
+namespace: app.agents.traits.public
+
+entries:
+  # app.agents.traits.public:public_agent_list
+  - name: public_agent_list
+    kind: function.lua
+    meta:
+      name: Public Agent List
+      comment: Dynamic function that generates current public agent list for prompt injection
+      tags:
+        - public
+        - agents
+        - dynamic
+        - prompt
+      description: Generates real-time list of available public agents for trait prompt injection
+    source: file://public_agent_list.lua
+    imports:
+      list_agents: keeper.agents.manager:list_agents
+    method: handler
+    
+  # app.agents.traits.public:public_router
+  - name: public_router
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      title: Public Router
+      comment: Simple redirection to public agents without delegation overhead
+      tags:
+        - public
+        - routing
+        - redirect
+      icon: tabler:arrow-right
+    tools:
+      - id: app.agents.traits.public:redirect
+    prompt_func_id: app.agents.traits.public:public_agent_list
+    
+  # app.agents.traits.public:redirect
+  - name: redirect
+    kind: function.lua
+    meta:
+      type: tool
+      title: Redirect to Agent
+      comment: Redirect user to a public agent
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "agent_id": {
+              "type": "string",
+              "description": "Public agent ID or name to redirect to"
+            }
+          },
+          "required": ["agent_id"],
+          "additionalProperties": false
+        }
+      llm_alias: RedirectTo
+      llm_description: Redirect user to a public agent by ID or name.
+      private: true
+    source: file://redirect.lua
+    modules:
+      - registry
+    method: handler
+    

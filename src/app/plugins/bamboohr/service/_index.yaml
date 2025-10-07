@@ -1,0 +1,192 @@
+version: "1.0"
+namespace: app.plugins.bamboohr.service
+
+entries:
+  # app.plugins.bamboohr.service:bamboohr_delete_func
+  - name: bamboohr_delete_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated DELETE request to BambooHR REST API
+      tags:
+        - bamboohr
+        - delete
+        - http
+        - rest
+    source: file://bamboohr_delete_func.lua
+    modules:
+      - http_client
+    imports:
+      bamboohr_internal: app.plugins.bamboohr.service:bamboohr_internal
+      component: userspace.component:component
+    method: handle
+    
+  # app.plugins.bamboohr.service:bamboohr_get_func
+  - name: bamboohr_get_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated GET request to BambooHR REST API
+      tags:
+        - bamboohr
+        - get
+        - http
+        - rest
+    source: file://bamboohr_get_func.lua
+    modules:
+      - http_client
+    imports:
+      bamboohr_internal: app.plugins.bamboohr.service:bamboohr_internal
+      component: userspace.component:component
+    method: handle
+    
+  # app.plugins.bamboohr.service:bamboohr_get_info_func
+  - name: bamboohr_get_info_func
+    kind: function.lua
+    meta:
+      comment: Get BambooHR server info and connection metadata
+      tags:
+        - bamboohr
+        - info
+        - metadata
+    source: file://bamboohr_get_info_func.lua
+    modules:
+      - ctx
+    imports:
+      bamboohr_internal: app.plugins.bamboohr.service:bamboohr_internal
+      component: userspace.component:component
+    method: handle
+    
+  # app.plugins.bamboohr.service:bamboohr_internal
+  - name: bamboohr_internal
+    kind: library.lua
+    meta:
+      comment: Internal library for BambooHR functions to reduce code duplication
+      tags:
+        - bamboohr
+        - internal
+        - library
+    source: file://bamboohr_internal.lua
+    modules:
+      - ctx
+      - base64
+    imports:
+      component: userspace.component:component
+    
+  # app.plugins.bamboohr.service:bamboohr_patch_func
+  - name: bamboohr_patch_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated PATCH request to BambooHR REST API
+      tags:
+        - bamboohr
+        - patch
+        - http
+        - rest
+    source: file://bamboohr_patch_func.lua
+    modules:
+      - http_client
+      - json
+    imports:
+      bamboohr_internal: app.plugins.bamboohr.service:bamboohr_internal
+      component: userspace.component:component
+    method: handle
+    
+  # app.plugins.bamboohr.service:bamboohr_post_func
+  - name: bamboohr_post_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated POST request to BambooHR REST API
+      tags:
+        - bamboohr
+        - post
+        - http
+        - rest
+    source: file://bamboohr_post_func.lua
+    modules:
+      - http_client
+      - json
+    imports:
+      bamboohr_internal: app.plugins.bamboohr.service:bamboohr_internal
+      component: userspace.component:component
+    method: handle
+    
+  # app.plugins.bamboohr.service:bamboohr_put_func
+  - name: bamboohr_put_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated PUT request to BambooHR REST API
+      tags:
+        - bamboohr
+        - put
+        - http
+        - rest
+    source: file://bamboohr_put_func.lua
+    modules:
+      - http_client
+      - json
+    imports:
+      bamboohr_internal: app.plugins.bamboohr.service:bamboohr_internal
+      component: userspace.component:component
+    method: handle
+    
+  # app.plugins.bamboohr.service:bamboohr_rest_service
+  - name: bamboohr_rest_service
+    kind: contract.binding
+    meta:
+      name: BambooHR REST Service
+      type: component
+      comment: Low-level BambooHR REST API service - handles HTTP and authentication
+      tags:
+        - bamboohr
+        - implementation
+        - rest
+        - http
+      class: bamboohr_rest_service
+      component:
+        icon: tabler:users
+        create_ui_id: app.plugins.bamboohr.views:create_bamboohr_rest_service
+        manage_ui_id: app.plugins.bamboohr.views:manage_bamboohr_rest_service
+    contracts:
+      - contract: app.plugins.bamboohr:bamboohr_rest_contract
+        context_required:
+          - component_id
+        default: true
+        methods:
+          delete: app.plugins.bamboohr.service:bamboohr_delete_func
+          get: app.plugins.bamboohr.service:bamboohr_get_func
+          get_info: app.plugins.bamboohr.service:bamboohr_get_info_func
+          patch: app.plugins.bamboohr.service:bamboohr_patch_func
+          post: app.plugins.bamboohr.service:bamboohr_post_func
+          put: app.plugins.bamboohr.service:bamboohr_put_func
+      - contract: userspace.contract:deletable
+        context_required:
+          - component_id
+        methods:
+          delete: userspace.credentials:delete_func
+      - contract: userspace.contract:component
+        context_required:
+          - component_id
+        methods:
+          get_status: app.plugins.bamboohr.service:get_service_status_func
+      - contract: userspace.credentials:credential_validator
+        context_required:
+          - component_id
+        methods:
+          normalize_and_validate: app.plugins.bamboohr:normalize_credentials
+    
+  # app.plugins.bamboohr.service:get_service_status_func
+  - name: get_service_status_func
+    kind: function.lua
+    meta:
+      comment: Get status function for BambooHR REST service component
+      tags:
+        - bamboohr
+        - status
+        - component
+    source: file://get_service_status_func.lua
+    modules:
+      - ctx
+    imports:
+      bamboohr_internal: app.plugins.bamboohr.service:bamboohr_internal
+      component: userspace.component:component
+    method: handle
+    

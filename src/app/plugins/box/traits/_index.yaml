@@ -1,0 +1,107 @@
+version: "1.0"
+namespace: app.plugins.box.traits
+
+entries:
+  # app.plugins.box.traits:box_manager
+  - name: box_manager
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      comment: Adds Box cloud storage capabilities to agents
+      tags:
+        - box
+        - cloud-storage
+        - files
+        - trait
+      icon: tabler:brand-box
+    prompt: |-
+      You have access to Box cloud storage tools. Use these to help users manage their Box files.
+    
+      **Available capabilities:**
+      - List files and folders from Box
+      - Read file content from Box
+      - Browse folder structure using folder IDs
+    
+      **Important guidelines:**
+      - Use folder_id "0" for root folder
+      - Use file/folder IDs from list results to navigate
+      - Handle different file types appropriately (text, images, binary)
+      - Respect Box API rate limits and file size constraints
+      - Always provide helpful context about what you're doing
+    
+      **Usage examples:**
+      - "List my Box files" → Use list_files with default folder_id "0"
+      - "Show files in that folder" → Use list_files with specific folder_id
+      - "Read that document" → Use read_file with specific file_id
+    tools:
+      - app.plugins.box.traits:*
+    
+  # app.plugins.box.traits:list_files
+  - name: list_files
+    kind: function.lua
+    meta:
+      type: tool
+      title: List Box Files
+      tags:
+        - box
+        - files
+        - cloud-storage
+      description: List files and folders from Box cloud storage
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "folder_id": {
+              "type": "string",
+              "description": "Box folder ID (default: '0' for root folder)",
+              "default": "0"
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Maximum files to return (1-100)",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        }
+      llm_alias: ListBoxFiles
+      llm_description: List files and folders from Box cloud storage. Use folder_id from previous results to browse into folders.
+    source: file://list_files.lua
+    modules:
+      - json
+    imports:
+      box_client: app.plugins.box:box_client
+    method: handle
+    
+  # app.plugins.box.traits:read_file
+  - name: read_file
+    kind: function.lua
+    meta:
+      type: tool
+      title: Read Box File
+      tags:
+        - box
+        - files
+        - content
+      description: Read file content from Box cloud storage
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "file_id": {
+              "type": "string",
+              "description": "Box file ID to read"
+            }
+          },
+          "required": ["file_id"]
+        }
+      llm_alias: ReadBoxFile
+      llm_description: Read content from a Box file by ID. Handles text files, images, and binary files appropriately.
+    source: file://read_file.lua
+    modules:
+      - json
+    imports:
+      box_client: app.plugins.box:box_client
+    method: handle
+    

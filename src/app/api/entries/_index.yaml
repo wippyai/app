@@ -1,0 +1,179 @@
+version: "1.0"
+namespace: app.api.entries
+
+entries:
+  # app.api.entries:agent_details
+  - name: agent_details
+    kind: function.lua
+    meta:
+      comment: Gets agent title and start prompts by name or ID
+      depends_on:
+        - ns:app
+      router: app:api
+    source: file://agent_details.lua
+    modules:
+      - http
+      - json
+      - registry
+    method: handler
+
+  # app.api.entries:agent_details.endpoint
+  - name: agent_details.endpoint
+    kind: http.endpoint
+    meta:
+      comment: Protected endpoint that returns agent title and start prompts
+      depends_on:
+        - ns:app
+      router: app:api
+    method: GET
+    func: agent_details
+    path: /agents/details
+
+  # app.api.entries:agents_by_name
+  - name: agents_by_name
+    kind: function.lua
+    meta:
+      comment: Gets agent titles by their names
+      router: app:api
+    source: file://agents_by_name.lua
+    modules:
+      - http
+      - json
+      - registry
+    method: handler
+    pool:
+      size: 2
+
+  # app.api.entries:agents_by_name.endpoint
+  - name: agents_by_name.endpoint
+    kind: http.endpoint
+    meta:
+      comment: Protected endpoint that returns agent titles by their names
+      depends_on:
+        - ns:app
+      router: app:api
+    method: GET
+    func: agents_by_name
+    path: /agents/by-name
+
+  # app.api.entries:list_agents
+  - name: list_agents
+    kind: function.lua
+    meta:
+      comment: Lists all agents with limited metadata (name, title, group, comment, icon, tags)
+      depends_on:
+        - ns:app
+        - ns:wippy.session
+      router: app:api
+    source: file://list_agents.lua
+    modules:
+      - http
+      - registry
+    imports:
+      start_tokens: wippy.session:start_tokens
+    method: handler
+    pool:
+      size: 2
+
+  # app.api.entries:list_agents.endpoint
+  - name: list_agents.endpoint
+    kind: http.endpoint
+    meta:
+      comment: Protected endpoint that provides list of agents with limited metadata
+      depends_on:
+        - ns:app
+      router: app:api
+    method: GET
+    func: list_agents
+    path: /agents/list
+
+  # app.api.entries:list_models
+  - name: list_models
+    kind: function.lua
+    meta:
+      comment: Lists all available models with limited metadata (name, title, description, provider)
+      depends_on:
+        - ns:app
+        - ns:wippy.llm
+      router: app:api
+    source: file://list_models.lua
+    modules:
+      - http
+      - json
+    imports:
+      models: wippy.llm.discovery:models
+    method: handler
+    pool:
+      size: 2
+
+  # app.api.entries:list_models.endpoint
+  - name: list_models.endpoint
+    kind: http.endpoint
+    meta:
+      comment: Endpoint that provides list of models with limited metadata
+      depends_on:
+        - ns:app
+      router: app:api
+    method: GET
+    func: list_models
+    path: /models/list
+
+  # app.api.entries:models_by_name
+  - name: models_by_name
+    kind: function.lua
+    meta:
+      comment: Gets model information by their names
+      depends_on:
+        - ns:app
+      router: app:api
+    source: file://models_by_name.lua
+    modules:
+      - http
+      - json
+    imports:
+      models: wippy.llm.discovery:models
+    method: handler
+    pool:
+      size: 2
+
+  # app.api.entries:models_by_name.endpoint
+  - name: models_by_name.endpoint
+    kind: http.endpoint
+    meta:
+      comment: Endpoint that returns model information by their names
+      depends_on:
+        - ns:app
+      router: app:api
+    method: GET
+    func: models_by_name
+    path: /models/by-name
+
+  # app.api.entries:tools_by_name
+  - name: tools_by_name
+    kind: function.lua
+    meta:
+      comment: Gets tool titles by their names
+      depends_on:
+        - ns:app
+      router: app:api
+    source: file://tools_by_name.lua
+    modules:
+      - http
+      - json
+    imports:
+      tools_reg: wippy.agent.discovery:tools
+    method: handler
+    pool:
+      size: 2
+
+  # app.api.entries:tools_by_name.endpoint
+  - name: tools_by_name.endpoint
+    kind: http.endpoint
+    meta:
+      comment: Endpoint that returns tool titles by their names
+      depends_on:
+        - ns:app
+      router: app:api
+    method: GET
+    func: tools_by_name
+    path: /tools/by-name

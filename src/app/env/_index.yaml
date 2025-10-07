@@ -1,0 +1,152 @@
+version: "1.0"
+namespace: app.env
+
+entries:
+  # app.env:app_base_url
+  - name: app_base_url
+    kind: env.variable
+    meta:
+      comment: Application base URL for generating links and redirects
+      icon: tabler:world
+      private: true
+    readonly: true
+    storage: app.env:router
+    variable: APP_BASE_URL
+
+  # app.env:app_db
+  - name: app_db
+    kind: env.variable
+    meta:
+      comment: Database service ID reference to main database instance
+      icon: tabler:database
+      private: true
+    default: app:db
+    readonly: true
+    storage: app.env:router
+    variable: APP_DB
+
+  # app.env:app_fs
+  - name: app_fs
+    kind: env.variable
+    meta:
+      comment: Filesystem service ID reference to main file storage
+      icon: tabler:folder
+      private: true
+    readonly: true
+    storage: app.env:router
+    variable: APP_FS
+
+  # app.env:app_ws_url
+  - name: app_ws_url
+    kind: env.variable
+    meta:
+      comment: WebSocket URL for real-time communication
+      icon: tabler:plug-connected
+      private: true
+    readonly: true
+    storage: app.env:router
+    variable: APP_WS_URL
+
+  # app.env:enable_integration_tests
+  - name: enable_integration_tests
+    kind: env.variable
+    meta:
+      comment: Enable integration tests flag to control test execution
+      icon: tabler:test-pipe
+    storage: app.env:router
+    variable: ENABLE_INTEGRATION_TESTS
+
+  # app.env:file
+  - name: file
+    kind: env.storage.file
+    meta:
+      comment: Environment variables from .env file
+    auto_create: true
+    file_path: .env
+    lifecycle:
+      auto_start: true
+
+  # app.env:os
+  - name: os
+    kind: env.storage.os
+    meta:
+      comment: OS environment variables
+    lifecycle:
+      auto_start: true
+
+  # app.env:router
+  - name: router
+    kind: env.storage.router
+    meta:
+      comment: Router storage with file and OS fallback
+    lifecycle:
+      auto_start: true
+    storages:
+      - app.env:file
+      - app.env:os
+
+  # app.env:upload_storage_id
+  - name: upload_storage_id
+    kind: env.variable
+    meta:
+      comment: Upload storage service ID for file upload handling
+      icon: tabler:upload
+      private: true
+    default: app:uploads
+    storage: app.env:router
+    variable: UPLOAD_STORAGE_ID
+
+  # app.env:public_app_api_url
+  - name: public_app_api_url
+    kind: env.variable
+    meta:
+      comment: Public API URL for frontend consumption
+      icon: tabler:world
+    storage: app.env:router
+    variable: PUBLIC_APP_API_URL
+
+  # app.env:public_app_websocket_url
+  - name: public_app_websocket_url
+    kind: env.variable
+    meta:
+      comment: Public WebSocket URL for frontend consumption
+      icon: tabler:plug-connected
+    storage: app.env:router
+    variable: PUBLIC_APP_WEBSOCKET_URL
+
+  # app.env:public_project_specific_env
+  - name: public_project_specific_env
+    kind: env.variable
+    meta:
+      comment: Example project-specific environment variable for frontend
+      icon: tabler:settings
+    storage: app.env:router
+    variable: PUBLIC_PROJECT_SPECIFIC_ENV
+
+  # app.env:public_env_handler
+  - name: public_env_handler
+    kind: function.lua
+    meta:
+      comment: Returns PUBLIC_ environment variables as JavaScript ES6 module
+      depends_on:
+        - ns:app
+      router: app:api.public
+    source: file://public_env_handler.lua
+    modules:
+      - http
+      - env
+    method: handler
+    pool:
+      size: 2
+
+  # app.env:public_env_endpoint
+  - name: public_env_endpoint
+    kind: http.endpoint
+    meta:
+      comment: Public endpoint that returns environment variables as JavaScript ES6 module
+      depends_on:
+        - ns:app
+      router: app:api.public
+    method: GET
+    func: public_env_handler
+    path: /env/public.js

@@ -1,0 +1,20 @@
+version: "1.0"
+namespace: app.uploads.embed
+
+entries:
+  # app.uploads.embed:embed
+  - name: embed
+    kind: function.lua
+    meta:
+      type: processor
+      comment: Process document pages by chunking content and generating embeddings
+    source: file://embed.lua
+    modules:
+      - time
+      - ctx
+      - text
+    imports:
+      content_repo: userspace.uploads:content_repo
+      embeddings: wippy.embeddings:embeddings
+    method: process
+    

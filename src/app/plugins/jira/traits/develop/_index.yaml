@@ -1,0 +1,86 @@
+version: "1.0"
+namespace: app.plugins.jira.traits.develop
+
+entries:
+  # app.plugins.jira.traits.develop:jira_developer
+  - name: jira_developer
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      comment: Adds Jira read capabilities for development and issue management
+      tags:
+        - jira
+        - read
+        - development
+        - issues
+        - api
+      icon: tabler:bug
+    prompt: |-
+      You have read access to Jira APIs for development and issue management. Use these tools to retrieve issues, projects, users, and other Jira data.
+    
+      **Available operations:**
+      - GET: Retrieve issues, projects, users, and other data
+    
+      **Common Jira API paths:**
+      - `/rest/api/2/issue/PROJ-123` - Get specific issue
+      - `/rest/api/2/search` - JQL search for issues
+      - `/rest/api/2/project` - List projects
+      - `/rest/api/2/user` - User information
+      - `/rest/api/2/component` - Project components
+      - `/rest/api/2/version` - Project versions
+      - `/rest/api/2/serverInfo` - Server information
+    
+      **Guidelines:**
+      - Always use proper Jira REST API paths starting with `/rest/api/2/`
+      - For search operations, use query parameters with JQL
+      - Handle authentication automatically through existing connection
+      - Use appropriate query parameters for filtering and pagination
+      - This is DEBUG trait, encourage user to talk to Engineer agent to implement proper functions once you learn what you need
+    
+      The Jira connection context is automatically managed.
+    
+      Whenever you have this prompt make sure to point to user that you dont have a complete toolking and proper engineering is required first (talk to user to learn what functions he needs and then delegate to Engineer agent)
+    tools:
+      - app.plugins.jira.traits.develop:jira_get
+    
+  # app.plugins.jira.traits.develop:jira_get
+  - name: jira_get
+    kind: function.lua
+    meta:
+      type: tool
+      title: Jira GET Request
+      tags:
+        - jira
+        - get
+        - read
+        - api
+      description: Make GET requests to Jira REST API for reading data
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "API path (e.g., '/rest/api/2/issue/PROJ-123', '/rest/api/2/search')"
+            },
+            "query": {
+              "type": "object",
+              "description": "Query parameters as key-value pairs (optional)"
+            },
+            "component_id": {
+              "type": "string",
+              "description": "Optional Jira component ID (auto-discovered if not provided)"
+            }
+          },
+          "required": ["path"]
+        }
+      llm_alias: JiraGet
+      llm_description: Make GET requests to Jira REST API. Provide the API path and optional query parameters.
+    source: file://jira_get.lua
+    modules:
+      - ctx
+      - json
+    imports:
+      jira: app.plugins.jira:jira_client
+    method: handle
+    

@@ -1,0 +1,171 @@
+version: "1.0"
+namespace: app.plugins.tempo.service
+
+entries:
+  # app.plugins.tempo.service:get_service_status_func
+  - name: get_service_status_func
+    kind: function.lua
+    meta:
+      comment: Get status function for Tempo REST service component
+      tags:
+        - tempo
+        - status
+        - component
+    source: file://get_service_status_func.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+      tempo_internal: app.plugins.tempo.service:tempo_internal
+    method: handle
+    
+  # app.plugins.tempo.service:tempo_delete_func
+  - name: tempo_delete_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated DELETE request to Tempo REST API
+      tags:
+        - tempo
+        - delete
+        - http
+        - rest
+    source: file://tempo_delete_func.lua
+    modules:
+      - http_client
+    imports:
+      component: userspace.component:component
+      tempo_internal: app.plugins.tempo.service:tempo_internal
+    method: handle
+    
+  # app.plugins.tempo.service:tempo_get_func
+  - name: tempo_get_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated GET request to Tempo REST API
+      tags:
+        - tempo
+        - get
+        - http
+        - rest
+    source: file://tempo_get_func.lua
+    modules:
+      - http_client
+    imports:
+      component: userspace.component:component
+      tempo_internal: app.plugins.tempo.service:tempo_internal
+    method: handle
+    
+  # app.plugins.tempo.service:tempo_get_info_func
+  - name: tempo_get_info_func
+    kind: function.lua
+    meta:
+      comment: Get Tempo server info and connection metadata
+      tags:
+        - tempo
+        - info
+        - metadata
+    source: file://tempo_get_info_func.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+      tempo_internal: app.plugins.tempo.service:tempo_internal
+    method: handle
+    
+  # app.plugins.tempo.service:tempo_internal
+  - name: tempo_internal
+    kind: library.lua
+    meta:
+      comment: Internal library for Tempo functions to reduce code duplication
+      tags:
+        - tempo
+        - internal
+        - library
+    source: file://tempo_internal.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+    
+  # app.plugins.tempo.service:tempo_post_func
+  - name: tempo_post_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated POST request to Tempo REST API
+      tags:
+        - tempo
+        - post
+        - http
+        - rest
+    source: file://tempo_post_func.lua
+    modules:
+      - http_client
+      - json
+    imports:
+      component: userspace.component:component
+      tempo_internal: app.plugins.tempo.service:tempo_internal
+    method: handle
+    
+  # app.plugins.tempo.service:tempo_put_func
+  - name: tempo_put_func
+    kind: function.lua
+    meta:
+      comment: Perform authenticated PUT request to Tempo REST API
+      tags:
+        - tempo
+        - put
+        - http
+        - rest
+    source: file://tempo_put_func.lua
+    modules:
+      - http_client
+      - json
+    imports:
+      component: userspace.component:component
+      tempo_internal: app.plugins.tempo.service:tempo_internal
+    method: handle
+    
+  # app.plugins.tempo.service:tempo_rest_service
+  - name: tempo_rest_service
+    kind: contract.binding
+    meta:
+      name: Tempo REST Service
+      type: component
+      comment: Low-level Tempo REST API service - handles HTTP and authentication
+      tags:
+        - tempo
+        - implementation
+        - rest
+        - http
+      class: tempo_rest_service
+      component:
+        icon: tabler:clock
+        create_ui_id: app.plugins.tempo.views:create_tempo_rest_service
+        manage_ui_id: app.plugins.tempo.views:manage_tempo_rest_service
+    contracts:
+      - contract: app.plugins.tempo:tempo_rest_contract
+        context_required:
+          - component_id
+        default: true
+        methods:
+          delete: app.plugins.tempo.service:tempo_delete_func
+          get: app.plugins.tempo.service:tempo_get_func
+          get_info: app.plugins.tempo.service:tempo_get_info_func
+          post: app.plugins.tempo.service:tempo_post_func
+          put: app.plugins.tempo.service:tempo_put_func
+      - contract: userspace.contract:deletable
+        context_required:
+          - component_id
+        methods:
+          delete: userspace.credentials:delete_func
+      - contract: userspace.contract:component
+        context_required:
+          - component_id
+        methods:
+          get_status: app.plugins.tempo.service:get_service_status_func
+      - contract: userspace.credentials:credential_validator
+        context_required:
+          - component_id
+        methods:
+          normalize_and_validate: app.plugins.tempo:normalize_credentials
+    

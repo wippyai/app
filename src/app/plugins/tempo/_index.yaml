@@ -1,0 +1,404 @@
+version: "1.0"
+namespace: app.plugins.tempo
+
+entries:
+  # app.plugins.tempo:normalize_credentials
+  - name: normalize_credentials
+    kind: function.lua
+    meta:
+      comment: Validates and normalizes Tempo credential form data
+      tags:
+        - credentials
+        - validation
+        - normalization
+        - tempo
+    source: file://normalize_credentials.lua
+    modules:
+      - http_client
+      - json
+      - base64
+    method: normalize_and_validate
+    
+  # app.plugins.tempo:tempo
+  - name: tempo
+    kind: registry.entry
+    meta:
+      name: Tempo
+      type: component
+      title: Tempo Time Tracking
+      comment: Connection to Tempo for time tracking and worklog management
+      group: Time Tracking
+      tags:
+        - time-tracking
+        - worklogs
+        - tempo
+        - jira
+        - timesheet
+      class:
+        - connection
+        - credential_connection
+        - tempo_services
+      component:
+        icon: tabler:clock
+        create_ui_id: userspace.credentials.views:create_credential_connection/tempo
+        manage_ui_id: userspace.credentials.views:manage_credential_connection
+      credential_provider: tempo
+    component_contract_id: app.plugins.tempo.service:tempo_rest_service
+    credential_schema:
+      type: object
+      properties:
+        access_token:
+          type: string
+          title: Personal Access Token
+          description: Tempo Personal Access Token for authentication
+          min_length: 20
+          placeholder: Generated from Tempo settings or Jira profile
+        server_url:
+          type: string
+          title: Jira Server URL
+          description: Your Jira instance URL where Tempo is installed
+          format: uri
+          pattern: ^https?://.+
+          placeholder: https://jira.company.com or https://company.atlassian.net
+        username:
+          type: string
+          title: Username
+          description: Your Jira username (for self-hosted instances)
+          min_length: 2
+          placeholder: Your Jira username
+      required:
+        - server_url
+        - access_token
+    ui_config:
+      description: |-
+        Connect to your Tempo time tracking system for worklog management and time utilization reporting. Tempo is a popular time tracking add-on for Jira.
+    
+        Authentication Guide:
+    
+        For Jira Cloud with Tempo:
+        • Use a Personal Access Token generated from Tempo settings
+        • Access tokens can be created in Tempo → Settings → API Integration
+    
+        For Jira Server/Data Center with Tempo:
+        • Use a Personal Access Token from your user profile
+        • Some configurations may require username + token combination
+    
+        Capabilities:
+        • View and create worklogs
+        • Generate time utilization reports
+        • Analyze team productivity and time allocation
+        • Search worklogs by user, project, or date range
+        • Track time against Jira issues
+      field_groups:
+        - name: connection
+          title: Connection Details
+          icon: tabler:server
+          description: Enter your Jira server URL where Tempo is installed
+          fields:
+            - server_url
+        - name: auth
+          title: Authentication
+          icon: tabler:key
+          description: Tempo authentication credentials
+          fields:
+            - username
+            - access_token
+      field_order:
+        - server_url
+        - username
+        - access_token
+      reference_urls:
+        - name: tempo_api_documentation
+          type: documentation
+          title: Tempo REST API Documentation
+          icon: tabler:book
+          description: Complete API reference and integration guides
+          url: https://www.tempo.io/server-api-documentation
+        - name: tempo_token_setup
+          type: setup
+          title: Generate Personal Access Tokens
+          icon: tabler:key
+          description: Guide for creating Tempo API tokens
+          url: https://www.tempo.io/doc/timesheets/server/latest/installation-and-configuration/api-integration
+      sensitive_fields:
+        - access_token
+    validation_contract_id: app.plugins.tempo:tempo_validator
+    
+  # app.plugins.tempo:tempo_client
+  - name: tempo_client
+    kind: library.lua
+    meta:
+      name: Tempo Client
+      comment: Minimal Tempo client library for contract opening with auto-discovery
+      tags:
+        - tempo
+        - client
+        - library
+        - minimal
+      description: Provides minimal interface for opening Tempo REST contract with automatic component discovery
+    source: file://tempo_client.lua
+    modules:
+      - ctx
+    imports:
+      component: userspace.component:component
+    
+  # app.plugins.tempo:tempo_rest_contract
+  - name: tempo_rest_contract
+    kind: contract.definition
+    meta:
+      comment: Low-level Tempo REST API contract - handles auth and HTTP mechanics
+      tags:
+        - tempo
+        - rest
+        - http
+        - low-level
+      description: Provides low-level HTTP access to Tempo REST API with authentication handling
+    methods:
+      - name: get
+        description: |
+          Perform authenticated GET request to Tempo REST API.
+          Calling: get(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/tempo-timesheets/4/worklogs/user/admin')"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: post
+        description: |
+          Perform authenticated POST request to Tempo REST API. Requires WRITE access.
+          Calling: post(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/tempo-timesheets/4/worklogs/search')"
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "Request body (will be JSON encoded)"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: put
+        description: |
+          Perform authenticated PUT request to Tempo REST API. Requires WRITE access.
+          Calling: put(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/tempo-timesheets/4/worklogs')"
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "Request body (will be JSON encoded)"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: delete
+        description: |
+          Perform authenticated DELETE request to Tempo REST API. Requires WRITE access.
+          Calling: delete(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "API path (e.g., '/rest/tempo-timesheets/4/worklogs/123')"
+                  },
+                  "query": {
+                    "type": "object",
+                    "description": "Query parameters as key-value pairs",
+                    "additionalProperties": true
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Additional headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["path"]
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code"
+                  },
+                  "body": {
+                    "description": "Response body (parsed JSON object or string)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "description": "Response headers",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["status_code", "body"]
+              }
+            format: application/schema+json
+      - name: get_info
+        description: |
+          Get Tempo server information and connection metadata.
+          Calling: get_info(request_dto)
+        input_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {},
+                "default": {}
+              }
+            format: application/schema+json
+        output_schemas:
+          - definition: |
+              {
+                "type": "object",
+                "properties": {
+                  "server_url": {
+                    "type": "string",
+                    "description": "Jira server URL"
+                  },
+                  "connection_name": {
+                    "type": "string",
+                    "description": "Connection name"
+                  },
+                  "user_info": {
+                    "type": "object",
+                    "description": "User information",
+                    "properties": {
+                      "username": {"type": "string"},
+                      "display_name": {"type": "string"}
+                    }
+                  }
+                },
+                "required": ["server_url"]
+              }
+            format: application/schema+json
+    
+  # app.plugins.tempo:tempo_validator
+  - name: tempo_validator
+    kind: contract.binding
+    meta:
+      comment: Standalone Tempo credential validator - no component_id context required
+      tags:
+        - credentials
+        - validation
+        - tempo
+        - standalone
+    contracts:
+      - contract: userspace.credentials:credential_validator
+        methods:
+          normalize_and_validate: app.plugins.tempo:normalize_credentials
+    

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="{{ env.hostname }}">
+    <title>{{ yield title() }}</title>
+    <meta name="description" content="{{ yield metaDescription() }}">
+    {{ if isset(resources.style) }}
+    {{ range resources.style }}
+    {{ if isset(.url) }}
+    <link rel="stylesheet" href="{{ .url }}"{{ if isset(.integrity) }} integrity="{{ .integrity }}"{{ end }}{{ if isset(.crossorigin) }} crossorigin="{{ .crossorigin }}"{{ end }}{{ if isset(.media) }} media="{{ .media }}"{{ end }}>
+    {{ end }}
+    {{ if isset(.inline) }}
+    <style>{{ .inline }}</style>
+    {{ end }}
+    {{ end }}
+    {{ end }}
+    {* JS Resources *}
+    {{ if isset(resources.script) }}
+    {{ range resources.script }}
+    {{ if isset(.url) }}
+    <script src="{{ .url }}"{{ if isset(.integrity) }} integrity="{{ .integrity }}"{{ end }}{{ if isset(.crossorigin) }} crossorigin="{{ .crossorigin }}"{{ end }}{{ if isset(.defer) }} defer{{ end }}{{ if isset(.async) }} async{{ end }}></script>
+    {{ end }}
+    {{ if isset(.inline) }}
+    <script>{{ .inline }}</script>
+    {{ end }}
+    {{ end }}
+    {{ end }}
+</head>
+<body class="bg-surface-100 dark:bg-surface-800">
+<div class="min-h-screen">
+    {*
+    Main Content Container
+    Child templates can override containerWidth() to set their preferred width
+    Default: max-w-7xl (wide container)
+    Other options:
+    - max-w-3xl (narrow, good for forms)
+    - max-w-5xl (medium width)
+    - w-full (full width, no constraints)
+    *}
+    <main class="{{ block containerWidth() }}max-w-7xl{{ end }} mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {{ yield mainContent() }}
+    </main>
+    {* Custom JS Block - For page-specific JavaScript *}
+    {{block customJs()}}{{ end }}
+</div>
+</body>
+</html>

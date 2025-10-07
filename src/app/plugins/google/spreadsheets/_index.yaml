@@ -1,0 +1,24 @@
+version: "1.0"
+namespace: app.plugins.google.spreadsheets
+
+entries:
+  # app.plugins.google.spreadsheets:sheets_client
+  - name: sheets_client
+    kind: library.lua
+    meta:
+      name: Google Sheets Client
+      comment: Google Sheets API client library with comprehensive spreadsheet operations
+      tags:
+        - google
+        - sheets
+        - spreadsheets
+        - client
+        - library
+        - data
+      description: Comprehensive spreadsheet operations for Google Sheets API
+    source: file://sheets_client.lua
+    modules:
+      - json
+    imports:
+      google_client: app.plugins.google:google_client
+    

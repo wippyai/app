@@ -1,0 +1,103 @@
+version: "1.0"
+namespace: app.uploads
+
+entries:
+  # app.uploads:types.documents
+  - name: types.documents
+    kind: registry.entry
+    meta:
+      name: Document Files
+      type: upload.type
+      description: PDF, Word, PowerPoint files converted to markdown via Docling
+    extensions:
+      - pdf
+      - docx
+      - doc
+      - pptx
+      - ppt
+      - rtf
+      - odt
+      - ods
+      - odp
+    mime_types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/msword
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - application/vnd.ms-powerpoint
+      - application/rtf
+      - application/vnd.oasis.opendocument.text
+      - application/vnd.oasis.opendocument.spreadsheet
+      - application/vnd.oasis.opendocument.presentation
+    pipeline:
+      - title: Converting to Markdown
+        func: app.uploads.markitdown:processor.markdown
+    
+  # app.uploads:types.images
+  - name: types.images
+    kind: registry.entry
+    meta:
+      name: Image Files
+      type: upload.type
+      description: Image files for agent viewing and analysis
+    extensions:
+      - jpg
+      - jpeg
+      - png
+      - gif
+      - bmp
+      - webp
+      - tiff
+      - tif
+      - svg
+      - ico
+    mime_types:
+      - image/.*
+    pipeline:
+      - title: Processing Image Upload
+        func: app.uploads.images:processor
+    
+  # app.uploads:types.text
+  - name: types.text
+    kind: registry.entry
+    meta:
+      name: Text Files
+      type: upload.type
+      description: Text and code files including source code, markup, and plain text
+    extensions:
+      - txt
+      - md
+      - markdown
+      - html
+      - htm
+      - css
+      - js
+      - json
+      - xml
+      - py
+      - lua
+      - rb
+      - php
+      - java
+      - c
+      - cpp
+      - cs
+      - go
+      - sh
+      - bat
+      - ps1
+      - yml
+      - yaml
+      - toml
+      - sql
+      - csv
+      - tsv
+    mime_types:
+      - text/.*
+      - application/json
+      - application/javascript
+      - application/xml
+    pipeline:
+      - title: Processing Text Content
+        func: app.uploads.text:processor
+    

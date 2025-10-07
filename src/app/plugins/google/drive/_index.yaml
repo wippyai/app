@@ -1,0 +1,23 @@
+version: "1.0"
+namespace: app.plugins.google.drive
+
+entries:
+  # app.plugins.google.drive:drive_client
+  - name: drive_client
+    kind: library.lua
+    meta:
+      name: Google Drive Client
+      comment: Google Drive API client library with specialized Drive operations
+      tags:
+        - google
+        - drive
+        - client
+        - library
+        - files
+      description: Drive-specific operations for Google Drive API
+    source: file://drive_client.lua
+    modules:
+      - json
+    imports:
+      google_client: app.plugins.google:google_client
+    

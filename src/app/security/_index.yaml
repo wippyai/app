@@ -1,0 +1,92 @@
+version: "1.0"
+namespace: app.security
+
+entries:
+  # app.security:admin.all_access
+  - name: admin.all_access
+    kind: security.policy
+    meta:
+      comment: Full administrative access to all resources and actions
+    groups:
+      - app.security:admin
+    policy:
+      resources: '*'
+      actions: '*'
+      effect: allow
+    
+  # app.security:ingress.forbid_registry
+  - name: ingress.forbid_registry
+    kind: security.policy
+    meta:
+      comment: Deny registry operations for ingress requests
+    groups:
+      - app.security:ingress
+    policy:
+      resources: '*'
+      actions: '*'
+      conditions:
+        - field: action
+          operator: matches
+          value: ^registry\.apply\.*$
+      effect: deny
+    
+  # app.security:ingress.general_access
+  - name: ingress.general_access
+    kind: security.policy
+    meta:
+      comment: General access policy for ingress requests
+    groups:
+      - app.security:ingress
+    policy:
+      resources: '*'
+      actions: '*'
+      effect: allow
+    
+  # app.security:session
+  - name: session
+    kind: store.memory
+    meta:
+      comment: User session storage
+    cleanup_interval: 10m
+    lifecycle:
+      auto_start: true
+    max_size: 5000
+    
+  # app.security:tokens
+  - name: tokens
+    kind: security.token_store
+    meta:
+      comment: Authentication token storage
+    default_expiration: 24h
+    store: app.security:session
+    token_key: ${ENV_TOKEN_KEY:-application-key}
+    token_length: 32
+    
+  # app.security:user.forbid_registry
+  - name: user.forbid_registry
+    kind: security.policy
+    meta:
+      comment: Deny registry write operations for standard users
+    groups:
+      - app.security:user
+    policy:
+      resources: '*'
+      actions: '*'
+      conditions:
+        - field: action
+          operator: matches
+          value: ^registry\.apply.*$
+      effect: deny
+    
+  # app.security:user.general_access
+  - name: user.general_access
+    kind: security.policy
+    meta:
+      comment: General access policy for standard users
+    groups:
+      - app.security:user
+    policy:
+      resources: '*'
+      actions: '*'
+      effect: allow
+    

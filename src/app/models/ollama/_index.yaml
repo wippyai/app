@@ -1,0 +1,36 @@
+version: "1.0"
+namespace: app.models.ollama
+
+entries:
+  # app.models.ollama:nomic-embed-text
+  - name: nomic-embed-text
+    kind: registry.entry
+    meta:
+      name: nomic-embed-text
+      type: llm.model
+      title: Nomic Embed Text
+      capabilities:
+        - embed
+      class:
+        - embedding
+      priority: 15
+    max_tokens: 8192
+    dimensions: 768
+    providers:
+      - id: app.models.ollama:provider
+        provider_model: nomic-embed-text
+
+  # app.models.ollama:provider
+  - name: provider
+    kind: registry.entry
+    meta:
+      name: ollama
+      type: llm.provider
+      title: Ollama Local using OpenAI compatible API
+      link: https://ollama.com
+    driver:
+      id: wippy.llm.openai:driver
+      options:
+        api_key_env: "none"
+        base_url: http://127.0.0.1:11434/v1
+        timeout: "600"

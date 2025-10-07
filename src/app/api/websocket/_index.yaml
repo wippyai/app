@@ -1,0 +1,26 @@
+version: "1.0"
+namespace: app.api.websocket
+
+entries:
+  # app.api.websocket:ws_endpoint
+  - name: ws_endpoint
+    kind: function.lua
+    meta:
+      comment: WebSocket authentication and join endpoint
+    source: file://ws_endpoint.lua
+    modules:
+      - http
+      - security
+      - json
+    method: handler
+    
+  # app.api.websocket:ws_endpoint.endpoint
+  - name: ws_endpoint.endpoint
+    kind: http.endpoint
+    meta:
+      comment: WebSocket join endpoint
+      router: app:api
+    method: GET
+    func: ws_endpoint
+    path: /ws/join
+    

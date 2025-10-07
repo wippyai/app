@@ -1,0 +1,121 @@
+version: "1.0"
+namespace: app.plugins.github
+
+entries:
+  # app.plugins.github:client_id
+  - name: client_id
+    kind: env.variable
+    meta:
+      comment: GitHub OAuth client ID
+      icon: tabler:brand-github
+    storage: app.env:router
+    variable: GITHUB_CLIENT_ID
+    
+  # app.plugins.github:client_secret
+  - name: client_secret
+    kind: env.variable
+    meta:
+      comment: GitHub OAuth client secret
+      icon: tabler:brand-github
+    storage: app.env:router
+    variable: GITHUB_CLIENT_SECRET
+    
+  # app.plugins.github:github
+  - name: github
+    kind: registry.entry
+    meta:
+      name: GitHub
+      type: component
+      title: GitHub
+      comment: OAuth connection to GitHub for repository and profile access
+      group: Development
+      tags:
+        - code
+        - repositories
+        - development
+        - version-control
+        - collaboration
+      class:
+        - connection
+        - oauth_connection
+        - github_services
+        - development
+        - code_repository
+      component:
+        icon: tabler:brand-github
+        create_ui_id: userspace.oauth.views:create_oauth_connection/github
+        manage_ui_id: userspace.oauth.views:manage_oauth_connection
+      oauth_provider: github
+    description: Connect to GitHub to access your repositories, profile, and development workflow
+    depends_on:
+      - app.plugins.github:client_id
+      - app.plugins.github:client_secret
+      - app.plugins.github:client_id
+      - app.plugins.github:client_secret
+      - app.plugins.github:client_id
+      - app.plugins.github:client_secret
+      - app.plugins.github:client_id
+      - app.plugins.github:client_secret
+      - app.plugins.github:client_id
+      - app.plugins.github:client_secret
+    available_scopes:
+      - name: Email Address
+        description: Access your email address
+        scope: user:email
+      - name: Read User Profile
+        description: Read your basic profile information
+        scope: read:user
+      - name: Full User Profile
+        description: Update user profile info and access private email addresses
+        scope: user
+      - name: Public Repository Access
+        description: Read and write access to public repositories only
+        scope: public_repo
+      - name: Full Repository Access
+        description: Read and write access to all public and private repositories
+        scope: repo
+      - name: Repository Status
+        description: Read and write repository commit status
+        scope: repo:status
+      - name: Read Organization
+        description: Read organization membership and team information
+        scope: read:org
+      - name: Write Organization
+        description: Publicize and unpublicize organization membership
+        scope: write:org
+      - name: Notifications
+        description: Access notifications
+        scope: notifications
+      - name: Gists
+        description: Write access to gists
+        scope: gist
+      - name: Read Packages
+        description: Download packages from GitHub Package Registry
+        scope: read:packages
+      - name: Write Packages
+        description: Upload packages to GitHub Package Registry
+        scope: write:packages
+      - name: Read Projects
+        description: Read access to user and organization projects
+        scope: read:project
+      - name: Manage Projects
+        description: Full access to user and organization projects
+        scope: project
+    component_contract_id: userspace.oauth:oauth_connection
+    connector_contract:
+      context_values:
+        oauth_authorization_endpoint: https://github.com/login/oauth/authorize
+        oauth_client_id_env: app.plugins.github:client_id
+        oauth_client_secret_env: app.plugins.github:client_secret
+        oauth_pkce_method: S256
+        oauth_response_type: ""
+        oauth_token_endpoint: https://github.com/login/oauth/access_token
+        oauth_use_pkce: true
+        oauth_userinfo_auth_header: true
+        oauth_userinfo_endpoint: https://api.github.com/user
+        oauth_userinfo_method: GET
+      implementation_id: userspace.oauth:base_connector
+    default_scopes:
+      - user:email
+      - read:user
+    

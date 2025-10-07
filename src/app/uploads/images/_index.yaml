@@ -1,0 +1,17 @@
+version: "1.0"
+namespace: app.uploads.images
+
+entries:
+  # app.uploads.images:processor
+  - name: processor
+    kind: function.lua
+    meta:
+      type: processor
+      comment: Process image uploads - just mark as completed without content extraction
+    source: file://processor.lua
+    modules:
+      - fs
+    imports:
+      upload_repo: userspace.uploads:upload_repo
+    method: process
+    
