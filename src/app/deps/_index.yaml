@@ -3,7 +3,7 @@ namespace: app.deps
 
 entries:
   # app.deps:__dependency.keeper.keeper
-  - version: '>=v0.1.0'
+  - version: '>=v0.2.1'
     name: __dependency.keeper.keeper
     kind: ns.dependency
     meta:
@@ -14,33 +14,33 @@ entries:
         value: app:api
       - name: target_db
         value: app:db
-    
+
   # app.deps:__dependency.userspace.userspace
-  - version: '>=v0.1.0'
+  - version: '>=v0.1.14'
     name: __dependency.userspace.userspace
     kind: ns.dependency
     meta:
       description: Userspace
     component: userspace/userspace
-    
+
   # app.deps:__dependency.wippy.actor
-  - version: '>=v0.2.1'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.actor
     kind: ns.dependency
     meta:
       description: Actor component
     component: wippy/actor
-    
+
   # app.deps:__dependency.wippy.agent
-  - version: '>=v0.2.1'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.agent
     kind: ns.dependency
     meta:
       description: Agent component
     component: wippy/agent
-    
+
   # app.deps:__dependency.wippy.bootloader
-  - version: '>=v0.0.9'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.bootloader
     kind: ns.dependency
     meta:
@@ -53,17 +53,17 @@ entries:
         value: app:db
       - name: env_storage
         value: app.env:router
-    
+
   # app.deps:__dependency.wippy.docs
-  - version: '>=v0.2.8'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.docs
     kind: ns.dependency
     meta:
       description: Documentation
     component: wippy/docs
-    
+
   # app.deps:__dependency.wippy.embeddings
-  - version: '>=v0.2.2'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.embeddings
     kind: ns.dependency
     meta:
@@ -72,9 +72,9 @@ entries:
     parameters:
       - name: target_db
         value: app:db
-    
+
   # app.deps:__dependency.wippy.llm
-  - version: '>=v0.2.8'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.llm
     kind: ns.dependency
     meta:
@@ -83,17 +83,17 @@ entries:
     parameters:
       - name: env_storage
         value: app.env:router
-    
+
   # app.deps:__dependency.wippy.migration
-  - version: '>=v0.0.7'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.migration
     kind: ns.dependency
     meta:
       description: Migration component
     component: wippy/migration
-    
+
   # app.deps:__dependency.wippy.relay
-  - version: '>=v0.2.1'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.relay
     kind: ns.dependency
     meta:
@@ -112,17 +112,17 @@ entries:
         value: "100"
       - name: user_hub_inactivity_timeout
         value: 300s
-    
+
   # app.deps:__dependency.wippy.security
-  - version: '>=v0.0.7'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.security
     kind: ns.dependency
     meta:
       description: Security component
     component: wippy/security
-    
+
   # app.deps:__dependency.wippy.session
-  - version: '>=v0.2.0'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.session
     kind: ns.dependency
     meta:
@@ -145,25 +145,25 @@ entries:
         value: 300s
       - name: delegation_func_id
         value: userspace.dataflow.session:delegate
-    
-  # app.deps:__dependency.wippy.terminal
-  - version: '>=v0.0.7'
-    name: __dependency.wippy.terminal
-    kind: ns.dependency
-    meta:
-      description: Terminal component
-    component: wippy/terminal
-    
+
+  # # app.deps:__dependency.wippy.terminal
+  # - version: '>=v0.3.0'
+  #   name: __dependency.wippy.terminal
+  #   kind: ns.dependency
+  #   meta:
+  #     description: Terminal component
+  #   component: wippy/terminal
+
   # app.deps:__dependency.wippy.test
-  - version: '>=v0.0.8'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.test
     kind: ns.dependency
     meta:
       description: Testing component
     component: wippy/test
-    
+
   # app.deps:__dependency.wippy.usage
-  - version: '>=v0.2.1'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.usage
     kind: ns.dependency
     meta:
@@ -172,9 +172,9 @@ entries:
     parameters:
       - name: target_db
         value: app:db
-    
+
   # app.deps:__dependency.wippy.views
-  - version: '>=v0.0.13'
+  - version: '>=v0.3.0'
     name: __dependency.wippy.views
     kind: ns.dependency
     meta:
@@ -183,4 +183,3 @@ entries:
     parameters:
       - name: api_router
         value: app:api.public
-    
