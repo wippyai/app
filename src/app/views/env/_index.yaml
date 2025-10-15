@@ -1,0 +1,18 @@
+version: "1.0"
+namespace: app.views.env
+
+entries:
+  # app.views.env:default_mappings
+  - name: default_mappings
+    kind: registry.entry
+    meta:
+      name: Default Application Environment Mappings
+      type: view.env_mapping
+      description: Default environment variable mappings for application views
+      category: application_mappings
+      priority: 20
+    mappings:
+      base_url: APP_BASE_URL
+      iframe_origin: PUBLIC_IFRAME_ORIGIN
+      public_api_url: PUBLIC_APP_API_URL
+      websocket_url: APP_WS_URL
