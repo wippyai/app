@@ -114,15 +114,15 @@ entries:
     storage: app.env:router
     variable: PUBLIC_APP_WEBSOCKET_URL
 
-  # app.env:public_iframe_origin
-  - name: public_iframe_origin
+  # app.env:PUBLIC_WEB_HOST_ORIGIN
+  - name: PUBLIC_WEB_HOST_ORIGIN
     kind: env.variable
     meta:
       comment: Public WebSocket URL for frontend consumption
       icon: tabler:frame
     storage: app.env:router
     default: https://front.wippy.ai
-    variable: PUBLIC_IFRAME_ORIGIN
+    variable: PUBLIC_WEB_HOST_ORIGIN
 
   # app.env:public_project_specific_env
   - name: public_project_specific_env

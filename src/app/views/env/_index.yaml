@@ -14,6 +14,6 @@ entries:
     mappings:
       hostname: APP_BASE_URL # deprecated
       base_url: APP_BASE_URL
-      iframe_origin: PUBLIC_IFRAME_ORIGIN
+      web_host_origin: PUBLIC_WEB_HOST_ORIGIN
       public_api_url: PUBLIC_APP_API_URL
       websocket_url: APP_WS_URL
