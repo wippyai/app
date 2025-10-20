@@ -13,7 +13,7 @@ entries:
       resource_type: script
       template_set: app.views.common:templates
       url: https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js
-    
+
   # app.views.common:iconify
   - name: iconify
     kind: registry.entry
@@ -24,7 +24,7 @@ entries:
       resource_type: script
       template_set: app.views.common:templates
       url: https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js
-    
+
   # app.views.common:layout
   - name: layout
     kind: template.jet
@@ -33,7 +33,7 @@ entries:
       description: Base layout template for all pages
     source: file://layout.jet
     set: templates
-    
+
   # app.views.common:tailwindcss
   - name: tailwindcss
     kind: registry.entry
@@ -44,7 +44,7 @@ entries:
       resource_type: script
       template_set: app.views.common:templates
       url: https://cdn.tailwindcss.com
-    
+
   # app.views.common:templates
   - name: templates
     kind: template.set
@@ -52,15 +52,3 @@ entries:
       description: Template set for app pages
     engine:
       development_mode: true
-    
-  # app.views.common:wippy-api
-  - name: wippy-api
-    kind: registry.entry
-    meta:
-      name: WippyAPI
-      type: view.resource
-      order: 10
-      resource_type: script
-      template_set: app.views.common:templates
-      url: https://front.wippy.ai/proxy.js
-    
