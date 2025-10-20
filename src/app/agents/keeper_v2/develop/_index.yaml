@@ -1,0 +1,47 @@
+version: "1.0"
+namespace: keeper.agents.keeper_v2.develop
+
+entries:
+  - name: implement_task
+    kind: function.lua
+    meta:
+      type: tool
+      title: Implement Task
+      comment: Routes task to specialist pair for context gathering and implementation
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "task": {
+              "type": "string",
+              "description": "Development task description"
+            },
+            "branch": {
+              "type": "string",
+              "default": "main",
+              "description": "Branch to work on"
+            }
+          },
+          "required": ["task"]
+        }
+      llm_alias: implement_task
+      llm_description: Execute development task with automatic context gathering and implementation
+    source: file://implement_task.lua
+    modules: [json, ctx]
+    imports:
+      flow: userspace.dataflow.flow:flow
+      agent_registry: wippy.agent.discovery:registry
+    method: handler
+
+  - name: router
+    kind: function.lua
+    meta:
+      title: Development Task Router
+      comment: Selects dev agent based on task, reads context_agent_id from meta
+    source: file://router.lua
+    modules: [json]
+    imports:
+      llm: wippy.llm:llm
+      prompt: wippy.llm:prompt
+      agent_registry: wippy.agent.discovery:registry
+    method: handler
