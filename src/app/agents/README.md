@@ -34,6 +34,102 @@ flow.create()
   :run()                       -- Execute entire flow
 ```
 
+#### Key Flow Builder Concepts
+
+**Routing:**
+- Automatic chaining: nodes connect sequentially unless `:to()` specified
+- Conditional routing: `:when("output.score > 0.8")`
+- Terminal nodes: `@success` and `@fail` for explicit completion
+- Transform on route: `:to("target"):transform("output.data.field")`
+
+**Node Types:**
+- `:func()` - Call Lua functions with input/output handling
+- `:agent()` - Execute LLM agents with arena configuration
+- `:cycle()` - Iterative loops with state management (exit via `continue = false`)
+- `:map_reduce()` - Parallel processing with batch control and aggregation
+
+**Agent Arena:**
+```lua
+:agent("namespace:agent_id", {
+  arena = {
+    prompt = "System instructions",
+    max_iterations = 10,
+    tool_calling = "auto",      -- "auto", "any", "none"
+    exit_schema = {...}         -- Creates automatic "finish" tool
+  }
+})
+```
+
+**Cycle Pattern:**
+```lua
+-- Cycle function receives:
+{iteration = N, input = {...}, state = {...}, last_result = {...}}
+
+-- Must return:
+{state = {...}, result = {...}, continue = boolean}
+```
+
+**Expression Language:**
+- Operators: `+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, `&&`, `||`, `!`, `? :`
+- Optional chaining: `output?.field?.nested`
+- Null coalescing: `value ?? default`
+- Functions: `len()`, `filter()`, `map()`, `upper()`, `lower()`, etc.
+
+**Context Variables:**
+- `input` - workflow input (in `:with_input()` routes)
+- `output` - node output (in `:to()` routes)
+- `error` - error object (in `:error_to()` routes)
+- `inputs` - multiple inputs (in node `input_transform`)
+
+**Execution Context:**
+
+Flow behavior depends on where it's called:
+
+**Called from outside workflow** (e.g., tool handler):
+```lua
+function handler(args)
+  return flow.create()
+    :with_input(args)
+    :func("process")
+    :run()  -- Creates NEW workflow
+end
+```
+- `:run()` compiles flow and creates a new workflow
+- `@success`/`@fail` terminate the workflow
+- Returns result to caller
+
+**Called from inside workflow** (e.g., cycle function):
+```lua
+function cycle_handler(cycle_context)
+  return flow.create()
+    :with_input(cycle_context.state)
+    :func("step1")
+    :func("step2")
+    :run()  -- Embeds as subgraph in parent workflow
+end
+```
+- Flow embeds as inline subgraph (like pipeline in pipeline)
+- `@success`/`@fail` return to parent as `NODE_OUTPUT`
+- Inherits parent's workflow context (`session_parent_id`)
+
+**Template Inlining:**
+```lua
+:cycle({
+  template = flow.template()  -- NOT :run()
+    :func("step1")
+    :func("step2")
+})
+```
+- Template nodes get `parent_node_id` set
+- Become part of parent's node graph
+- No separate workflow created
+
+**Key Points:**
+- Each `:run()` outside workflow = new workflow execution
+- `:run()` inside workflow = embedded subgraph
+- Templates (`:use()`, cycle/map-reduce templates) = inlined nodes
+- State persists across cycle iterations via the `state` field
+
 ---
 
 ## Agent Systems
