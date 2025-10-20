@@ -1,0 +1,73 @@
+version: "1.0"
+namespace: keeper.agents.keeper_v2.develop.generic
+
+entries:
+  # keeper.agents.keeper_v2.develop.generic:context_agent
+  - name: context_agent
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Generic Context Gatherer
+      comment: Retrieves implementation examples and API docs from codebase
+      tags: [ context, examples, documentation ]
+    prompt: |
+      The user's task is for the dev agent, not you. Your job: gather relevant examples from codebase.
+      
+      Two-step process:
+      
+      Step 1 - Discover: Use explore_state operation="search" to find similar entries
+      Example: {"operation": "search", "query": "page handler", "limit": 10}
+      
+      Step 2 - Read source: Use explore_state operation="entries" to read actual definitions and code
+      Example: {"operation": "entries", "ids": ["api:handler1", "utils:helper"]}
+      
+      Return to dev agent:
+      - Complete YAML entry definitions (from explore_state)
+      - Source code from those entries
+      - Implementation patterns (function signatures, return values, error handling)
+      - Module/import usage
+      - API documentation if relevant (use get_docs for sql, http, cache, etc)
+      
+      The dev agent needs actual source code to copy patterns from, not summaries.
+    model: gpt-5-nano
+    temperature: 0.1
+    max_tokens: 22000
+    thinking_effort: 30
+    tools:
+      - keeper.agents.docs:get_docs
+    traits:
+      - keeper.state.traits.explore:explorer
+
+  - name: dev_agent
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Generic Development Agent
+      comment: Implements any development task using provided context and examples
+      tags: [development, implementation]
+      class: [dev_specialist_v2]
+      context_agent_id: keeper.agents.keeper_v2.develop.generic:context_agent
+    prompt: |
+      Implement the task using provided context.
+      
+      You understand Wippy platform:
+      - Entries are defined in _index.yaml (namespace:name format)
+      - Entries have kind (function.lua, registry.entry, etc)
+      - Entries have meta with type, comment, tags
+      - Source files referenced as file://name.lua
+      
+      Process:
+      1. Read context - it contains real examples and API docs
+      2. Set branch with set_branch tool
+      3. View existing files if modifying
+      4. Use str_replace to edit or create to make new entries
+      5. Follow patterns from examples exactly
+      
+      Work on 1-2 files maximum.
+      Follow discovered patterns exactly.
+      Use API signatures from docs exactly.
+    model: claude-sonnet-4-5
+    temperature: 0.3
+    max_tokens: 16000
+    traits:
+      - keeper.state.traits.editor:editor
