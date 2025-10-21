@@ -3,7 +3,7 @@ namespace: app.deps
 
 entries:
   # app.deps:__dependency.keeper.keeper
-  - version: '>=v0.2.1'
+  - version: '>=v0.2.2'
     name: __dependency.keeper.keeper
     kind: ns.dependency
     meta:
@@ -14,14 +14,30 @@ entries:
         value: app:api
       - name: target_db
         value: app:db
+      - name: web_host_origin_env
+        value: app.env:PUBLIC_WEB_HOST_ORIGIN
 
   # app.deps:__dependency.userspace.userspace
-  - version: '>=v0.1.14'
+  - version: '>=v0.3.1'
     name: __dependency.userspace.userspace
     kind: ns.dependency
     meta:
       description: Userspace
     component: userspace/userspace
+    parameters:
+      - name: web_host_origin_env
+        value: app.env:PUBLIC_WEB_HOST_ORIGIN
+
+  # app.deps:__dependency.wippy.dataflow
+  - version: '>=v0.3.0'
+    name: __dependency.wippy.dataflow
+    kind: ns.dependency
+    meta:
+      description: Dataflow
+    component: wippy/dataflow
+    parameters:
+      - name: web_host_origin_env
+        value: app.env:PUBLIC_WEB_HOST_ORIGIN
 
   # app.deps:__dependency.wippy.actor
   - version: '>=v0.3.0'
