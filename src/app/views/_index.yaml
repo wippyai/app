@@ -11,7 +11,7 @@ entries:
       description: JavaScript library for creating flexible and customizable dropdown selects with search, multiple selection, and autocomplete features
       resource_type: script
       url: https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js
-    
+
   # app.views:tom-select-css
   - name: tom-select-css
     kind: registry.entry
@@ -21,7 +21,7 @@ entries:
       description: CSS style files for the Tom Select library, providing styling and visual presentation of the control elements
       resource_type: style
       url: https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css
-    
+
   # app.views:uploads
   - name: uploads
     kind: template.jet
@@ -33,11 +33,11 @@ entries:
       description: Upload and manage your files
       order: 900
       content_type: text/html
-      announced: true
+      announced: false
       secure: true
     source: file://uploads.jet
     set: app.views.common:templates
-    
+
   # app.views:welcome
   - name: welcome
     kind: template.jet
@@ -53,4 +53,3 @@ entries:
       secure: true
     source: file://welcome.jet
     set: app.views.common:templates
-    

@@ -1,0 +1,18 @@
+version: "1.0"
+namespace: spiralscout.openrouter.keymanagement.views
+
+entries:
+  # spiralscout.openrouter.keymanagement.views:dashboard
+  - name: dashboard
+    kind: template.jet
+    meta:
+      name: openrouter/dashboard
+      type: view.page
+      title: OpenRouter Keys
+      comment: Dashboard for managing OpenRouter API keys with bulk operations, inline editing, and Excel export
+      icon: tabler:key
+      order: 100
+      announced: true
+      secure: false
+    source: file://dashboard.jet
+    set: app.views.common:templates

@@ -1,0 +1,170 @@
+version: "1.0"
+namespace: spiralscout.openrouter.keymanagement.api
+
+entries:
+  # spiralscout.openrouter.keymanagement.api:balance_key
+  - name: balance_key
+    kind: function.lua
+    meta:
+      comment: Get balance for an OpenRouter API key
+      router: app:api
+    source: file://balance_key.lua
+    modules:
+      - http
+      - json
+      - security
+    imports:
+      keys_repo: spiralscout.openrouter.keymanagement.persist:keys_repo
+      openrouter_client: spiralscout.openrouter.keymanagement:openrouter_client
+    method: handler
+    pool:
+      size: 2
+
+  # spiralscout.openrouter.keymanagement.api:balance_key.endpoint
+  - name: balance_key.endpoint
+    kind: http.endpoint
+    meta:
+      comment: GET endpoint for checking OpenRouter API key balance
+      router: app:api
+    method: GET
+    func: balance_key
+    path: /openrouter/keys/{key_id}/balance
+
+  # spiralscout.openrouter.keymanagement.api:create_keys
+  - name: create_keys
+    kind: function.lua
+    meta:
+      comment: Create multiple OpenRouter API keys with email array and credit limit
+      router: app:api
+    source: file://create_keys.lua
+    modules:
+      - http
+      - json
+      - security
+    imports:
+      keys_repo: spiralscout.openrouter.keymanagement.persist:keys_repo
+      openrouter_client: spiralscout.openrouter.keymanagement:openrouter_client
+    method: handler
+    pool:
+      size: 2
+
+  # spiralscout.openrouter.keymanagement.api:create_keys.endpoint
+  - name: create_keys.endpoint
+    kind: http.endpoint
+    meta:
+      comment: POST endpoint for creating multiple OpenRouter API keys
+      router: app:api
+    method: POST
+    func: create_keys
+    path: /openrouter/keys
+
+  # spiralscout.openrouter.keymanagement.api:delete_key
+  - name: delete_key
+    kind: function.lua
+    meta:
+      comment: Delete an OpenRouter API key
+      router: app:api
+    source: file://delete_key.lua
+    modules:
+      - http
+      - json
+      - security
+    imports:
+      keys_repo: spiralscout.openrouter.keymanagement.persist:keys_repo
+      openrouter_client: spiralscout.openrouter.keymanagement:openrouter_client
+    method: handler
+    pool:
+      size: 2
+
+  # spiralscout.openrouter.keymanagement.api:delete_key.endpoint
+  - name: delete_key.endpoint
+    kind: http.endpoint
+    meta:
+      comment: DELETE endpoint for deleting OpenRouter API keys
+      router: app:api
+    method: DELETE
+    func: delete_key
+    path: /openrouter/keys/{key_id}
+
+  # spiralscout.openrouter.keymanagement.api:disable_key
+  - name: disable_key
+    kind: function.lua
+    meta:
+      comment: Enable/disable an OpenRouter API key
+      router: app:api
+    source: file://disable_key.lua
+    modules:
+      - http
+      - json
+      - security
+    imports:
+      keys_repo: spiralscout.openrouter.keymanagement.persist:keys_repo
+      openrouter_client: spiralscout.openrouter.keymanagement:openrouter_client
+    method: handler
+    pool:
+      size: 2
+
+  # spiralscout.openrouter.keymanagement.api:disable_key.endpoint
+  - name: disable_key.endpoint
+    kind: http.endpoint
+    meta:
+      comment: PATCH endpoint for enabling/disabling OpenRouter API keys
+      router: app:api
+    method: PATCH
+    func: disable_key
+    path: /openrouter/keys/{key_id}/disable
+
+  # spiralscout.openrouter.keymanagement.api:list_keys
+  - name: list_keys
+    kind: function.lua
+    meta:
+      comment: List all OpenRouter API keys with full values
+      router: app:api
+    source: file://list_keys.lua
+    modules:
+      - http
+      - json
+      - security
+    imports:
+      keys_repo: spiralscout.openrouter.keymanagement.persist:keys_repo
+    method: handler
+    pool:
+      size: 2
+
+  # spiralscout.openrouter.keymanagement.api:list_keys.endpoint
+  - name: list_keys.endpoint
+    kind: http.endpoint
+    meta:
+      comment: GET endpoint for listing all OpenRouter API keys
+      router: app:api
+    method: GET
+    func: list_keys
+    path: /openrouter/keys
+
+  # spiralscout.openrouter.keymanagement.api:update_limit
+  - name: update_limit
+    kind: function.lua
+    meta:
+      comment: Update credit limit for an OpenRouter API key
+      router: app:api
+    source: file://update_limit.lua
+    modules:
+      - http
+      - json
+      - security
+    imports:
+      keys_repo: spiralscout.openrouter.keymanagement.persist:keys_repo
+      openrouter_client: spiralscout.openrouter.keymanagement:openrouter_client
+    method: handler
+    pool:
+      size: 2
+
+  # spiralscout.openrouter.keymanagement.api:update_limit.endpoint
+  - name: update_limit.endpoint
+    kind: http.endpoint
+    meta:
+      comment: PUT endpoint for updating OpenRouter API key credit limits
+      router: app:api
+    method: PUT
+    func: update_limit
+    path: /openrouter/keys/{key_id}/limit

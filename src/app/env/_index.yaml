@@ -66,6 +66,15 @@ entries:
     lifecycle:
       auto_start: true
 
+  # app.env:hostname_env_mapping
+  - name: hostname_env_mapping
+    kind: registry.entry
+    meta:
+      type: view.env_mapping
+      priority: 20
+    mappings:
+      hostname: APP_BASE_URL
+
   # app.env:os
   - name: os
     kind: env.storage.os

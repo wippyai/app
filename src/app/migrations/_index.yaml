@@ -1,0 +1,18 @@
+version: "1.0"
+namespace: app.migrations
+
+entries:
+  # app.migrations:example_migration7
+  - name: example_migration7
+    kind: function.lua
+    meta:
+      type: migration
+      tags:
+        - example
+      description: Example migration with print statements
+      target_db: app:db
+      timestamp: "2025-10-20T10:00:00Z"
+    source: file://example_migration7.lua
+    imports:
+      migration: wippy.migration:migration
+    method: handler

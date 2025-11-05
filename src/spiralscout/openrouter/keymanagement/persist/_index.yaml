@@ -1,0 +1,15 @@
+version: "1.0"
+namespace: spiralscout.openrouter.keymanagement.persist
+
+entries:
+  # spiralscout.openrouter.keymanagement.persist:keys_repo
+  - name: keys_repo
+    kind: library.lua
+    meta:
+      comment: OpenRouter keys repository library
+      description: CRUD operations for OpenRouter key management
+    source: file://keys_repo.lua
+    modules:
+      - sql
+      - time
+      - hash

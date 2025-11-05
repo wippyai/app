@@ -1,0 +1,800 @@
+version: "1.0"
+namespace: app.drafling.linkedin_v2
+
+entries:
+  # app.drafling.linkedin_v2:analyze_content
+  - name: analyze_content
+    kind: function.lua
+    meta:
+      type: tool
+      title: Analyze Content
+      tags:
+        - analysis
+        - general
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "file_types": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "analysis_prompt": {"type": "string"}
+          },
+          "required": ["analysis_prompt"]
+        }
+      llm_alias: AnalyzeContent
+      llm_description: General content analysis
+    source: file://analyze_content.lua
+    modules:
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: handler
+
+  # app.drafling.linkedin_v2:cluster_analyzer
+  - name: cluster_analyzer
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Cluster Analyzer
+      tags:
+        - analysis
+        - clusters
+    prompt: |
+      Analyze transcripts and identify distinct content clusters.
+
+      Each cluster:
+      - Title
+      - Description (2-3 sentences)
+      - Key Points (3-7 insights)
+      - Supporting Quotes
+
+      Return full analysis. DO NOT create entries.
+    model: claude-4-5-sonnet
+    temperature: 0.4
+    max_tokens: 16000
+    traits:
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:cluster_consolidator
+  - name: cluster_consolidator
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Cluster Consolidator
+      tags:
+        - consolidation
+        - clusters
+    prompt: |
+      Merge gpt_analysis and claude_analysis into ONE cluster_analysis entry.
+
+      CreateDraflingEntry(category: "analysis", entry_type: "cluster_analysis", content: merged, status: "Extracted")
+
+      Return:
+      {
+        "entry_created": true,
+        "entry_type": "cluster_analysis",
+        "cluster_count": N,
+        "cluster_titles": ["Title 1", ...],
+        "summary": "N clusters identified covering [topics]"
+      }
+    model: claude-4-5-sonnet
+    temperature: 0.3
+    max_tokens: 16000
+    traits:
+      - userspace.drafling.traits:drafling_editor
+      - app.drafling.linkedin_v2:output_discipline
+      - app.drafling.linkedin_v2:coordinator_reporting
+
+  # app.drafling.linkedin_v2:content_collector
+  - name: content_collector
+    kind: function.lua
+    meta:
+      title: Content Collector
+    source: file://content_collector.lua
+    modules:
+      - json
+      - funcs
+    method: run
+
+  # app.drafling.linkedin_v2:content_cycle
+  - name: content_cycle
+    kind: function.lua
+    meta:
+      title: Content Cycle
+    source: file://content_cycle.lua
+    modules:
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: run
+
+  # app.drafling.linkedin_v2:content_planner
+  - name: content_planner
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Content Planner
+      tags:
+        - planning
+    prompt: |
+      Create strategic content plan for LinkedIn posts (main and supportive). Map identified clusters to post sections (hook, take, supporting points, kicker). Explain why specific clusters fit specific sections and what insights to emphasize. Reference other entries, don't embed them. Provide strategic direction for content writer. Dot not overfit formatting instructions, agents will gain access to guidelines.
+      Your goal is to plan whole series, be coinse in planning for each post, writer agents know what they doing.
+      Do not violate content guidelines, but do not repeat them, they will be provided to writers. Dot write anything besides post outline plan, do not set post sizes in violation of guidelines, do not write anything about guidelines, they will be provided to writers.
+    model: claude-4-5-sonnet
+    temperature: 0.4
+    max_tokens: 16000
+    traits:
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:content_writer
+  - name: content_writer
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Content Writer
+      tags:
+        - writer
+        - linkedin
+    prompt: |
+      Create LinkedIn post using provided materials.
+
+      Follow content plan. Use cluster insights. Match tone patterns.
+      Address feedback while maintaining voice.
+
+      Output complete post with title.
+    model: claude-4-5-sonnet
+    temperature: 0.7
+    max_tokens: 16000
+    traits:
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:coordinator
+  - name: coordinator
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: LinkedIn V2 Coordinator
+      tags:
+        - orchestrator
+        - linkedin
+      icon: tabler:brand-linkedin
+      class:
+        - contextual
+        - drafling_project_orchestrator
+    prompt: |
+      Orchestrate LinkedIn content creation. Delegate to tools and report results to user.
+
+      ## TOOL OUTPUTS
+
+      Tools return structured summaries. Report to user:
+      - What entries were created
+      - Key findings or structure details
+      - Next suggested actions
+
+      ## WORKFLOW
+
+      1. **integrate_content(file_ids)** - Classify uploaded files
+      2. **extract_clusters()** - Identify content clusters from transcripts
+      3. **extract_tone()** - Extract voice patterns from writing samples
+      4. **extract_guidelines()** - Consolidate guidelines from files and KBs
+      5. **create_content_plan()** - Create outline mapping clusters to posts (main and supportive) structure
+      6. **generate_content(content_prompt, entry_id?, ...)** - Generate/refine post (only single post) through QA cycle
+
+      ## GENERATING POSTS
+
+      Call generate_content with:
+      - content_prompt: What post to create
+      - entry_id: (optional) To refine existing post
+      - Tool loads outline/analysis/guidelines automatically
+      - Single post task.
+      - Never assume guidelines, they are given to agents inside this tool automatically, as well outline, so you only have to point on high level what to generate.
+
+      Report result: entry_id, title, score, status
+      If not approved, show feedback and ask to refine with same entry_id
+
+      Ask user approval between stages. Dont be entusiastic idiot.
+    model: claude-4-5-sonnet
+    temperature: 0.3
+    max_tokens: 8000
+    tools:
+      - app.drafling.linkedin_v2:integrate_content
+      - app.drafling.linkedin_v2:extract_clusters
+      - app.drafling.linkedin_v2:extract_tone
+      - app.drafling.linkedin_v2:extract_guidelines
+      - app.drafling.linkedin_v2:create_content_plan
+      - app.drafling.linkedin_v2:generate_content
+      - app.drafling.linkedin_v2:analyze_content
+    traits:
+      - userspace.drafling.traits:drafling_editor
+
+  # app.drafling.linkedin_v2:coordinator_reporting
+  - name: coordinator_reporting
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      tags:
+        - behavior
+        - reporting
+    prompt: |
+      After creating entries, return structured exit object with:
+      - entry_created: true
+      - entry_type: created type
+      - High-level summary (1-2 sentences)
+      - Key structure info relevant to coordinator
+
+      No verbose explanations. No instruction repetition.
+
+  # app.drafling.linkedin_v2:create_content_plan
+  - name: create_content_plan
+    kind: function.lua
+    meta:
+      type: tool
+      title: Create Content Plan
+      tags:
+        - planning
+        - strategy
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "custom_prompt": {"type": "string"}
+          }
+        }
+      llm_alias: CreateContentPlan
+      llm_description: Create content plan with cluster mapping
+    source: file://create_content_plan.lua
+    modules:
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: handler
+
+  # app.drafling.linkedin_v2:extract_clusters
+  - name: extract_clusters
+    kind: function.lua
+    meta:
+      type: tool
+      title: Extract Clusters
+      tags:
+        - analysis
+        - clusters
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "custom_prompt": {"type": "string"}
+          }
+        }
+      llm_alias: ExtractClusters
+      llm_description: Extract content clusters from transcripts
+    source: file://extract_clusters.lua
+    modules:
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: handler
+
+  # app.drafling.linkedin_v2:extract_guidelines
+  - name: extract_guidelines
+    kind: function.lua
+    meta:
+      type: tool
+      title: Extract Guidelines
+      tags:
+        - guidelines
+        - strategy
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "custom_prompt": {"type": "string"}
+          }
+        }
+      llm_alias: ExtractGuidelines
+      llm_description: Extract content guidelines from files and KBs
+    source: file://extract_guidelines.lua
+    modules:
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: handler
+
+  # app.drafling.linkedin_v2:extract_tone
+  - name: extract_tone
+    kind: function.lua
+    meta:
+      type: tool
+      title: Extract Tone
+      tags:
+        - analysis
+        - tone
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "custom_prompt": {"type": "string"}
+          }
+        }
+      llm_alias: ExtractTone
+      llm_description: Extract tone patterns from writing samples
+    source: file://extract_tone.lua
+    modules:
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: handler
+
+  # app.drafling.linkedin_v2:file_classifier
+  - name: file_classifier
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: File Classifier
+      tags:
+        - classifier
+    prompt: |
+      Classify file and create source_materials entry.
+
+      Entry types: transcript_file, writing_sample_file, guideline_file, reference_file
+
+      Process:
+      1. Read file
+      2. Classify
+      3. CreateDraflingEntry(category: "source_materials", entry_type: [type], content: formatted, status: "Classified")
+
+      Content format:
+      **File ID:** {file_id}
+      **Filename:** {filename}
+      **Type:** {entry_type}
+      **Summary:** {2-3 sentences}
+
+      Return: {"file_id": "...", "file_type": "...", "summary": "...", "entry_created": true}
+    model: gpt-5-mini
+    temperature: 0.2
+    max_tokens: 4000
+    traits:
+      - userspace.uploads.traits:file_manager
+      - userspace.drafling.traits:drafling_editor
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:file_filter
+  - name: file_filter
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: File Filter
+      tags:
+        - filter
+        - utility
+    prompt: |
+      Find file IDs from source_materials entries matching requested types.
+      Use ViewProject to get entries. Parse content for file_id field.
+      Return: {"file_ids": ["uuid1", "uuid2"]}
+    model: gpt-5-mini
+    temperature: 0.2
+    max_tokens: 7000
+    traits:
+      - userspace.drafling.traits:drafling
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:file_guidelines_extractor
+  - name: file_guidelines_extractor
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: File Guidelines Extractor
+      tags:
+        - guidelines
+        - files
+    prompt: |
+      Extract LinkedIn posting guidelines from guideline files.
+
+      Cover: Content structure, Writing style, Quality criteria, Platform practices
+
+      Return comprehensive guidelines. DO NOT create entries.
+    model: claude-4-5-sonnet
+    temperature: 0.3
+    max_tokens: 8000
+    traits:
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:generate_content
+  - name: generate_content
+    kind: function.lua
+    meta:
+      type: tool
+      title: Generate Content
+      tags:
+        - generation
+        - linkedin
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "content_prompt": {"type": "string"},
+            "entry_id": {"type": "string"},
+            "max_iterations": {"type": "number", "default": 3},
+            "min_score": {"type": "number", "default": 8.0},
+            "post_type": {
+              "type": "string",
+              "enum": ["main_post", "supporting_post"],
+              "default": "main_post"
+            }
+          },
+          "required": ["content_prompt"]
+        }
+      llm_alias: GenerateContent
+      llm_description: Generate or refine LinkedIn post through QA cycle
+    source: file://generate_content.lua
+    modules:
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: handler
+
+  # app.drafling.linkedin_v2:guidelines_consolidator
+  - name: guidelines_consolidator
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Guidelines Consolidator
+      tags:
+        - consolidation
+        - guidelines
+    prompt: |
+      Merge file_guidelines and kb_guidelines into ONE content_guidelines entry.
+      Project files take precedence.
+
+      CreateDraflingEntry(category: "content_strategy", entry_type: "content_guidelines", content: merged, status: "Approved")
+
+      Return:
+      {
+        "entry_created": true,
+        "entry_type": "content_guidelines",
+        "sources": {"project_files": N, "knowledge_bases": N},
+        "summary": "Guidelines consolidated from [sources]"
+      }
+    model: claude-4-5-sonnet
+    temperature: 0.3
+    max_tokens: 16000
+    traits:
+      - userspace.drafling.traits:drafling_editor
+      - app.drafling.linkedin_v2:output_discipline
+      - app.drafling.linkedin_v2:coordinator_reporting
+
+  # app.drafling.linkedin_v2:integrate_content
+  - name: integrate_content
+    kind: function.lua
+    meta:
+      type: tool
+      title: Integrate Content
+      tags:
+        - integration
+        - classification
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "file_ids": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          },
+          "required": ["file_ids"]
+        }
+      llm_alias: IntegrateContent
+      llm_description: Classify and integrate uploaded files
+    source: file://integrate_content.lua
+    modules:
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: handler
+
+  # app.drafling.linkedin_v2:kb_guidelines_extractor
+  - name: kb_guidelines_extractor
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: KB Guidelines Extractor
+      tags:
+        - guidelines
+        - knowledge-base
+    prompt: |
+      Query knowledge bases for LinkedIn posting guidelines.
+
+      Search: Content Bible, LinkedIn Newsletter Output, Writing standards, Quality benchmarks
+
+      Return extracted guidelines. DO NOT create entries.
+    model: claude-4-5-sonnet
+    temperature: 0.3
+    max_tokens: 8000
+    traits:
+      - userspace.knowledge.traits:kb_operations
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:linkedin_content_creation
+  - name: linkedin_content_creation
+    kind: registry.entry
+    meta:
+      name: LinkedIn Content Creation V2
+      type: drafling.template
+      tags:
+        - drafling
+        - linkedin
+      icon: tabler:brand-linkedin
+      agent_id: app.drafling.linkedin_v2:coordinator
+    template:
+      agent_id: app.drafling.linkedin_v2:coordinator
+      categories:
+        - name: source_materials
+          icon: tabler:file-upload
+          display_name: Source Materials
+          entry_types:
+            - transcript_file
+            - writing_sample_file
+            - guideline_file
+            - reference_file
+        - name: analysis
+          icon: tabler:chart-dots
+          display_name: Analysis
+          entry_types:
+            - cluster_analysis
+            - tone_guide
+        - name: content_strategy
+          icon: tabler:strategy
+          display_name: Strategy & Planning
+          entry_types:
+            - content_guidelines
+            - content_outline
+        - name: content_creation
+          icon: tabler:edit
+          display_name: Content Creation
+          entry_types:
+            - main_post
+            - supporting_post
+      entry_types:
+        cluster_analysis:
+          icon: tabler:chart-dots
+          content_type: text/markdown
+          color: blue
+          default_status: extracted
+          display_name: Cluster Analysis
+          statuses:
+            - color: yellow
+              display_name: Extracting
+              value: extracting
+            - color: green
+              display_name: Extracted
+              value: extracted
+        content_guidelines:
+          icon: tabler:clipboard-list
+          content_type: text/markdown
+          color: emerald
+          default_status: draft
+          display_name: Content Guidelines
+          statuses:
+            - color: yellow
+              display_name: Draft
+              value: draft
+            - color: green
+              display_name: Approved
+              value: approved
+        content_outline:
+          icon: tabler:layout-grid
+          content_type: text/markdown
+          color: indigo
+          default_status: draft
+          display_name: Content Outline
+          statuses:
+            - color: yellow
+              display_name: Draft
+              value: draft
+            - color: green
+              display_name: Approved
+              value: approved
+        guideline_file:
+          icon: tabler:book
+          content_type: text/markdown
+          color: orange
+          default_status: classified
+          display_name: Guideline
+          statuses:
+            - color: green
+              display_name: Classified
+              value: classified
+        main_post:
+          icon: tabler:file-text
+          content_type: text/markdown
+          color: blue
+          default_status: drafting
+          display_name: Main Post
+          statuses:
+            - color: yellow
+              display_name: Drafting
+              value: drafting
+            - color: orange
+              display_name: Needs Revision
+              value: review
+            - color: green
+              display_name: Approved
+              value: approved
+        reference_file:
+          icon: tabler:file-info
+          content_type: text/markdown
+          color: slate
+          default_status: classified
+          display_name: Reference
+          statuses:
+            - color: green
+              display_name: Classified
+              value: classified
+        supporting_post:
+          icon: tabler:files
+          content_type: text/markdown
+          color: cyan
+          default_status: drafting
+          display_name: Supporting Post
+          statuses:
+            - color: yellow
+              display_name: Drafting
+              value: drafting
+            - color: orange
+              display_name: Needs Revision
+              value: review
+            - color: green
+              display_name: Approved
+              value: approved
+        tone_guide:
+          icon: tabler:microphone
+          content_type: text/markdown
+          color: purple
+          default_status: analyzed
+          display_name: Tone Guide
+          statuses:
+            - color: yellow
+              display_name: Analyzing
+              value: analyzing
+            - color: green
+              display_name: Analyzed
+              value: analyzed
+        transcript_file:
+          icon: tabler:message-circle
+          content_type: text/markdown
+          color: blue
+          default_status: classified
+          display_name: Transcript
+          statuses:
+            - color: green
+              display_name: Classified
+              value: classified
+        writing_sample_file:
+          icon: tabler:pencil
+          content_type: text/markdown
+          color: purple
+          default_status: classified
+          display_name: Writing Sample
+          statuses:
+            - color: green
+              display_name: Classified
+              value: classified
+
+  # app.drafling.linkedin_v2:output_discipline
+  - name: output_discipline
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      tags:
+        - behavior
+        - discipline
+    prompt: |
+      Execute instructions without meta-commentary. Never explain what you did or didn't include. Never list your own instructions. Output only requested content.
+
+  # app.drafling.linkedin_v2:planning_consolidator
+  - name: planning_consolidator
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Planning Consolidator
+      tags:
+        - consolidation
+        - planning
+    prompt: |
+      Merge gpt_plan and claude_plan into ONE content_outline.
+
+      CreateDraflingEntry(category: "content_strategy", entry_type: "content_outline", content: merged, status: "Approved")
+
+      Return:
+      {
+        "entry_created": true,
+        "entry_type": "content_outline",
+        "post_structure": {
+          "hook": {"clusters": [N], "approach": "..."},
+          "take": {"clusters": [N], "approach": "..."},
+          "supporting": [{"clusters": [N], "approach": "..."}],
+          "kicker": {"clusters": [N], "approach": "..."}
+        },
+        "unused_clusters": [N],
+        "summary": "Outline maps X clusters across Y sections"
+      }
+    model: claude-4-5-sonnet
+    temperature: 0.3
+    max_tokens: 16000
+    traits:
+      - userspace.drafling.traits:drafling_editor
+      - app.drafling.linkedin_v2:output_discipline
+      - app.drafling.linkedin_v2:coordinator_reporting
+
+  # app.drafling.linkedin_v2:qa_agent
+  - name: qa_agent
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Content QA
+      tags:
+        - qa
+        - linkedin
+    prompt: |
+      Review post against guidelines and quality standards.
+
+      Check: AI slop, Voice authenticity, Guideline compliance, Structure, Platform optimization
+
+      Content should read as cohesive, engaging, authentic. Be ruthless.
+
+      Score 1-10. Provide specific actionable feedback.
+    model: gpt-5
+    temperature: 0.3
+    max_tokens: 12000
+    traits:
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:tone_analyzer
+  - name: tone_analyzer
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Tone Analyzer
+      tags:
+        - analysis
+        - tone
+    prompt: |
+      Analyze writing samples for voice, tone, formatting patterns.
+
+      Cover: Voice, Tone, Sentence structure, Vocabulary, Post formatting, Visual flow
+
+      Return full analysis. DO NOT create entries.
+    model: claude-4-5-sonnet
+    temperature: 0.4
+    max_tokens: 16000
+    traits:
+      - app.drafling.linkedin_v2:output_discipline
+
+  # app.drafling.linkedin_v2:tone_consolidator
+  - name: tone_consolidator
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Tone Consolidator
+      tags:
+        - consolidation
+        - tone
+    prompt: |
+      Merge gpt_analysis and claude_analysis into ONE tone_guide entry.
+
+      CreateDraflingEntry(category: "analysis", entry_type: "tone_guide", content: merged, status: "Analyzed")
+
+      Return:
+      {
+        "entry_created": true,
+        "entry_type": "tone_guide",
+        "summary": "Tone guide created covering [key patterns]"
+      }
+    model: claude-4-5-sonnet
+    temperature: 0.3
+    max_tokens: 16000
+    traits:
+      - userspace.drafling.traits:drafling_editor
+      - app.drafling.linkedin_v2:output_discipline
+      - app.drafling.linkedin_v2:coordinator_reporting

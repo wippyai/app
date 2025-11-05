@@ -1,0 +1,37 @@
+version: "1.0"
+namespace: spiralscout.openrouter.keymanagement.migrations
+
+entries:
+  # spiralscout.openrouter.keymanagement.migrations:01_create_keys_table
+  - name: 01_create_keys_table
+    kind: function.lua
+    meta:
+      type: migration
+      tags:
+        - spiralscout
+        - openrouter
+        - keymanagement
+      description: Create OpenRouter keys table with proper SQLite structure
+      target_db: app:db
+      timestamp: "2025-01-27T10:00:00Z"
+    source: file://01_create_keys_table.lua
+    imports:
+      migration: wippy.migration:migration
+    method: migrate
+
+  # spiralscout.openrouter.keymanagement.migrations:02_add_disabled_column
+  - name: 02_add_disabled_column
+    kind: function.lua
+    meta:
+      type: migration
+      tags:
+        - spiralscout
+        - openrouter
+        - keymanagement
+      description: Add is_disabled column to OpenRouter keys table
+      target_db: app:db
+      timestamp: "2025-01-27T11:00:00Z"
+    source: file://02_add_disabled_column.lua
+    imports:
+      migration: wippy.migration:migration
+    method: migrate
