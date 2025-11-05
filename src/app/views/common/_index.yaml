@@ -25,6 +25,15 @@ entries:
       template_set: app.views.common:templates
       url: https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js
 
+  # app.views.common:fullscreen
+  - name: fullscreen
+    kind: template.jet
+    meta:
+      name: common/fullscreen
+      description: Full screen layout with no default margins
+    source: file://fullscreen.jet
+    set: app.views.common:templates
+
   # app.views.common:layout
   - name: layout
     kind: template.jet
@@ -32,7 +41,7 @@ entries:
       name: common/layout
       description: Base layout template for all pages
     source: file://layout.jet
-    set: templates
+    set: app.views.common:templates
 
   # app.views.common:tailwindcss
   - name: tailwindcss

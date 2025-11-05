@@ -10,7 +10,7 @@ entries:
       icon: tabler:key
     storage: app.env:router
     variable: OPENROUTER_API_KEY
-    
+
   # app.models.openrouter:claude-3-5-haiku
   - name: claude-3-5-haiku
     kind: registry.entry
@@ -38,7 +38,7 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: anthropic/claude-3.5-haiku
-    
+
   # app.models.openrouter:claude-3-5-sonnet
   - name: claude-3-5-sonnet
     kind: registry.entry
@@ -66,7 +66,65 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: anthropic/claude-3.5-sonnet
-    
+
+  # app.models.openrouter:claude-4-5-haiku
+  - name: claude-4-5-haiku
+    kind: registry.entry
+    meta:
+      name: claude-4-5-haiku
+      type: llm.model
+      title: Claude 4.5 Haiku
+      comment: Updated fast model with improved coding and reasoning capabilities while maintaining speed and cost efficiency
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+        - coding
+      class:
+        - fast
+        - cost-effective
+        - coding
+      priority: 75
+    max_tokens: 200000
+    output_tokens: 8192
+    pricing:
+      input: 1
+      output: 5
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: anthropic/claude-haiku-4.5
+
+  # app.models.openrouter:claude-4-5-sonnet
+  - name: claude-4-5-sonnet
+    kind: registry.entry
+    meta:
+      name: claude-4-5-sonnet
+      type: llm.model
+      title: Claude 4.5 Sonnet
+      comment: Anthropic's flagship Claude 4 model with advanced reasoning, vision, and thinking capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - caching
+        - generate
+        - structured_output
+      class:
+        - coding
+        - flagship
+      priority: 105
+    max_tokens: 200000
+    output_tokens: 64000
+    pricing:
+      input: 3
+      output: 15
+    providers:
+      - id: app.models.openrouter:provider
+        options:
+          reasoning_model_request: true
+        provider_model: anthropic/claude-sonnet-4.5
+
   # app.models.openrouter:claude-4-sonnet
   - name: claude-4-sonnet
     kind: registry.entry
@@ -96,7 +154,7 @@ entries:
         options:
           reasoning_model_request: true
         provider_model: anthropic/claude-sonnet-4
-    
+
   # app.models.openrouter:claude-opus-4
   - name: claude-opus-4
     kind: registry.entry
@@ -130,7 +188,34 @@ entries:
         options:
           reasoning_model_request: true
         provider_model: anthropic/claude-opus-4
-    
+
+  # app.models.openrouter:deepseek-chat-v3-0324
+  - name: deepseek-chat-v3-0324
+    kind: registry.entry
+    meta:
+      name: deepseek-chat-v3-0324
+      type: llm.model
+      title: DeepSeek V3 0324
+      comment: 685B parameter mixture-of-experts model with strong performance across diverse tasks and 131K context
+      capabilities:
+        - tool_use
+        - generate
+        - structured_output
+        - coding
+      class:
+        - cost-effective
+        - coding
+        - flagship
+      priority: 95
+    max_tokens: 131072
+    output_tokens: 32768
+    pricing:
+      input: 0.2
+      output: 0.8
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: deepseek/deepseek-chat-v3-0324
+
   # app.models.openrouter:deepseek-r1
   - name: deepseek-r1
     kind: registry.entry
@@ -158,7 +243,63 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: deepseek/deepseek-r1
-    
+
+  # app.models.openrouter:gemini-2-5-flash
+  - name: gemini-2-5-flash
+    kind: registry.entry
+    meta:
+      name: gemini-2-5-flash
+      type: llm.model
+      title: Gemini 2.5 Flash
+      comment: Google's state-of-the-art workhorse model with advanced reasoning, coding, mathematics, and built-in thinking capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - structured_output
+      class:
+        - balanced
+        - reasoning
+        - coding
+      priority: 90
+    max_tokens: 1.048576e+06
+    output_tokens: 32768
+    pricing:
+      input: 0.15
+      output: 0.6
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: google/gemini-2.5-flash
+
+  # app.models.openrouter:gemini-2-5-flash-lite
+  - name: gemini-2-5-flash-lite
+    kind: registry.entry
+    meta:
+      name: gemini-2-5-flash-lite
+      type: llm.model
+      title: Gemini 2.5 Flash Lite
+      comment: Lightweight reasoning model optimized for ultra-low latency and cost efficiency with optional thinking mode
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - structured_output
+      class:
+        - fast
+        - cost-effective
+        - reasoning
+      priority: 80
+    max_tokens: 1.048576e+06
+    output_tokens: 32768
+    pricing:
+      input: 0.1
+      output: 0.4
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: google/gemini-2.5-flash-lite
+
   # app.models.openrouter:gemini-2-5-pro
   - name: gemini-2-5-pro
     kind: registry.entry
@@ -185,146 +326,36 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: google/gemini-2.5-pro
-    
-  # app.models.openrouter:gpt-4.1
-  - name: gpt-4.1
+
+  # app.models.openrouter:glm-4-6
+  - name: glm-4-6
     kind: registry.entry
     meta:
-      name: gpt-4.1
+      name: glm-4-6
       type: llm.model
-      title: GPT-4.1
-      comment: Flagship GPT model for complex tasks with advanced reasoning and multimodal capabilities
+      title: GLM 4.6
+      comment: Enhanced model with comprehensive improvements in coding, long-context processing, reasoning, and agentic applications
       capabilities:
         - tool_use
-        - vision
-        - generate
-        - structured_output
-      class:
-        - default
-      priority: 10
-    max_tokens: 1.047576e+06
-    output_tokens: 32768
-    pricing:
-      cached_input: 0.5
-      input: 2
-      output: 8
-    providers:
-      - id: app.models.openrouter:provider
-        provider_model: openai/gpt-4.1
-    
-  # app.models.openrouter:gpt-4.1-mini
-  - name: gpt-4.1-mini
-    kind: registry.entry
-    meta:
-      name: gpt-4.1-mini
-      type: llm.model
-      title: GPT-4.1-mini
-      comment: Flagship GPT model for complex tasks with advanced reasoning and multimodal capabilities
-      capabilities:
-        - tool_use
-        - vision
-        - generate
-        - structured_output
-      class:
-        - default
-        - test-model
-      priority: 10
-    max_tokens: 1.047576e+06
-    output_tokens: 32768
-    pricing:
-      cached_input: 0.5
-      input: 2
-      output: 8
-    providers:
-      - id: app.models.openrouter:provider
-        provider_model: openai/gpt-4.1-mini
-    
-  # app.models.openrouter:gpt-4o
-  - name: gpt-4o
-    kind: registry.entry
-    meta:
-      name: gpt-4o
-      type: llm.model
-      title: GPT-4o
-      comment: OpenAI's multimodal flagship model with vision, audio, and fast performance
-      capabilities:
-        - tool_use
-        - vision
-        - generate
-        - structured_output
-      class:
-        - default
-        - multimodal
-      priority: 12
-    max_tokens: 128000
-    output_tokens: 16384
-    pricing:
-      input: 2.5
-      output: 10
-    providers:
-      - id: app.models.openrouter:provider
-        provider_model: openai/gpt-4o
-    
-  # app.models.openrouter:gpt-4o-mini
-  - name: gpt-4o-mini
-    kind: registry.entry
-    meta:
-      name: gpt-4o-mini
-      type: llm.model
-      title: GPT-4o-mini
-      comment: Efficient GPT model for complex tasks with advanced reasoning and multimodal capabilities
-      capabilities:
-        - tool_use
-        - vision
-        - generate
-        - structured_output
-      class:
-        - default
-        - test-model
-        - cost-effective
-      priority: 10
-    max_tokens: 128000
-    output_tokens: 16384
-    pricing:
-      input: 0.15
-      output: 0.6
-    providers:
-      - id: app.models.openrouter:provider
-        provider_model: openai/gpt-4o-mini
-    
-  # app.models.openrouter:gpt-5
-  - name: gpt-5
-    kind: registry.entry
-    meta:
-      name: gpt-5
-      type: llm.model
-      title: GPT-5
-      comment: Next-generation GPT model with enhanced reasoning, thinking capabilities, and multimodal understanding
-      capabilities:
-        - tool_use
-        - vision
         - thinking
         - generate
-        - coding
         - structured_output
+        - coding
+        - reasoning
       class:
         - coding
-        - default
-        - flagship
-      priority: 15
-    max_tokens: 1.047576e+06
+        - reasoning
+        - balanced
+      priority: 88
+    max_tokens: 200000
     output_tokens: 32768
     pricing:
-      cached_input: 0.5
-      input: 3
-      output: 12
+      input: 0.6
+      output: 2.2
     providers:
       - id: app.models.openrouter:provider
-        options:
-          reasoning_model_request: true
-        provider_model: openai/gpt-5
-    thinking_effort: 10
-    
+        provider_model: z-ai/glm-4.6
+
   # app.models.openrouter:grok-3
   - name: grok-3
     kind: registry.entry
@@ -351,7 +382,7 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: x-ai/grok-3
-    
+
   # app.models.openrouter:grok-3-mini
   - name: grok-3-mini
     kind: registry.entry
@@ -377,7 +408,7 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: x-ai/grok-3-mini
-    
+
   # app.models.openrouter:grok-4
   - name: grok-4
     kind: registry.entry
@@ -404,7 +435,35 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: x-ai/grok-4
-    
+
+  # app.models.openrouter:grok-4-fast
+  - name: grok-4-fast
+    kind: registry.entry
+    meta:
+      name: grok-4-fast
+      type: llm.model
+      title: Grok 4 Fast
+      comment: xAI's latest multimodal model with SOTA cost-efficiency, 2M token context, and optional reasoning mode
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - structured_output
+      class:
+        - fast
+        - cost-effective
+        - multimodal
+      priority: 90
+    max_tokens: 2e+06
+    output_tokens: 32768
+    pricing:
+      input: 0.2
+      output: 0.5
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: x-ai/grok-4-fast
+
   # app.models.openrouter:grok-code-fast-1
   - name: grok-code-fast-1
     kind: registry.entry
@@ -431,7 +490,7 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: x-ai/grok-code-fast-1
-    
+
   # app.models.openrouter:kimi-k2
   - name: kimi-k2
     kind: registry.entry
@@ -460,7 +519,7 @@ entries:
     providers:
       - id: app.models.openrouter:provider
         provider_model: moonshotai/kimi-k2
-    
+
   # app.models.openrouter:provider
   - name: provider
     kind: registry.entry
@@ -482,5 +541,60 @@ entries:
           HTTP-Referer: https://wippy.ai
           X-Title: Wippy
         organization: ""
-        timeout: "600"
-    
+        timeout: "1200"
+
+  # app.models.openrouter:qwen3-235b-a22b-2507
+  - name: qwen3-235b-a22b-2507
+    kind: registry.entry
+    meta:
+      name: qwen3-235b-a22b-2507
+      type: llm.model
+      title: Qwen3 235B A22B 2507
+      comment: 235B parameter MoE model with 22B active parameters, enhanced reasoning, instruction-following, and multilingual support
+      capabilities:
+        - tool_use
+        - thinking
+        - generate
+        - structured_output
+        - coding
+      class:
+        - flagship
+        - reasoning
+        - multilingual
+      priority: 92
+    max_tokens: 131072
+    output_tokens: 32768
+    pricing:
+      input: 0.6
+      output: 2.5
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: qwen/qwen3-235b-a22b-2507
+
+  # app.models.openrouter:qwen3-coder
+  - name: qwen3-coder
+    kind: registry.entry
+    meta:
+      name: qwen3-coder
+      type: llm.model
+      title: Qwen3 Coder
+      comment: 480B parameter MoE code model with 35B active parameters, optimized for agentic coding, tool use, and repository-scale understanding
+      capabilities:
+        - tool_use
+        - generate
+        - structured_output
+        - coding
+        - agentic
+      class:
+        - coding
+        - agentic
+        - specialized
+      priority: 94
+    max_tokens: 256000
+    output_tokens: 32768
+    pricing:
+      input: 0.35
+      output: 1.4
+    providers:
+      - id: app.models.openrouter:provider
+        provider_model: qwen/qwen3-coder

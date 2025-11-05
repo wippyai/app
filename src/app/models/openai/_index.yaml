@@ -2,6 +2,239 @@ version: "1.0"
 namespace: app.models.openai
 
 entries:
+  # app.models.openai:gpt-4.1
+  - name: gpt-4.1
+    kind: registry.entry
+    meta:
+      name: gpt-4.1
+      type: llm.model
+      title: GPT-4.1
+      comment: Flagship GPT model for complex tasks with advanced reasoning and multimodal capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+      priority: 10
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 2
+      output: 8
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: gpt-4.1
+
+  # app.models.openai:gpt-4.1-mini
+  - name: gpt-4.1-mini
+    kind: registry.entry
+    meta:
+      name: gpt-4.1-mini
+      type: llm.model
+      title: GPT-4.1-mini
+      comment: Flagship GPT model for complex tasks with advanced reasoning and multimodal capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+        - test-model
+      priority: 10
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 2
+      output: 8
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: gpt-4.1-mini
+
+  # app.models.openai:gpt-4.1-nano
+  - name: gpt-4.1-nano
+    kind: registry.entry
+    meta:
+      name: gpt-4.1-nano
+      type: llm.model
+      title: GPT-4.1-nano
+      comment: Nano version of GPT-4.1 optimized for ultra cost-effective performance on complex tasks
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+        - test-model
+      priority: 10
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 2
+      output: 8
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: gpt-4.1-nano
+
+  # app.models.openai:gpt-4o
+  - name: gpt-4o
+    kind: registry.entry
+    meta:
+      name: gpt-4o
+      type: llm.model
+      title: GPT-4o
+      comment: OpenAI's multimodal flagship model with vision, audio, and fast performance
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+        - multimodal
+      priority: 12
+    max_tokens: 128000
+    output_tokens: 16384
+    pricing:
+      input: 2.5
+      output: 10
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: gpt-4o
+
+  # app.models.openai:gpt-4o-mini
+  - name: gpt-4o-mini
+    kind: registry.entry
+    meta:
+      name: gpt-4o-mini
+      type: llm.model
+      title: GPT-4o-mini
+      comment: Efficient GPT model for complex tasks with advanced reasoning and multimodal capabilities
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+      class:
+        - default
+        - test-model
+        - cost-effective
+      priority: 10
+    max_tokens: 128000
+    output_tokens: 16384
+    pricing:
+      input: 0.15
+      output: 0.6
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: gpt-4o-mini
+
+  # app.models.openai:gpt-5
+  - name: gpt-5
+    kind: registry.entry
+    meta:
+      name: gpt-5
+      type: llm.model
+      title: GPT-5
+      comment: Next-generation GPT model with enhanced reasoning, thinking capabilities, and multimodal understanding
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - coding
+        - structured_output
+      class:
+        - coding
+        - default
+        - flagship
+      priority: 15
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 3
+      output: 12
+    providers:
+      - id: wippy.llm.openai:provider
+        options:
+          reasoning_model_request: true
+          timeout: 1200
+        provider_model: gpt-5
+    thinking_effort: 10
+
+  # app.models.openai:gpt-5-mini
+  - name: gpt-5-mini
+    kind: registry.entry
+    meta:
+      name: gpt-5-mini
+      type: llm.model
+      title: GPT-5 Mini
+      comment: Mini version of GPT-5 optimized for cost-effective performance on reasoning and coding tasks
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - coding
+        - structured_output
+      class:
+        - coding
+        - default
+        - flagship
+      priority: 15
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 3
+      output: 12
+    providers:
+      - id: wippy.llm.openai:provider
+        options:
+          reasoning_model_request: true
+        provider_model: gpt-5-mini
+    thinking_effort: 10
+
+  # app.models.openai:gpt-5-nano
+  - name: gpt-5-nano
+    kind: registry.entry
+    meta:
+      name: gpt-5-nano
+      type: llm.model
+      title: GPT-5 Nano
+      comment: Nano version of GPT-5 optimized for ultra cost-effective performance on reasoning and coding tasks
+      capabilities:
+        - tool_use
+        - vision
+        - thinking
+        - generate
+        - coding
+        - structured_output
+      class:
+        - coding
+        - default
+        - flagship
+      priority: 15
+    max_tokens: 1.047576e+06
+    output_tokens: 32768
+    pricing:
+      cached_input: 0.5
+      input: 3
+      output: 12
+    providers:
+      - id: wippy.llm.openai:provider
+        options:
+          reasoning_model_request: true
+        provider_model: gpt-5-nano
+    thinking_effort: 10
+
   # app.models.openai:text-embedding-3-large
   - name: text-embedding-3-large
     kind: registry.entry
@@ -22,7 +255,7 @@ entries:
     providers:
       - id: wippy.llm.openai:provider
         provider_model: text-embedding-3-large
-    
+
   # app.models.openai:text-embedding-3-small
   - name: text-embedding-3-small
     kind: registry.entry
@@ -43,4 +276,3 @@ entries:
     providers:
       - id: wippy.llm.openai:provider
         provider_model: text-embedding-3-small
-    
