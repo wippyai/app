@@ -65,8 +65,6 @@ entries:
     parameters:
       - name: application_host
         value: app:processes
-      - name: app_db
-        value: app:db
       - name: env_storage
         value: app.env:router
 
@@ -107,6 +105,9 @@ entries:
     meta:
       description: Migration component
     component: wippy/migration
+    parameters:
+      - name: app_db
+        value: app:db
 
   # app.deps:__dependency.wippy.relay
   - version: '>=v0.3.0'
