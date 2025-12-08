@@ -400,16 +400,27 @@
 
             // Onboarding methods
             checkOnboardingState() {
-                // Check if user has visited onboarding before
-                this.onboarding.hasVisited = localStorage.getItem('wippy_onboarding_visited') === 'true';
-
-                // Check if banner was dismissed
-                this.onboarding.bannerDismissed = localStorage.getItem('wippy_onboarding_banner_dismissed') === 'true';
+                this.api.api.get(`/api/v1/onboard/banner/flags`)
+                    .then(response => {
+                        if (response.data && response.data.success && Array.isArray(response.data.flags)) {
+                            for (const flagObj of response.data.flags) {
+                                if (flagObj.flag === 'wippy_onboarding_visited') {
+                                    this.onboarding.hasVisited = true;
+                                }
+                                if (flagObj.flag === 'wippy_onboarding_banner_dismissed') {
+                                    this.onboarding.bannerDismissed = true;
+                                }
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error getting onboarding flags:', error);
+                    });
             },
 
             checkAutoRedirect() {
                 // Auto-redirect if: no onboarding visited flag AND no sessions
-                if (!this.onboarding.hasVisited && this.sessionCount === 0) {
+                if (!this.onboarding.hasVisited) {
                     console.log('First-time user detected, redirecting to onboarding...');
                     this.navigateToOnboarding();
                 }
@@ -424,7 +435,7 @@
             async navigateToOnboarding() {
                 try {
                     // Mark that user has visited onboarding
-                    localStorage.setItem('wippy_onboarding_visited', 'true');
+                    await this.api.api.get(`/api/v1/onboard/banner/flag/wippy_onboarding_visited`);
                     this.onboarding.hasVisited = true;
 
                     // Use Wippy API for navigation instead of window.location
@@ -441,8 +452,12 @@
             },
 
             dismissOnboardingBanner() {
-                this.onboarding.bannerDismissed = true;
-                localStorage.setItem('wippy_onboarding_banner_dismissed', 'true');
+                try {
+                    this.api.api.get(`/api/v1/onboard/banner/flag/wippy_onboarding_banner_dismissed`);
+                    this.onboarding.bannerDismissed = true;
+                } catch (error) {
+                    console.error('Failed to dismiss onboarding banner:', error);
+                }
             },
 
             // Agent methods
