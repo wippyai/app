@@ -30,6 +30,14 @@ export default defineConfig({
         chunkFileNames: '[name]-[hash].js',
         assetFileNames: '[name]-[hash][extname]',
       },
+      // No constraint on entry signatures — entry chunk can absorb its
+      // dependencies instead of being split into a facade + sub-chunk.
+      // This matters because `src/index.ts` calls
+      // `define(import.meta.url, …)`; if that statement is moved into a
+      // sub-chunk, `import.meta.url` resolves to the sub-chunk URL,
+      // which lacks the `?declare-tag=` query the autoload script
+      // appends to the entry — registration silently no-ops.
+      preserveEntrySignatures: false,
     },
     sourcemap: true,
   },

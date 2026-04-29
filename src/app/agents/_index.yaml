@@ -51,16 +51,29 @@ entries:
       tags:
         - artifacts
     prompt: |
-      You have the CreateArtifact tool to create rich content artifacts displayed inline in the chat.
+      You have the CreateArtifact tool to create rich content artifacts.
 
-      Two modes:
-      1. **Content mode** — pass `content` (HTML or Markdown) directly.
-         Use for: formatted text, code snippets, tables, documentation.
-      2. **Component mode** — pass `tag_name` and `props` to render a registered web component.
-         Use for: diagrams, interactive widgets, visualizations.
-         Only use tag names from the available components list in the session context.
+      Two content modes:
+       - Content mode — pass title + content (HTML or Markdown). Use for formatted text,
+         code, tables, documentation.
+       - Component mode — pass title + tag_name + props. Use for diagrams, charts,
+         interactive widgets. Pick tag_name from the available components list in the
+         session context. Each component lists its own props and usage notes there;
+         consult those before invoking. Never invent tag names.
 
-      After calling the tool you will receive instructions with an artifact tag — include that tag in your response.
+      Two display modes (set the `instructions` parameter on the call):
+       - instructions: false (default) — the artifact appears as its own standalone
+         message in the chat thread. Your reply is plain prose; do NOT embed any tag.
+         Use this when the artifact is the headline answer.
+       - instructions: true — the framework returns an embed tag in the tool result
+         that you MUST place verbatim in your reply where the artifact should appear
+         inline. Use this when the artifact flows with surrounding prose ("As shown
+         here: <artifact …/> the trend is …").
+
+      In both modes the artifact persists in chat history and re-renders on reload.
+
+      Never write <w-artifact>, <artifact>, or any component tag yourself unless the
+      framework gave you that exact tag string in the tool result.
     tools:
       - app.agents:create_artifact
 
@@ -94,6 +107,11 @@ entries:
             "props": {
               "type": "object",
               "description": "Props object passed to the web component. Only used with tag_name."
+            },
+            "instructions": {
+              "type": "boolean",
+              "description": "Display mode. false (default) — artifact appears as its own standalone message in the chat; your reply is plain prose with no embed tag. true — the framework returns an embed tag in the tool result that you place verbatim in your reply where the artifact should appear inline.",
+              "default": false
             }
           },
           "required": ["title"],
@@ -101,10 +119,11 @@ entries:
         }
       llm_alias: CreateArtifact
       llm_description: |
-        Create a rich content artifact rendered inline in the chat.
-        Two modes: (1) Content mode — provide title + content (HTML or Markdown).
+        Create a rich content artifact rendered in the chat.
+        Two content modes: (1) Content mode — provide title + content (HTML or Markdown).
         (2) Component mode — provide title + tag_name + props to render a registered web component.
         Use component mode when a matching component is available (check session context for available components).
+        Two display modes via the `instructions` flag: false (default) shows the artifact as a standalone message; true returns an embed tag for inline placement in your reply.
     source: file://create_artifact.lua
     modules:
       - json

@@ -8,25 +8,35 @@ local function handler(params)
         title = title,
         display_type = display_type,
         preview = params.preview or "",
-        instructions = false,  -- Use standalone artifact message, not inline tag
+        instructions = params.instructions == true,
     }
 
     if params.tag_name then
-        -- Web component mode: content is JSON props for the component
+        -- Web component mode: content is a Wippy component-tag package JSON
+        -- (`specification: wippy-component-tag-1.0`) — gen-2-chat's
+        -- web-package-loader.vue recognises this shape via
+        -- `isWippyPackageComponent` and mounts the custom element with the
+        -- bound props. Bare props alone don't pass the type guard, so the
+        -- standalone bubble would render empty without this wrapping.
         artifact.tag_name = params.tag_name
         artifact.content_type = "application/json"
 
+        local props_table = {}
         if params.props and type(params.props) == "table" then
-            local encoded, err = json.encode(params.props)
-            if err then
-                return { success = false, error = "Failed to encode props: " .. tostring(err) }
-            end
-            artifact.content = encoded
-        elseif params.content then
-            artifact.content = params.content
-        else
-            artifact.content = "{}"
+            props_table = params.props
         end
+
+        local pkg = {
+            specification = "wippy-component-tag-1.0",
+            wippy = { tagName = params.tag_name },
+            props = props_table,
+        }
+
+        local encoded, err = json.encode(pkg)
+        if err then
+            return { success = false, error = "Failed to encode component package: " .. tostring(err) }
+        end
+        artifact.content = encoded
     else
         -- Content mode: HTML or Markdown
         artifact.content = params.content or ""
