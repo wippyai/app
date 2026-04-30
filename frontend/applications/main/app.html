@@ -4,10 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wippy</title>
-    <script
-            src="http://localhost:5173/dev-proxy.js"
-            data-role="@wippy/scripts"
-    ></script>
     <script type="importmap">
     {
         "imports": {
@@ -16,10 +12,15 @@
             "vue-router": "https://esm.sh/vue-router@4",
             "luxon": "https://esm.sh/luxon",
             "@iconify/vue": "https://esm.sh/@iconify/vue",
-            "axios": "https://esm.sh/axios"
+            "axios": "https://esm.sh/axios",
+            "@wippy-fe/markdown-iframe": "http://localhost:5173/@wippy-fe/markdown-iframe.js"
         }
     }
     </script>
+    <script
+            src="http://localhost:5173/dev-proxy.js"
+            data-role="@wippy/scripts"
+    ></script>
 </head>
 <body>
     <div id="app">

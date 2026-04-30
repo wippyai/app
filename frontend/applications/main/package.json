@@ -48,7 +48,7 @@
     "lint:fix": "eslint src --ext .ts,.vue --fix"
   },
   "dependencies": {
-    "@wippy-fe/theme": "^0.0.20"
+    "@wippy-fe/theme": "^0.0.21"
   },
   "devDependencies": {
     "@tanstack/query-core": "^5.90.20",
@@ -56,7 +56,7 @@
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-vue": "^5.0.0",
-    "@wippy-fe/types-global-proxy": "^0.0.20",
+    "@wippy-fe/types-global-proxy": "^0.0.21",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.0.0",
@@ -73,8 +73,8 @@
   "peerDependencies": {
     "@iconify/vue": "^5.0.0",
     "@tanstack/vue-query": "^5.69.0",
-    "@wippy-fe/pinia-persist": "^0.0.20",
-    "@wippy-fe/proxy": "^0.0.20",
+    "@wippy-fe/pinia-persist": "^0.0.21",
+    "@wippy-fe/proxy": "^0.0.21",
     "axios": "^1.0.0",
     "luxon": "^3.5.0",
     "pinia": "^2.1.0",

@@ -11,16 +11,16 @@
     "package.json"
   ],
   "dependencies": {
-    "@wippy-fe/theme": "^0.0.20",
-    "@wippy-fe/webcomponent-core": "^0.0.20",
-    "@wippy-fe/webcomponent-vue": "^0.0.20",
+    "@wippy-fe/theme": "^0.0.21",
+    "@wippy-fe/webcomponent-core": "^0.0.21",
+    "@wippy-fe/webcomponent-vue": "^0.0.21",
     "primevue": "^4.3.3"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-vue": "^5.0.0",
-    "@wippy-fe/proxy": "^0.0.20",
+    "@wippy-fe/proxy": "^0.0.21",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.0.0",
@@ -33,7 +33,7 @@
     "vue-tsc": "^2.0.0"
   },
   "peerDependencies": {
-    "@wippy-fe/proxy": "^0.0.20",
+    "@wippy-fe/proxy": "^0.0.21",
     "vue": "^3.5.0"
   },
   "wippy": {
