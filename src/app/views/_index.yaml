@@ -330,3 +330,232 @@ entries:
               provider:
                 type: string
             description: Fired when a model card is clicked
+
+  # ───────────────────────────────────────────────────────────────────
+  # Event-DAM managed-layout demo (battle-test)
+  # ───────────────────────────────────────────────────────────────────
+  # All entries are announced: false — the managed-layout shell renders
+  # its own chrome (dam-header / dam-footer); these views are mounted
+  # by the layout decl, not by the compat-mode sidebar.
+
+  - name: dam-gallery
+    kind: registry.entry
+    meta:
+      type: view.page
+      name: dam-gallery
+      title: DAM Gallery
+      icon: tabler:photo
+      announced: false
+      secure: false
+      url: /app
+      base_path: app/dam-gallery
+      entry_point: app.html
+      mountRoute: /dam-gallery/:part(.*)*
+    proxy:
+      enabled: true
+      css:
+        fonts: true
+        theme_config: true
+        iframe: true
+        prime_vue: true
+        custom_css: true
+        custom_variables: true
+      tailwind_config: true
+      iconify_icons: true
+
+  - name: dam-list
+    kind: registry.entry
+    meta:
+      type: view.page
+      name: dam-list
+      title: DAM List
+      icon: tabler:list
+      announced: false
+      secure: false
+      url: /app
+      base_path: app/dam-list
+      entry_point: app.html
+      mountRoute: /dam-list/:part(.*)*
+    proxy:
+      enabled: true
+      css: { fonts: true, theme_config: true, iframe: true, prime_vue: true, custom_css: true, custom_variables: true }
+      tailwind_config: true
+      iconify_icons: true
+
+  - name: dam-detail
+    kind: registry.entry
+    meta:
+      type: view.page
+      name: dam-detail
+      title: DAM Detail
+      icon: tabler:zoom-scan
+      announced: false
+      secure: false
+      url: /app
+      base_path: app/dam-detail
+      entry_point: app.html
+      mountRoute: /dam-detail/:part(.*)*
+    proxy:
+      enabled: true
+      css: { fonts: true, theme_config: true, iframe: true, prime_vue: true, custom_css: true, custom_variables: true }
+      tailwind_config: true
+      iconify_icons: true
+
+  - name: dam-settings
+    kind: registry.entry
+    meta:
+      type: view.page
+      name: dam-settings
+      title: DAM Settings
+      icon: tabler:settings
+      announced: false
+      secure: false
+      url: /app
+      base_path: app/dam-settings
+      entry_point: app.html
+      mountRoute: /dam-settings/:part(.*)*
+    proxy:
+      enabled: true
+      css: { fonts: true, theme_config: true, iframe: true, prime_vue: true, custom_css: true, custom_variables: true }
+      tailwind_config: true
+      iconify_icons: true
+
+  - name: dam-side-history
+    kind: registry.entry
+    meta:
+      type: view.page
+      name: dam-side-history
+      title: DAM Side History
+      icon: tabler:history
+      announced: false
+      secure: false
+      url: /app
+      base_path: app/dam-side-history
+      entry_point: app.html
+      mountRoute: /dam-side-history/:part(.*)*
+    proxy:
+      enabled: true
+      css: { fonts: true, theme_config: true, iframe: true, prime_vue: true, custom_css: true, custom_variables: true }
+      tailwind_config: true
+      iconify_icons: true
+
+  # Web components mounted by the layout — header / subheader / filterbar /
+  # toolbar / footer / flaps / coordinator / modal-body. All auto-register;
+  # the layout decl references them by tag_name.
+
+  - name: dam-header
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-header
+      title: DAM Header
+      tag_name: dam-header
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-header
+
+  - name: dam-subheader
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-subheader
+      title: DAM Sub-Header
+      tag_name: dam-subheader
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-subheader
+
+  - name: dam-filterbar
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-filterbar
+      title: DAM Filter Bar
+      tag_name: dam-filterbar
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-filterbar
+
+  - name: dam-toolbar
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-toolbar
+      title: DAM Toolbar
+      tag_name: dam-toolbar
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-toolbar
+
+  - name: dam-footer
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-footer
+      title: DAM Footer
+      tag_name: dam-footer
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-footer
+
+  - name: dam-tools-flap
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-tools-flap
+      title: DAM Tools Flap
+      tag_name: dam-tools-flap
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-tools-flap
+
+  - name: dam-details-flap
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-details-flap
+      title: DAM Details Flap
+      tag_name: dam-details-flap
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-details-flap
+
+  - name: dam-coordinator
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-coordinator
+      title: DAM Coordinator (service)
+      tag_name: dam-coordinator
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-coordinator
+
+  - name: dam-upload-modal-body
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dam-upload-modal-body
+      title: DAM Upload Modal Body
+      tag_name: dam-upload-modal-body
+      entry_point: index.js
+      announced: false
+      secure: false
+      auto_register: true
+      url: /app/wc/dam-upload-modal-body

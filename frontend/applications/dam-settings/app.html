@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iframe Demo</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "vue": "https://esm.sh/vue@3",
+            "vue-router": "https://esm.sh/vue-router@4",
+            "@iconify/vue": "https://esm.sh/@iconify/vue",
+            "axios": "https://esm.sh/axios"
+        }
+    }
+    </script>
+    <script
+            src="http://localhost:5173/dev-proxy.js"
+            data-role="@wippy/scripts"
+    ></script>
+</head>
+<body>
+    <div id="app">
+        <wippy-loading title="Loading..."></wippy-loading>
+    </div>
+    <script type="module" src="./src/app.ts"></script>
+</body>
+</html>
