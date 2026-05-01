@@ -21,11 +21,11 @@ modules:
       version: 0.4.8
       hash: ed5a6f160c66b6805f531e41233ca8b3946753fd2a95945f3d77482d24482c95
     - name: wippy/facade
-      version: 0.6.0
-      hash: ae25cba85c8e3a47f8c5ef3b833e2ecc5e279ba8090d77fc94746d61b13bca98
+      version: 0.6.2
+      hash: a4a0a12cc42af28b3aaa5cd1ee80b1ae362573a712e31d5425fc00a6b7b707a7
     - name: wippy/llm
-      version: 0.4.27
-      hash: f8856a5e643e57970c45bcbec8e48a8de2830d8a13f5d518ecbc82c45b0ac5de
+      version: 0.4.28
+      hash: 4e99f9034d84b22d3c40e213843e5e3a1efc9b5ad837a3e84c3a53abc72ae562
     - name: wippy/migration
       version: 0.3.15
       hash: b675a9dd0bf83a48ecb696cc27ec7a9173e54c3431da89121d865751e26330d0
