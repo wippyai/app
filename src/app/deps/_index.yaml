@@ -176,7 +176,7 @@ entries:
       # Battle-test demo: flip facade to managed-layout mode and declare
       # the full HostLayoutDeclaration inline. Exercises every primitive:
       # vertical root, breakpoints, drawer-mode panels, floating flaps,
-      # services coordinator, builtin/page/component panels.
+      # coordinators, builtin/page/component panels.
       - name: fe_mode
         value: managed
       - name: host_config_layout
@@ -187,25 +187,25 @@ entries:
               "default": {
                 "direction": "vertical",
                 "children": [
-                  { "panel": "header", "size": "40px" },
-                  { "panel": "subhdr", "size": "48px" },
-                  { "panel": "filters", "size": "44px" },
-                  { "panel": "toolbar", "size": "48px" },
+                  { "panel": "header", "size": "40px", "fixed": true },
+                  { "panel": "subhdr", "size": "48px", "fixed": true },
+                  { "panel": "filters", "size": "44px", "fixed": true },
+                  { "panel": "toolbar", "size": "48px", "fixed": true },
                   { "direction": "horizontal", "size": "1fr", "children": [
-                    { "panel": "left", "size": "300px", "collapsible": true, "display": "inline" },
-                    { "panel": "main", "size": "1fr", "main": true, "display": "inline" },
-                    { "panel": "right", "size": "280px", "collapsible": true, "display": "inline" }
+                    { "panel": "left", "size": "300px", "minSize": "200px", "collapsible": true, "display": "inline" },
+                    { "panel": "main", "size": "1fr", "minSize": "400px", "main": true, "display": "inline" },
+                    { "panel": "right", "size": "280px", "minSize": "200px", "collapsible": true, "display": "inline" }
                   ]},
-                  { "panel": "footer", "size": "32px" }
+                  { "panel": "footer", "size": "32px", "fixed": true }
                 ]
               },
               "narrow": {
                 "direction": "vertical",
                 "children": [
-                  { "panel": "header", "size": "40px" },
-                  { "panel": "toolbar", "size": "48px" },
+                  { "panel": "header", "size": "40px", "fixed": true },
+                  { "panel": "toolbar", "size": "48px", "fixed": true },
                   { "panel": "main", "size": "1fr", "main": true },
-                  { "panel": "footer", "size": "32px" },
+                  { "panel": "footer", "size": "32px", "fixed": true },
                   { "panel": "left", "display": "drawer-left", "drawerSize": { "width": "320px" } },
                   { "panel": "right", "display": "drawer-right", "drawerSize": { "width": "320px" } }
                 ]
@@ -216,9 +216,9 @@ entries:
               "subhdr":  { "kind": "component", "tagName": "dam-subheader" },
               "filters": { "kind": "component", "tagName": "dam-filterbar" },
               "toolbar": { "kind": "component", "tagName": "dam-toolbar" },
-              "left":    { "kind": "page", "id": "dam-side-history", "route": "/" },
-              "main":    { "kind": "page", "id": "dam-gallery", "route": "/" },
-              "right":   { "kind": "page", "id": "dam-side-history", "route": "/display-settings" },
+              "left":    { "kind": "page", "id": "app.views:dam-side-history", "route": "/" },
+              "main":    { "kind": "page", "id": "app.views:dam-gallery", "route": "/" },
+              "right":   { "kind": "page", "id": "app.views:dam-side-history", "route": "/display-settings" },
               "footer":  { "kind": "component", "tagName": "dam-footer" }
             },
             "floating": {
@@ -227,7 +227,7 @@ entries:
               "details-flap": { "kind": "component", "tagName": "dam-details-flap",
                                 "position": { "x": -36, "y": 220 }, "size": { "width": 36, "height": 120 } }
             },
-            "services": {
+            "coordinators": {
               "dam-coordinator": { "kind": "component", "tagName": "dam-coordinator" }
             },
             "dragEnabled": true

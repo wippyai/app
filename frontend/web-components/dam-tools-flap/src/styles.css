@@ -1,2 +1,54 @@
 @import "@wippy-fe/theme/theme-config.css";
 @import 'tailwind.css';
+
+/* from dam-tools-flap.vue */
+.dam-flap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+  width: 100%;
+  background: var(--p-surface-800, #1a1a1c);
+  color: var(--p-surface-0, #fff);
+  border-radius: 0 6px 6px 0;
+  overflow: visible;
+  font-family: 'Poppins', system-ui, sans-serif;
+}
+.dam-flap__chevron {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  width: 36px;
+}
+.dam-flap__chevron:hover { background: var(--p-surface-700, #27272a); }
+.dam-flap__menu {
+  position: absolute;
+  left: 36px;
+  top: 0;
+  background: var(--p-surface-800, #1a1a1c);
+  border-radius: 0 6px 6px 0;
+  box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 0.25rem 0;
+}
+.dam-flap__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+}
+.dam-flap__item:hover { background: var(--p-surface-700, #27272a); }
+

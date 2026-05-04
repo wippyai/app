@@ -345,7 +345,7 @@ entries:
       name: dam-gallery
       title: DAM Gallery
       icon: tabler:photo
-      announced: false
+      announced: true
       secure: false
       url: /app
       base_path: app/dam-gallery
@@ -370,7 +370,7 @@ entries:
       name: dam-list
       title: DAM List
       icon: tabler:list
-      announced: false
+      announced: true
       secure: false
       url: /app
       base_path: app/dam-list
@@ -389,7 +389,7 @@ entries:
       name: dam-detail
       title: DAM Detail
       icon: tabler:zoom-scan
-      announced: false
+      announced: true
       secure: false
       url: /app
       base_path: app/dam-detail
@@ -408,7 +408,7 @@ entries:
       name: dam-settings
       title: DAM Settings
       icon: tabler:settings
-      announced: false
+      announced: true
       secure: false
       url: /app
       base_path: app/dam-settings
@@ -427,7 +427,7 @@ entries:
       name: dam-side-history
       title: DAM Side History
       icon: tabler:history
-      announced: false
+      announced: true
       secure: false
       url: /app
       base_path: app/dam-side-history
@@ -451,7 +451,7 @@ entries:
       title: DAM Header
       tag_name: dam-header
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-header
@@ -464,7 +464,7 @@ entries:
       title: DAM Sub-Header
       tag_name: dam-subheader
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-subheader
@@ -477,7 +477,7 @@ entries:
       title: DAM Filter Bar
       tag_name: dam-filterbar
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-filterbar
@@ -490,7 +490,7 @@ entries:
       title: DAM Toolbar
       tag_name: dam-toolbar
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-toolbar
@@ -503,7 +503,7 @@ entries:
       title: DAM Footer
       tag_name: dam-footer
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-footer
@@ -516,7 +516,7 @@ entries:
       title: DAM Tools Flap
       tag_name: dam-tools-flap
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-tools-flap
@@ -529,7 +529,7 @@ entries:
       title: DAM Details Flap
       tag_name: dam-details-flap
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-details-flap
@@ -542,7 +542,7 @@ entries:
       title: DAM Coordinator (service)
       tag_name: dam-coordinator
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-coordinator
@@ -555,7 +555,7 @@ entries:
       title: DAM Upload Modal Body
       tag_name: dam-upload-modal-body
       entry_point: index.js
-      announced: false
+      announced: true
       secure: false
       auto_register: true
       url: /app/wc/dam-upload-modal-body
