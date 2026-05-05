@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /**
- * 40px top nav: hamburger (narrow-only, left edge) + wordmark + nav
- * buttons + user avatar. Hamburger broadcasts app:toggle-drawer; nav
- * buttons broadcast app:nav.
+ * 40px top nav: left hamburger + wordmark + nav buttons + right
+ * details-toggle + user avatar. Hamburger / details-toggle broadcast
+ * `app:toggle-drawer` ({ side: 'left' | 'right' }) — visible only in
+ * the default (narrow) breakpoint where the side panels render as
+ * drawer overlays. Wide layout shows neither because both sides
+ * already render inline.
  */
 import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
@@ -26,6 +29,10 @@ function navTo(item: typeof navItems[number]) {
 
 function toggleHamburger() {
   host?.layout.broadcast('app:toggle-drawer', { side: 'left' })
+}
+
+function toggleDetails() {
+  host?.layout.broadcast('app:toggle-drawer', { side: 'right' })
 }
 </script>
 
@@ -56,6 +63,14 @@ function toggleHamburger() {
         <span>{{ item.label }}</span>
       </button>
     </nav>
+    <button
+      class="dam-header__details-toggle"
+      type="button"
+      aria-label="Toggle details drawer"
+      @click="toggleDetails"
+    >
+      <Icon icon="tabler:layout-sidebar-right" class="w-5 h-5" />
+    </button>
     <div class="dam-header__avatar" aria-label="Account">
       <Icon icon="tabler:user-circle" class="w-6 h-6" />
     </div>

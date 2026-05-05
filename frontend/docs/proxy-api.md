@@ -1,8 +1,8 @@
 # Wippy Proxy API
 
-> **CRITICAL: NOT STANDALONE**
+> **Runtime contract.**
 >
-> Web apps and components do **NOT** work outside Wippy. They run in iframes with host-injected configuration. Direct browser testing will fail - the `$W` global and `getWippyApi()` only exist when loaded within the Wippy host application.
+> The `$W` global / `getWippyApi()` is the only surface child apps and web components touch — production runs inside the Wippy host, which provides it. For local dev, browser playground pages, and unit tests, the same surface is provided by `dev-proxy.js` (a manual-config dev overlay) or by a vitest stub — the proxy contract is the same shape in both modes. See [host-less-mode.md](host-less-mode.md) for the dual-mode boot and how `<script src=".../dev-proxy.js" data-role="@wippy/scripts">` switches between hosted and host-less without code changes.
 
 ## Initialization
 
@@ -865,3 +865,5 @@ Both components use Shadow DOM and inherit CSS variables from `@wippy-fe/theme`:
 - `--p-danger-*` / `--p-warn-*` — error/warning severity colors
 
 If the theme CSS is not loaded (e.g., facade before config fetch), hardcoded fallbacks are used.
+
+For the full CSS-variable contract these components consume — and how to override them via the facade or per-page `configOverrides` — see [theming.md](theming.md).

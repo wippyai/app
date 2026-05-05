@@ -284,13 +284,15 @@ Configuration for the iframe proxy system:
 ```
 
 **Injection Options Explained:**
-- **CSS Injections**: All enabled for full host theming integration
+- **CSS Injections**: All enabled for full host theming integration. The host's theme + custom CSS variables flow through `themeConfig` / `customVariables` / `customCss`. Per-app theming options are documented in [theming.md](theming.md) — including the three-level model (basic / full / per-page) and how `customCSS` and `cssVariables` interact with these injection toggles.
 - **tailwindConfig**: `false` -  Enable if you use runtime Play CDN version of tailwind
 - **resizeObserver**: `false` -  Enable if your app is a widget and not full-screen
 - **preventLinkClicks**: `false` -  Enable if you dont implement custom router
 - **iconifyIcons**: `true` - Iconify icons are always loaded from the host
 
 **Note**: When `enabled` is `true`, CSS injections default to `true`. The non-CSS injections default to `false` except `iconifyIcons` which defaults to `true`.
+
+**Per-page theme overrides:** the host also reads `wippy.configOverrides.cssVariables` and `wippy.configOverrides.customCSS` from the page's `package.json`, applied AFTER facade-level overrides. See [theming.md → Level 3](theming.md#level-3--per-page-theme-override-configoverrides--runtime).
 
 ### `wippy.features`
 Array object describing component features that it uses from Wippy API:
@@ -326,6 +328,8 @@ export const webComponent: () => Promise<typeof HTMLElement>
 The page is defined by the `wippy.path` field in package.json.
 
 The HTML file specified in `wippy.path` **MUST** include a `<script type="text/javascript" data-role="@wippy/scripts">` element where additional scripts will be automatically injected. The host injects `loading.js` (registers `<wippy-loading>` and `<wippy-error>`) and `proxy.js` before this marker.
+
+That same tag **SHOULD** also carry an `src="http://localhost:5173/dev-proxy.js"` (or equivalent) so the page boots *standalone* when no host is present — see [host-less-mode.md](host-less-mode.md) for the full dual-mode contract and the dev-proxy bootstrap.
 
 The page **SHOULD** include an `<script type="importmap">` element with the merged import-map so that ES-Modules work without bundling.
 

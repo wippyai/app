@@ -16,14 +16,25 @@ interface Asset {
   name: string
   size: string
   uploadedAt: string
+  thumb: string
 }
 
-const assets = computed<Asset[]>(() => Array.from({ length: 24 }, (_, i) => ({
-  id: `asset-${i + 1}`,
-  name: `IMG_${(2026000 + i).toString()}.jpg`,
-  size: `${(0.4 + ((i * 17) % 47) / 10).toFixed(1)} MB`,
-  uploadedAt: new Date(Date.now() - i * 3600_000 * 7).toISOString().slice(0, 10),
-})))
+/**
+ * Image source: Lorem Picsum (https://picsum.photos). Seeded URLs
+ * (`/seed/<key>/W/H`) are deterministic — same seed always returns the
+ * same photo — and don't require an API key. We hit the small 400×300
+ * variant for thumbnails; cards display them via `object-fit: cover`.
+ */
+const assets = computed<Asset[]>(() => Array.from({ length: 24 }, (_, i) => {
+  const id = `asset-${i + 1}`
+  return {
+    id,
+    name: `IMG_${(2026000 + i).toString()}.jpg`,
+    size: `${(0.4 + ((i * 17) % 47) / 10).toFixed(1)} MB`,
+    uploadedAt: new Date(Date.now() - i * 3600_000 * 7).toISOString().slice(0, 10),
+    thumb: `https://picsum.photos/seed/dam-${i + 1}/400/300`,
+  }
+}))
 
 const primaryColor = ref('')
 
@@ -44,7 +55,15 @@ onMounted(() => {
   })
 })
 
-const cols = computed(() => density.value === 'compact' ? 8 : density.value === 'spacious' ? 4 : 6)
+/**
+ * Density now controls the MIN column width rather than a fixed column
+ * count — the grid uses `auto-fill` so the renderer picks how many
+ * columns fit at the current container width. Combined with the
+ * `min(<minPx>, 100%)` floor, single-column narrow viewports won't
+ * overflow horizontally (a bare `minmax(200px, 1fr)` blows out the
+ * grid when the container is less than 200px wide).
+ */
+const minCol = computed(() => density.value === 'compact' ? '140px' : density.value === 'spacious' ? '260px' : '200px')
 </script>
 
 <template>
@@ -56,7 +75,7 @@ const cols = computed(() => density.value === 'compact' ? 8 : density.value === 
     </div>
     <div
       class="grid gap-3"
-      :style="{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }"
+      :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${minCol}, 100%), 1fr))` }"
     >
       <article
         v-for="a in assets"
@@ -64,8 +83,13 @@ const cols = computed(() => density.value === 'compact' ? 8 : density.value === 
         class="group cursor-pointer rounded-md overflow-hidden bg-surface-0 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 hover:border-primary transition-colors"
         @click="pick(a)"
       >
-        <div class="aspect-[4/3] bg-gradient-to-br from-surface-200 to-surface-300 dark:from-surface-700 dark:to-surface-800 grid place-items-center">
-          <Icon icon="tabler:photo" class="w-8 h-8 text-surface-400" />
+        <div class="aspect-[4/3] bg-surface-200 dark:bg-surface-800 overflow-hidden">
+          <img
+            :src="a.thumb"
+            :alt="a.name"
+            loading="lazy"
+            class="w-full h-full object-cover"
+          >
         </div>
         <div class="p-2 text-xs">
           <div class="font-mono truncate">{{ a.name }}</div>

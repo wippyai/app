@@ -12,8 +12,9 @@
   border-bottom: 1px solid var(--p-surface-700, #2a2a2e);
   font-family: 'Poppins', system-ui, sans-serif;
 }
-.dam-header__hamburger {
-  display: none;
+.dam-header__hamburger,
+.dam-header__details-toggle {
+  display: inline-flex;
   background: transparent;
   border: none;
   color: inherit;
@@ -21,7 +22,8 @@
   padding: 0.25rem;
   border-radius: 4px;
 }
-.dam-header__hamburger:hover { background: var(--p-surface-800, #1a1a1c); }
+.dam-header__hamburger:hover,
+.dam-header__details-toggle:hover { background: var(--p-surface-800, #1a1a1c); }
 .dam-header__wordmark {
   display: flex;
   align-items: center;
@@ -60,9 +62,17 @@
   cursor: pointer;
 }
 
-html[data-breakpoint='narrow'] .dam-header__hamburger {
-  display: inline-flex;
+/*
+ * Drawer triggers visible by default (mobile/narrow). The wide layout
+ * already renders left/right panels inline, so the drawer triggers
+ * become redundant — hide them.
+ */
+html[data-breakpoint='wide'] .dam-header__hamburger,
+html[data-breakpoint='wide'] .dam-header__details-toggle {
+  display: none;
 }
-html[data-breakpoint='narrow'] .dam-header__nav span {
+/* Drop nav-button labels in narrow to save horizontal space — leave
+   icons. Wide breakpoint shows full labels. */
+html:not([data-breakpoint='wide']) .dam-header__nav span {
   display: none;
 }

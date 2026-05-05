@@ -1,23 +1,28 @@
 <script setup lang="ts">
 /**
- * Headless service coordinator. Subscribes to the in-tab layout bus
- * and translates app-level events to `host.layout.*` mutations.
+ * Coordinator-as-source-of-truth pattern. This component:
+ *   - subscribes to app-level events on the layout bus (via
+ *     `host.layout.on`) — the inbound "actions" from other WCs
+ *   - translates each event into a `LayoutManager` mutation through the
+ *     privileged `getLayoutManager(host)` escape hatch
  *
- * No UI — renders a hidden div. The point of the component is the
- * onMounted/onUnmounted lifecycle for managing the subscriptions.
+ * Other WCs (toolbar / header / flap / modal-body) NEVER call layout
+ * mutations directly. They `host.layout.broadcast(channel, payload)`
+ * and the coordinator decides what happens. This is the Redux pattern:
+ * components dispatch actions, the coordinator is the only writer.
  *
- * State this component owns:
- *   - currentBreakpoint: tracks @layout-breakpoint to set
- *     `data-breakpoint` on <html> (so dam-header's hamburger can
- *     show only on narrow), and to branch app:detail / app:asset-clicked
- *     between updatePanel(...) (default mode) and openDrawer(...)
- *     (narrow mode).
- *   - prevMainStash: deep-clone of the main panel def at the moment
- *     of app:open-modal, so app:close-modal can restore it.
+ * Modals are pre-declared in the layout YAML (`modals` block). Opening
+ * is `manager.openModal('id')` — id only, no def. The pre-registered
+ * template carries `tagName`, `title`, `dismissable`, `useNativeDialog`,
+ * etc. so the call site reads as pure intent.
+ *
+ * No UI — renders a hidden div. The point of this component is the
+ * onMounted/onUnmounted lifecycle for managing subscriptions.
  */
-import { onBeforeUnmount, onMounted } from 'vue'
+import type { LayoutManager, ProxyApiInstance, UpdatePanelLiveStateFn } from '@wippy-fe/proxy'
+import { getLayoutManager, getUpdatePanelLiveState } from '@wippy-fe/proxy'
 import { useHost } from '@wippy-fe/webcomponent-vue'
-import type { ProxyApiInstance } from '@wippy-fe/proxy'
+import { onBeforeUnmount, onMounted } from 'vue'
 import { CHANNELS } from '../channels'
 
 interface NavPayload { page: string, route: string }
@@ -31,8 +36,9 @@ interface BreakpointPayload { name: string, width: number }
 
 const host = useHost<ProxyApiInstance['host']>()
 
+let manager: LayoutManager | null = null
+let updatePanel: UpdatePanelLiveStateFn | null = null
 let currentBreakpoint = 'default'
-let prevMainStash: unknown = null
 const offs: Array<() => void> = []
 
 function setBreakpointAttr(name: string) {
@@ -48,6 +54,17 @@ onMounted(() => {
     return
   }
 
+  manager = getLayoutManager<LayoutManager>(host)
+  if (!manager) {
+    // eslint-disable-next-line no-console
+    console.warn('[dam-coordinator] no LayoutManager — coordinator-paradigm mutations will not work')
+  }
+  // `updatePanel` is the host-shape patcher (route / kind / id /
+  // title / props). Pure `manager.updatePanel` only accepts
+  // `Partial<PanelDef>`; this companion runs the host-side path that
+  // re-resolves content + re-applies wires.
+  updatePanel = getUpdatePanelLiveState(host)
+
   // Track breakpoint. Set <html data-breakpoint> for header hamburger CSS.
   offs.push(host.layout.on('@layout-breakpoint', (env) => {
     const payload = env.payload as BreakpointPayload
@@ -55,65 +72,75 @@ onMounted(() => {
     setBreakpointAttr(payload.name)
   }))
   // Initial read — in case @layout-breakpoint already fired before mount.
-  setBreakpointAttr(host.layout.snapshot?.activeBreakpoint ?? 'default')
-  currentBreakpoint = host.layout.snapshot?.activeBreakpoint ?? 'default'
+  // Prefer reading from the LayoutManager directly (truthful sync access)
+  // over `host.layout.snapshot` which historically returned stale data
+  // for host-mounted callers.
+  const initialBp = manager?.activeBreakpoint ?? 'default'
+  setBreakpointAttr(initialBp)
+  currentBreakpoint = initialBp
 
   offs.push(host.layout.on(CHANNELS.NAV, (env) => {
     const p = env.payload as NavPayload
-    host.layout.updatePanel('main', { kind: 'page', id: p.page, route: p.route } as never)
+    // Host-shape patch: kind / id / route are HostPanelDef fields,
+    // not PanelDef fields. Use the host-side patcher so the
+    // declaration is mutated and content resolvers re-read it.
+    updatePanel?.('main', { kind: 'page', id: p.page, route: p.route })
   }))
 
   offs.push(host.layout.on(CHANNELS.DETAIL, (env) => {
     const p = env.payload as DetailPayload
-    host.layout.updatePanel(p.panel, { route: p.route } as never)
-    if (currentBreakpoint === 'narrow') host.layout.openDrawer(p.panel)
-    else host.layout.expandPanel(p.panel)
+    updatePanel?.(p.panel, { route: p.route })
+    // Sides are drawers in any non-wide layout (default = mobile).
+    if (currentBreakpoint !== 'wide')
+      manager?.openDrawer(p.panel)
+    else
+      manager?.expandPanel(p.panel)
   }))
 
   offs.push(host.layout.on(CHANNELS.TOGGLE_DRAWER, (env) => {
     const p = env.payload as ToggleDrawerPayload
-    host.layout.toggleDrawer(p.side)
+    manager?.toggleDrawer(p.side)
   }))
 
   offs.push(host.layout.on(CHANNELS.EXPAND, (env) => {
     const p = env.payload as PanelPayload
-    host.layout.expandPanel(p.panel)
+    manager?.expandPanel(p.panel)
   }))
 
   offs.push(host.layout.on(CHANNELS.COLLAPSE, (env) => {
     const p = env.payload as PanelPayload
-    host.layout.collapsePanel(p.panel)
+    manager?.collapsePanel(p.panel)
   }))
 
   offs.push(host.layout.on(CHANNELS.OPEN_MODAL, (env) => {
     const p = env.payload as OpenModalPayload
-    const snap = host.layout.snapshot
-    const mainDef = snap?.panels?.main
-    prevMainStash = mainDef ? JSON.parse(JSON.stringify(mainDef)) : null
-    host.layout.updatePanel('main', {
-      kind: 'component',
-      tagName: 'dam-upload-modal-body',
-      props: { 'modal-id': p.id },
-    } as never)
+    // Modal id is pre-declared in the layout YAML's `modals` block.
+    // The manager looks up the registered template — no def needed at
+    // the call site.
+    manager?.openModal(p.id)
   }))
 
-  offs.push(host.layout.on(CHANNELS.CLOSE_MODAL, () => {
-    if (prevMainStash) {
-      host.layout.updatePanel('main', prevMainStash as never)
-      prevMainStash = null
-    }
+  offs.push(host.layout.on(CHANNELS.CLOSE_MODAL, (env) => {
+    const p = env.payload as OpenModalPayload
+    manager?.closeModal(p.id)
   }))
 
   offs.push(host.layout.on(CHANNELS.ASSET_CLICKED, (env) => {
     const p = env.payload as AssetClickedPayload
-    host.layout.updatePanel('right', { route: `/asset/${p.entityId}` } as never)
-    if (currentBreakpoint === 'narrow') host.layout.openDrawer('right')
-    else host.layout.expandPanel('right')
+    updatePanel?.('right', { route: `/asset/${p.entityId}` })
+    if (currentBreakpoint !== 'wide')
+      manager?.openDrawer('right')
+    else
+      manager?.expandPanel('right')
   }))
 
   offs.push(host.layout.on(CHANNELS.DENSITY, (env) => {
     const p = env.payload as DensityPayload
-    host.layout.updatePanel('main', { props: { density: p.value } } as never)
+    // Although `props` IS a PanelDef field, route through the
+    // host-shape patcher so the host declaration stays in sync with
+    // the resolved panel def. The shallow-merge of `props` is part
+    // of the updatePanelLiveState contract.
+    updatePanel?.('main', { props: { density: p.value } })
   }))
 })
 
@@ -123,9 +150,15 @@ onBeforeUnmount(() => {
     catch { /* swallow */ }
   }
   offs.length = 0
+  manager = null
+  updatePanel = null
+  currentBreakpoint = 'default'
 })
 </script>
 
 <template>
-  <div style="display:none" data-test="dam-coordinator" />
+  <div
+    style="display:none"
+    data-test="dam-coordinator"
+  />
 </template>

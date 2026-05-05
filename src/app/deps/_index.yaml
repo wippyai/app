@@ -182,9 +182,20 @@ entries:
       - name: host_config_layout
         value: |
           {
-            "breakpoints": { "narrow": 1024 },
+            "breakpoints": { "wide": 1024 },
             "layouts": {
               "default": {
+                "direction": "vertical",
+                "children": [
+                  { "panel": "header", "size": "40px", "fixed": true },
+                  { "panel": "toolbar", "size": "48px", "fixed": true },
+                  { "panel": "main", "size": "1fr", "main": true },
+                  { "panel": "footer", "size": "32px", "fixed": true },
+                  { "panel": "left", "display": "drawer-left", "drawerSize": { "width": "320px" } },
+                  { "panel": "right", "display": "drawer-right", "drawerSize": { "width": "320px" } }
+                ]
+              },
+              "wide": {
                 "direction": "vertical",
                 "children": [
                   { "panel": "header", "size": "40px", "fixed": true },
@@ -198,17 +209,6 @@ entries:
                   ]},
                   { "panel": "footer", "size": "32px", "fixed": true }
                 ]
-              },
-              "narrow": {
-                "direction": "vertical",
-                "children": [
-                  { "panel": "header", "size": "40px", "fixed": true },
-                  { "panel": "toolbar", "size": "48px", "fixed": true },
-                  { "panel": "main", "size": "1fr", "main": true },
-                  { "panel": "footer", "size": "32px", "fixed": true },
-                  { "panel": "left", "display": "drawer-left", "drawerSize": { "width": "320px" } },
-                  { "panel": "right", "display": "drawer-right", "drawerSize": { "width": "320px" } }
-                ]
               }
             },
             "panels": {
@@ -220,6 +220,18 @@ entries:
               "main":    { "kind": "page", "id": "app.views:dam-gallery", "route": "/" },
               "right":   { "kind": "page", "id": "app.views:dam-side-history", "route": "/display-settings" },
               "footer":  { "kind": "component", "tagName": "dam-footer" }
+            },
+            "modals": {
+              "upload":         { "kind": "component", "tagName": "dam-upload-modal-body",
+                                   "title": "Upload", "dismissable": true,
+                                   "size": { "width": "560px", "maxWidth": "90vw" } },
+              "upload-legacy":  { "kind": "component", "tagName": "dam-upload-modal-body",
+                                   "title": "Upload (legacy)", "dismissable": true,
+                                   "useNativeDialog": false,
+                                   "size": { "width": "560px", "maxWidth": "90vw" } },
+              "upload-second":  { "kind": "component", "tagName": "dam-upload-modal-body",
+                                   "title": "Upload (2nd)", "dismissable": true,
+                                   "size": { "width": "560px", "maxWidth": "90vw" } }
             },
             "floating": {
               "tools-flap":   { "kind": "component", "tagName": "dam-tools-flap",
