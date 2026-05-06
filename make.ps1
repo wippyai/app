@@ -79,8 +79,15 @@ function Invoke-Recipe {
     Push-Location $Dir
     try {
         Write-Host "==> $Dir" -ForegroundColor Cyan
-        if ($Clean -and (Test-Path 'node_modules')) {
-            Remove-Item -Recurse -Force 'node_modules'
+        # Clean = wipe both node_modules AND package-lock.json. Removing the
+        # lockfile is what makes a "clean reinstall" actually clean: a stale
+        # lockfile from before a @wippy-fe/* version bump pins the resolver
+        # to the OLD versions (npm ERESOLVE) even when package.json now asks
+        # for the new range. The Makefile target does not nuke the lockfile
+        # historically; this is a deliberate enhancement.
+        if ($Clean) {
+            if (Test-Path 'node_modules') { Remove-Item -Recurse -Force 'node_modules' }
+            if (Test-Path 'package-lock.json') { Remove-Item -Force 'package-lock.json' }
         }
         npm install
         if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
