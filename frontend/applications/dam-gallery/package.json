@@ -44,11 +44,11 @@
     "lint:fix": "eslint src --ext .ts,.vue --fix"
   },
   "dependencies": {
-    "@wippy-fe/theme": "^0.0.26"
+    "@wippy-fe/theme": "^0.0.27"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
-    "@wippy-fe/types-global-proxy": "^0.0.26",
+    "@wippy-fe/types-global-proxy": "^0.0.27",
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
     "tailwindcss": "3",
@@ -60,7 +60,7 @@
   },
   "peerDependencies": {
     "@iconify/vue": "^5.0.0",
-    "@wippy-fe/proxy": "^0.0.26",
+    "@wippy-fe/proxy": "^0.0.27",
     "axios": "^1.0.0",
     "vue": "^3.5.0",
     "vue-router": "^4.0.0"
