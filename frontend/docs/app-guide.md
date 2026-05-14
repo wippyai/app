@@ -1,8 +1,12 @@
 # Prompt for Building Vue 3 Applications with Wippy Platform Integration
 
+> **Architectural principle: the FE isolation paradigm.**
+>
+> A Wippy web app is a **standalone, universal bundle** that has zero knowledge of where or how it is served. `vite.config.ts` sets `base: ''` (mandatory) and does NOT hardcode `outDir` — the build script passes `--outDir` per deployment. `package.json` describes the app (title, type, proxy injections), not its mount point. The BE-side `_index.yaml` `view.page` entry is the **serving facade** that declares the URL, entry HTML, and byte source per deployment. The same built bundle ships unchanged to any Wippy instance. Full rules + audit checklist: [fe-compliance-checklist.md §0](fe-compliance-checklist.md#0-the-fe-isolation-paradigm).
+
 > **CRITICAL: NOT STANDALONE**
 >
-> Wippy web apps do **NOT** work outside the Wippy host application. They run in iframes with host-injected configuration. Direct browser testing will fail - the `$W` global and proxy APIs only exist when loaded within Wippy.
+> Wippy web apps do **NOT** work outside the Wippy host application. They run in iframes with host-injected configuration. Direct browser testing will fail — the `$W` global and proxy APIs only exist when loaded within Wippy. The single exception is **host-less mode** (`dev-proxy.js` provides a stubbed `$W` for local dev, browser playgrounds, and unit tests) — see [host-less-mode.md](host-less-mode.md) for the dual-mode boot contract.
 
 ## Task
 Create a modern Vue 3 application following 2025 best practices with PrimeVue component library, Tailwind CSS, and deep Wippy platform integration for iframe-embeddable applications.
@@ -65,6 +69,8 @@ src/
 - This ensures consistency with Wippy platform conventions and avoids import issues
 
 ## PrimeVue Integration Strategy
+
+> **Theming paradigm and per-component rules:** [theming.md](theming.md). This section covers the integration mechanics (plugin install, CSS injection); the paradigm doc covers what to reach for when, and the IF/THEN rules for color/component/layout decisions.
 
 ### PrimeVue + Tailwind Hybrid Approach
 Use **PrimeVue with Tailwind utilities** for the best of both worlds:
@@ -673,8 +679,7 @@ if (date.isValid) {
 - **Test proxy injections** to ensure proper integration with host theming and functionality
 - **Split large pages into components** - Create focused, reusable components for better maintainability
 - **Use composables for business logic** - Extract reusable logic into composables for better code organization
-- **Use semantic CSS variables** - Prefer `var(--p-content-background)`, `var(--p-text-color)` over numbered surface vars (`bg-surface-100`). Use `color-mix()` for derived shades (e.g., `color-mix(in srgb, var(--p-primary-color) 10%, transparent)`)
-- **Use semantic severity colors** - When a color conveys meaning (error, success, warning, info, help), use `danger-*`/`success-*`/`warn-*`/`info-*`/`help-*` — never raw Tailwind names like `red-*`/`green-*`/`orange-*`. In inline styles use `var(--p-danger-500)` etc. Semantics first, decorative later
+- **Theming** — see [theming.md](theming.md) for the full reference. Two rules in the bullet list: prefer semantic CSS vars over `--p-surface-N` for theme-dependent colors, and use semantic severity classes (`danger-*` / `success-*` / `warn-*` / `info-*` / `help-*` / `accent-*`) instead of raw Tailwind color names
 - **Use Luxon for date handling** - Prefer Luxon over native Date methods for better internationalization and formatting
 - **Use Icon component directly** - Always use `<Icon>` tags instead of button icon props for better control
 - **Use TanStack Query for server state** - Prefer `useInfiniteQuery` for pagination over manual state management
@@ -794,9 +799,19 @@ Examples: `@anthropic/app-analytics-dashboard`, `@acme/app-user-settings`
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My App</title>
-    <script type="text/javascript" data-role="@wippy/scripts">
-        // Placeholder for Wippy proxy scripts injection
-    </script>
+    <!--
+      Single-tag dual-mode boot. In hosted mode the Wippy host strips this
+      <script> (matched by data-role="@wippy/scripts") and injects its own
+      loading.js + proxy.js + AppConfig. In host-less mode (running app.html
+      directly) the src= falls through and dev-proxy.js bootstraps the page.
+      Local dev: http://localhost:5173/dev-proxy.js
+      Prod CDN (always tag-pinned): https://web-host.wippy.ai/<tag>/dev-proxy.js
+      Full details: host-less-mode.md.
+    -->
+    <script
+        src="http://localhost:5173/dev-proxy.js"
+        data-role="@wippy/scripts"
+    ></script>
     <!-- Import map: host-provided + app-provided (PrimeVue) dependencies -->
     <script type="importmap">
         {

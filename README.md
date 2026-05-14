@@ -35,6 +35,14 @@ wippy run -c
 
 ## Architecture & Terminology
 
+### The FE isolation paradigm
+
+Every FE module in this template — pages under `frontend/applications/` and web components under `frontend/web-components/` — is a **standalone, universal build artifact**. It has ZERO knowledge of where or how it is served. The package itself carries only source + a `package.json` describing what it is (tag, props, events, build entry). The BE-side `_index.yaml` registry entries are the **serving facade** that declare, per Wippy deployment, where the bundle is mounted (`meta.url`), how it's reached (`meta.entry_point`), and where the bytes come from (`fs.directory` + `http.static`, or `fs.embed`, or any other filesystem source).
+
+The same built bundle ships unchanged to any Wippy instance. The Makefile is what owns the build's output path — vite.config never hardcodes `outDir`, and every bundle sets `base: ''` so it's portable. **The registry entry wins over `package.json`** for any field that overlaps (tag_name, props, events). Cross-WC consumption goes through `await customElements.whenDefined('wc-x')` (peer must be `auto_register: true` + `announced: true`) or `loadWebComponent(artifactUUID)` for artifact-delivered components — NEVER a hardcoded URL like `import('/components/x/dist/index.js')`.
+
+Cite this paradigm in reviews as "**check FE isolation paradigm is followed**". Full rules + audit checklist: [frontend/docs/fe-compliance-checklist.md §0](frontend/docs/fe-compliance-checklist.md#0-the-fe-isolation-paradigm).
+
 ### Wippy Web Host
 
 The **Web Host** is a set of JS/CSS/HTML modules served from a CDN (e.g., `https://web-host.wippy.ai/webcomponents-1.0.20/`). It provides:
@@ -338,6 +346,8 @@ Icons are registered under the `custom:` namespace — use as `custom:logo`, `cu
 4. Build to `static/app/myapp/`
 
 ### Styling Consistency (CRITICAL)
+
+> **Canonical theming guide: [`frontend/docs/theming.md`](frontend/docs/theming.md).** The rules below are the executive summary; the full guide has the paradigm thesis ("maximum inheritance"), the AUTHOR and CUSTOMIZER waterfalls, the `hostCssKeys` decision tree, anti-patterns, and an IF/THEN rules cheatsheet.
 
 **All visual customization MUST go through the facade/host level, not individual apps.**
 

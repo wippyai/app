@@ -1,8 +1,8 @@
 # Wippy Proxy API
 
-> **CRITICAL: NOT STANDALONE**
+> **Runtime contract.**
 >
-> Web apps and components do **NOT** work outside Wippy. They run in iframes with host-injected configuration. Direct browser testing will fail - the `$W` global and `getWippyApi()` only exist when loaded within the Wippy host application.
+> The `$W` global / `getWippyApi()` is the only surface child apps and web components touch — production runs inside the Wippy host, which provides it. For local dev, browser playground pages, and unit tests, the same surface is provided by `dev-proxy.js` (a manual-config dev overlay) or by a vitest stub — the proxy contract is the same shape in both modes. See [host-less-mode.md](host-less-mode.md) for the dual-mode boot and how `<script src=".../dev-proxy.js" data-role="@wippy/scripts">` switches between hosted and host-less without code changes.
 
 ## Initialization
 
@@ -568,12 +568,15 @@ URLs to host-provided CSS (Vite `?url` imports). Use for reducing bundle size by
 ```typescript
 import { hostCss } from '@wippy-fe/proxy'
 
-hostCss.fontCssUrl      // Google Fonts
-hostCss.themeConfigUrl  // Theme CSS variables
-hostCss.primeVueCssUrl  // PrimeVue styles
-hostCss.markdownCssUrl  // Markdown content styles
-hostCss.iframeCssUrl    // Iframe sandbox styles
+hostCss.fontCssUrl       // Google Fonts
+hostCss.themeConfigUrl   // Theme CSS variables (--p-* tokens, light + dark)
+hostCss.primeVueCssUrl   // PrimeVue + Tailwind utility CSS (~455 KB)
+hostCss.markdownCssUrl   // .data-body markdown styles
+hostCss.iframeCssUrl     // Scrollbar styling (--p-surface-* refs)
+hostCss.preflightCssUrl  // Tailwind v3 preflight reset (legacy runtime-Tailwind only)
 ```
+
+> **For when to request each key** (and bundle-size impact per choice), see [theming.md § hostCssKeys decision tree](theming.md#hostcsskeys-decision-tree-for-web-components). The same doc has a [§ What the Wippy host provides](theming.md#what-the-wippy-host-provides-the-substrate) section explaining what each CSS file contains.
 
 ### loadCss(url)
 
@@ -865,3 +868,5 @@ Both components use Shadow DOM and inherit CSS variables from `@wippy-fe/theme`:
 - `--p-danger-*` / `--p-warn-*` — error/warning severity colors
 
 If the theme CSS is not loaded (e.g., facade before config fetch), hardcoded fallbacks are used.
+
+For the full CSS-variable contract these components consume — and how to override them via the facade or per-page `configOverrides` — see [theming.md](theming.md).

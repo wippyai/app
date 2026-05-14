@@ -111,63 +111,30 @@ export const useToggle = (initialValue = false) => {
 - Use Tailwind's spacing scale consistently
 - Leverage `@apply` sparingly, only for highly reused utility combinations
 
-### Theming with PrimeVue Variables
-The shared Tailwind preset from `@wippy-fe/theme/tailwind.config` includes `tailwindcss-primeui`, which maps Tailwind classes to PrimeVue CSS variables. See `@wippy-fe/theme/THEMING.md` for the full reference on available CSS variables, utility classes, and dark mode behavior.
-- `bg-primary`, `bg-primary-500`, `text-primary` → `--p-primary-*`
-- `bg-surface-0`, `text-surface-700` → `--p-surface-*`
-- `bg-secondary-500`, `text-secondary-300` → `--p-secondary-*`
-- `bg-danger-500`, `text-success-700`, `border-warn-200` → severity palettes
+### Theming
 
-### Semantic Severity Colors (MANDATORY)
+**See [theming.md](theming.md)** for the full theming guide: when to theme via the facade vs per-page, full CSS-variable reference, severity colors, dark mode rules, host UI customization, and WCAG luminosity guidance. The same content is also bundled with the npm package as `@wippy-fe/theme/THEMING.md`.
 
-**When a color conveys meaning (error, success, warning, info, help), always use the semantic severity palette — never raw Tailwind color names.** Semantics first, decorative later.
+**The two rules you'll hit most often:**
 
-| Use this | NOT this | When |
-|----------|----------|------|
-| `text-danger-500` | `text-red-500` | Errors, destructive actions, validation failures |
-| `bg-success-100` | `bg-green-100` | Success states, confirmations |
-| `border-warn-200` | `border-orange-200` | Warnings, caution states |
-| `text-info-600` | `text-sky-600` | Informational messages |
-| `bg-help-50` | `bg-purple-50` | Help text, hints |
-| `text-accent-500` | `text-teal-500` | Highlights, special callouts |
-
-Raw Tailwind colors (`red-*`, `green-*`, `orange-*`, `sky-*`, `purple-*`, `teal-*`) are only appropriate for purely decorative use where no semantic meaning is attached.
-
-In inline styles and `v-html`, use the CSS variables directly: `var(--p-danger-500)`, `var(--p-success-700)`, etc.
-
-Example:
-```vue
-<template>
-  <div class="flex flex-col gap-4 p-6 bg-surface-0 rounded-lg shadow-sm">
-    <h2 class="text-xl font-semibold text-surface-900">{{ title }}</h2>
-    <p class="text-sm text-surface-500 leading-relaxed">{{ description }}</p>
-  </div>
-</template>
-```
-
-### Theme-Aware CSS Variables
-When writing custom CSS (e.g., in web component `styles.css`), use semantic variables that adapt to dark mode:
-
-| Variable | Purpose |
-|----------|---------|
-| `--p-content-background` | Content area background |
-| `--p-text-color` | Primary text |
-| `--p-text-muted-color` | Secondary/muted text |
-| `--p-content-border-color` | Borders and dividers |
-
-**Never** use `--p-surface-0`, `--p-surface-200`, etc. for theme-dependent colors — they are a fixed scale that does not flip with dark mode.
+1. **Use semantic severity classes for meaningful colors.** `danger-*` / `success-*` / `warn-*` / `info-*` / `help-*` / `accent-*` — never `red-*` / `green-*` / `orange-*` / `sky-*` / `purple-*` / `teal-*` for things that convey meaning. Raw Tailwind color names are only for decorative use.
+2. **Never use `--p-surface-N` for theme-dependent colors.** The numbered surface scale is fixed and does NOT flip with dark mode. Use semantic vars (`--p-content-background`, `--p-text-color`, `--p-text-muted-color`, `--p-content-border-color`) for anything that should look different in light vs dark.
 
 For derived shades, use `color-mix()`:
 ```css
 background: color-mix(in srgb, var(--p-content-background) 85%, var(--p-text-color) 15%);
 ```
 
+In inline styles and `v-html`, use CSS variables directly: `var(--p-danger-500)`, `var(--p-success-700)`, etc.
+
 ---
 
 ## PrimeVue
 
+**Paradigm**: PrimeVue is the **first step** in the AUTHOR waterfall (see [theming.md § Theming architecture paradigm](theming.md#theming-architecture-paradigm-read-this-first)). Use a PrimeVue component before custom HTML; use `customCSS` overrides before reimplementation; reimplement only when PrimeVue genuinely lacks an analogue.
+
 - **Unstyled mode**: PrimeVue 4 installed via `PrimeVuePlugin` from `@wippy-fe/theme/primevue-plugin` — styled via `tailwindcss-primeui`
-- **Web components**: Bundle PrimeVue (add to `dependencies`, not externals). Request `primeVueCssUrl` in `hostCssKeys`
+- **Web components**: Bundle PrimeVue (add to `dependencies`, not externals). Request `primeVueCssUrl` in `hostCssKeys` ONLY when rendering PrimeVue inside Shadow DOM (see [theming.md § hostCssKeys decision tree](theming.md#hostcsskeys-decision-tree-for-web-components))
 - **Web apps**: Externalize PrimeVue and add `primevue/*` subpath entries to the app's own import map in `app.html`
 
 ---

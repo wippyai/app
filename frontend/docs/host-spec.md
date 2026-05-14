@@ -12,6 +12,8 @@ Components support shadow DOM with style encapsulation and use static properties
 
 Web Apps follow the [Proxy API](./proxy-api.md)
 
+> **Architectural principle: the FE isolation paradigm.** A Wippy FE module is a **standalone, universal build artifact** that has ZERO knowledge of where or how it is served. The package itself carries only its source + a `package.json` describing what it is (tag, props, events, build entry). The BE-side `_index.yaml` registry entries are the **serving facade** that, per deployment, declare WHERE the bundle is mounted and HOW the bytes are sourced. The same built bundle ships unchanged to any deployment. **Full rules, audit checklist, and "FE isolation paradigm" reference: [fe-compliance-checklist.md §0](fe-compliance-checklist.md#0-the-fe-isolation-paradigm).**
+
 ## Package Naming Convention
 
 Package names **MUST** follow this format and be **unique**:
@@ -259,7 +261,9 @@ Example:
 Path to the HTML entry point that will be loaded in an iframe.
 
 ### `wippy.proxy` (Web App only)
-Configuration for the iframe proxy system:
+Configuration for the iframe proxy system.
+
+> **For the WHEN/WHY of CSS injections**, see [theming.md § What the Wippy host provides](theming.md#what-the-wippy-host-provides-the-substrate). This section covers the HOW (the proxy mechanism that delivers them).
 
 #### Default Configuration (Recommended)
 ```json
@@ -284,13 +288,15 @@ Configuration for the iframe proxy system:
 ```
 
 **Injection Options Explained:**
-- **CSS Injections**: All enabled for full host theming integration
+- **CSS Injections**: All enabled for full host theming integration. The host's theme + custom CSS variables flow through `themeConfig` / `customVariables` / `customCss`. Per-app theming options are documented in [theming.md](theming.md) — including the three-level model (basic / full / per-page) and how `customCSS` and `cssVariables` interact with these injection toggles.
 - **tailwindConfig**: `false` -  Enable if you use runtime Play CDN version of tailwind
 - **resizeObserver**: `false` -  Enable if your app is a widget and not full-screen
 - **preventLinkClicks**: `false` -  Enable if you dont implement custom router
 - **iconifyIcons**: `true` - Iconify icons are always loaded from the host
 
 **Note**: When `enabled` is `true`, CSS injections default to `true`. The non-CSS injections default to `false` except `iconifyIcons` which defaults to `true`.
+
+**Per-page theme overrides:** the host also reads `wippy.configOverrides.cssVariables` and `wippy.configOverrides.customCSS` from the page's `package.json`, applied AFTER facade-level overrides. See [theming.md → Level 3](theming.md#level-3--per-page-theme-override-configoverrides--runtime).
 
 ### `wippy.features`
 Array object describing component features that it uses from Wippy API:
@@ -326,6 +332,8 @@ export const webComponent: () => Promise<typeof HTMLElement>
 The page is defined by the `wippy.path` field in package.json.
 
 The HTML file specified in `wippy.path` **MUST** include a `<script type="text/javascript" data-role="@wippy/scripts">` element where additional scripts will be automatically injected. The host injects `loading.js` (registers `<wippy-loading>` and `<wippy-error>`) and `proxy.js` before this marker.
+
+That same tag **SHOULD** also carry an `src="http://localhost:5173/dev-proxy.js"` (or equivalent) so the page boots *standalone* when no host is present — see [host-less-mode.md](host-less-mode.md) for the full dual-mode contract and the dev-proxy bootstrap.
 
 The page **SHOULD** include an `<script type="importmap">` element with the merged import-map so that ES-Modules work without bundling.
 
