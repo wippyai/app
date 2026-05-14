@@ -11,7 +11,7 @@ class ReactionBarElement extends WippyVueElement<ComponentProps, Events> {
   static get wippyConfig(): WippyElementConfig<ComponentProps> {
     return {
       propsSchema: pkg.wippy.props as WippyPropsSchema,
-      hostCssKeys: ['fontCssUrl', 'themeConfigUrl', 'primeVueCssUrl'] as const,
+      hostCssKeys: ['themeConfigUrl', 'primeVueCssUrl'] as const,
       inlineCss: stylesText,
     }
   }

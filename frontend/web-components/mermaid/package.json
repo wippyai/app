@@ -11,16 +11,17 @@
     "package.json"
   ],
   "dependencies": {
-    "@wippy-fe/theme": "^0.0.21",
-    "@wippy-fe/webcomponent-core": "^0.0.21",
-    "@wippy-fe/webcomponent-vue": "^0.0.21",
-    "beautiful-mermaid": "latest"
+    "@wippy-fe/theme": "^0.0.26",
+    "@wippy-fe/webcomponent-core": "^0.0.26",
+    "@wippy-fe/webcomponent-vue": "^0.0.26",
+    "beautiful-mermaid": "latest",
+    "mermaid": "^11"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-vue": "^5.0.0",
-    "@wippy-fe/proxy": "^0.0.21",
+    "@wippy-fe/proxy": "^0.0.26",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.0.0",
     "typescript": "^5.0.0",
@@ -30,12 +31,13 @@
     "vue-tsc": "^2.0.0"
   },
   "peerDependencies": {
-    "@wippy-fe/proxy": "^0.0.21",
+    "@wippy-fe/proxy": "^0.0.26",
     "vue": "^3.5.0"
   },
   "wippy": {
     "tagName": "example-mermaid",
     "type": "widget",
+    "description": "Renders Mermaid diagrams. Pass the Mermaid source in props.definition; never inline as text content. All diagram types are supported. Flowchart, sequence, class, ER, state, and xychart render fast via the primary engine. Pie, gantt, mindmap, journey, gitGraph, quadrant, timeline, sankey, c4, requirement, packet, and other less common types fall back to a heavier renderer that loads on first use — call CreateArtifact once and the diagram appears after a brief load.",
     "props": {
       "type": "object",
       "properties": {

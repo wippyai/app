@@ -143,7 +143,7 @@ The `wippy/facade` dependency controls the frontend shell:
 | `start_nav_open` | Nav open on load | `false` |
 | `allow_select_model` | User model selection | `false` |
 | `disable_right_panel` | Disable right sidebar | `false` |
-| `session_type` | `non-persistent` or `persistent` | `non-persistent` |
+| `session_type` | `non-persistent` or `cookie` | `non-persistent` |
 | `history_mode` | `hash` or `browser` | `hash` |
 | `login_path` | Unauthenticated redirect | `/login.html` (this template overrides to `/app/login.html`) |
 | `custom_css` | CSS injected into frontend | Poppins font import |

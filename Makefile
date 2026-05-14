@@ -1,9 +1,12 @@
-.PHONY: build clean-build dev run lint build-app-main build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
+.PHONY: build clean-build dev run lint build-app-main build-app-iframe-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
 
-build: build-app-main build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
+build: build-app-main build-app-iframe-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
 
 build-app-main:
 	cd frontend/applications/main && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir
+
+build-app-iframe-demo:
+	cd frontend/applications/iframe-demo && npm install && npm run build -- --outDir ../../../static/app/iframe-demo --emptyOutDir
 
 build-wc-reaction-bar:
 	cd frontend/web-components/reaction-bar && npm install && npm run build -- --outDir ../../../static/wc/reaction-bar --emptyOutDir

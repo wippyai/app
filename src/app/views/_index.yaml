@@ -15,6 +15,10 @@ entries:
       url: /app
       base_path: app/main
       entry_point: app.html
+      # Claim a top-level URL — gen-2-chat FE registers a dynamic route.
+      # Visiting /home (or /home/anything) on the host renders this page.
+      # v1 canonical form: /<literal>/:part(.*)* or /:part(.*)*
+      mountRoute: /home/:part(.*)*
       # config_overrides: Per-page AppConfig overrides. Injected into child iframe
       # as window.__WIPPY_CONFIG_OVERRIDES__ before proxy.js loads.
       # cssVariables/customCSS replace (not merge), iconSets merge additively.
@@ -23,6 +27,88 @@ entries:
       #   customization:
       #     cssVariables:
       #       "--p-primary": "#ef4444"
+    proxy:
+      enabled: true
+      css:
+        fonts: true
+        theme_config: true
+        iframe: true
+        prime_vue: true
+        custom_css: true
+        custom_variables: true
+      tailwind_config: true
+      iconify_icons: true
+
+  - name: iframe-demo
+    kind: registry.entry
+    meta:
+      type: view.page
+      name: iframe-demo
+      title: Iframe Demo
+      icon: tabler:frame
+      order: 3
+      announced: true
+      secure: false
+      url: /app
+      base_path: app/iframe-demo
+      entry_point: app.html
+      mountRoute: /demo/:part(.*)*
+    proxy:
+      enabled: true
+      css:
+        fonts: true
+        theme_config: true
+        iframe: true
+        prime_vue: true
+        custom_css: true
+        custom_variables: true
+      tailwind_config: true
+      iconify_icons: true
+
+  # Same app, but with a FULLY overridden color palette — demonstrates how
+  # configOverrides let you retheme an entire page. All 5 semantic color
+  # families are replaced: primary→rose, danger→orange, warn→teal,
+  # secondary→violet, accent→amber.
+  - name: iframe-demo-themed
+    kind: registry.entry
+    meta:
+      type: view.page
+      name: iframe-demo-themed
+      title: Iframe Demo (Custom Palette)
+      icon: tabler:paint
+      order: 4
+      announced: false
+      secure: false
+      url: /app
+      base_path: app/iframe-demo
+      entry_point: app.html
+      config_overrides:
+        customization:
+          cssVariables:
+            # Pastel palette — soft muted tones, still blue-hued primary
+            "--p-primary": "#7c9ed9"           # Soft blue (pastel)
+            "--p-primary-color": "#7c9ed9"
+            "--p-danger": "#e8a0a0"            # Soft rose
+            "--p-warn": "#c5c88a"              # Soft olive/sage
+            "--p-secondary": "#b4a7d6"         # Soft lavender
+            "--p-accent": "#8cc5b5"            # Soft mint
+            # Warm creamy surface (noticeably warm, almost parchment)
+            "--p-surface-0": "#fffcf7"
+            "--p-surface-50": "#faf6ef"
+            "--p-surface-100": "#f3ede3"
+            "--p-surface-200": "#e8dfd1"
+            "--p-surface-300": "#d6cab8"
+            "--p-surface-400": "#b0a48f"
+            "--p-surface-500": "#8a7e6b"
+            "--p-surface-600": "#6b6052"
+            "--p-surface-700": "#524a3e"
+            "--p-surface-800": "#3a342b"
+            "--p-surface-900": "#262019"
+            "--p-surface-950": "#141008"
+          # Override font to Quicksand (rounded, friendly)
+          customCSS: |
+            @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
+            :root, body, * { font-family: 'Quicksand', sans-serif !important; }
     proxy:
       enabled: true
       css:

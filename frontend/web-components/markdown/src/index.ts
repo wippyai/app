@@ -10,7 +10,7 @@ class MarkdownElement extends WippyVueElement<ComponentProps, Events> {
   static get wippyConfig(): WippyElementConfig<ComponentProps> {
     return {
       propsSchema: pkg.wippy.props as WippyPropsSchema,
-      hostCssKeys: ['fontCssUrl', 'themeConfigUrl', 'markdownCssUrl'] as const,
+      hostCssKeys: ['themeConfigUrl', 'markdownCssUrl'] as const,
       inlineCss: stylesText,
       contentTemplate: 'text/markdown',
     }
