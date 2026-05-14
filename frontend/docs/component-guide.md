@@ -1,8 +1,14 @@
 # Prompt for Building Wippy Web Components
 
-> **CRITICAL: NOT STANDALONE**
+> **Architectural principle: the FE isolation paradigm.**
 >
-> Wippy web components do **NOT** work outside the Wippy host application. They run within Wippy pages with host-injected configuration. The `@wippy-fe/proxy` module and host APIs only exist when loaded within Wippy.
+> A web component is a **standalone, universal bundle** that has zero knowledge of where or how it is served. It carries source + `package.json` (tag, props, events, build entry). The BE-side `_index.yaml` registry entry is the **serving facade** that declares the URL, entry path, and byte source per deployment. **The registry entry wins over `package.json`** for any field that overlaps (tag_name, props, events) — `package.json` is a suggestion / host-less-mode fallback. Same built artifact ships unchanged to any Wippy instance. **Cross-WC consumption MUST go through `await customElements.whenDefined('wc-x')` (peer is `auto_register: true` + `announced: true`) or `loadWebComponent(artifactUUID)` for artifact-delivered peers — NEVER `import('/components/x/dist/index.js')`.** Full rules + audit checklist: [fe-compliance-checklist.md §0](fe-compliance-checklist.md#0-the-fe-isolation-paradigm).
+
+> **Runtime contract: the proxy API.**
+>
+> Wippy web components communicate with the world only through `@wippy-fe/proxy` (`api`, `host`, `on`, etc.). In production they run inside the Wippy host, which provides those globals. For local dev, browser playground pages, and unit tests, the same components run **host-less** — `dev-proxy.js` (or a vitest stub) supplies the proxy globals and a fake host. Apps and components are deliberately *standalone-aware* — they don't reach out to neighboring code or the host's internals. See [host-less-mode.md](host-less-mode.md) for the dual-mode boot, dev overlay, and WC test-isolation patterns.
+
+> **Loading & registration is its own concern.** This guide covers *writing* a WC. For how the host discovers, fetches, and registers your WC at runtime — and the recurring `Proxy globals not found` / `process is not defined` / silent-unknown-element failure modes — read [web-component-loading.md](web-component-loading.md) first. It covers the `announced: true` requirement on `view.component`, the `vite.config.ts` externals you must declare (especially `pinia`), the big-lazy / small-eager bundle pattern, and the supported `web-host` version floor.
 
 ## Task
 
@@ -519,6 +525,8 @@ function handleClick() {
 
 ## hostCssKeys Reference
 
+> **For when to request each key with bundle-size impact and a decision tree**, see [theming.md § hostCssKeys decision tree](theming.md#hostcsskeys-decision-tree-for-web-components). The table below is the reference list; the theming doc has the rules for choosing.
+
 Keys passed to `hostCssKeys` in `wippyConfig` control which platform CSS is loaded into the shadow root at runtime. Each key maps to a URL provided by `@wippy-fe/proxy`.
 
 | Key | What it loads | When to include |
@@ -696,30 +704,26 @@ host.logout()
 
 ## Styling Guidelines
 
-1. **Use semantic CSS variables** for all theme-dependent colors. These adapt to dark mode automatically:
-   - `--p-text-color`, `--p-text-muted-color` -- text
-   - `--p-content-background` -- backgrounds
-   - `--p-content-border-color` -- borders
-   - `--p-primary-500`, `--p-primary-color` -- accent/brand
-   - `--p-highlight-background`, `--p-highlight-color` -- selections
-   - `--p-danger-*`, `--p-success-*`, `--p-warn-*`, `--p-info-*`, `--p-help-*`, `--p-accent-*` -- severity & accent
+> **Full theming reference: [theming.md](theming.md)** — covers the three theming levels (basic / full / per-page), the complete CSS-variable list, dark-mode rules, severity colors, host UI customization, and WCAG guidance. Same content also at `@wippy-fe/theme/THEMING.md`. Read it once; this section only covers the component-specific quirks.
 
-2. **Never use raw surface values** like `--p-surface-0`, `--p-surface-200`, `--p-surface-700` for theme-dependent colors. They do not adapt to dark mode. Use the semantic aliases above.
+**Component-specific rules:**
 
-3. **Use semantic severity colors, not raw Tailwind color names.** When a color conveys meaning (error, success, warning, info, help), use `danger-*`, `success-*`, `warn-*`, `info-*`, `help-*` — never `red-*`, `green-*`, `orange-*`, `sky-*`, `purple-*`. Raw color names are only for purely decorative use. Semantics first, decorative later.
+1. **No root-level padding or margin** on web components — the host controls outer spacing. Apply padding inside child elements.
 
-3. **Derived shades** via `color-mix()` instead of hardcoded surface values:
-   ```css
-   background: color-mix(in srgb, var(--p-content-background) 85%, var(--p-text-color) 15%);
-   ```
+2. **`@wippy-fe/theme/theme-config.css` is the dev-time fallback only.** Import it via `@import "@wippy-fe/theme/theme-config.css"` in your `styles.css` so component preview / Storybook works. At runtime the host injects the real theme via `hostCssKeys: ['themeConfigUrl']` — see [theming.md → Reference — CSS variables](theming.md#reference--css-variables) for the full var list.
 
-4. **No root-level padding or margin** on components -- the host controls spacing.
+3. **Tailwind components**: import `tailwind.css` (the `@tailwind` directives file) from `styles.css`. Both files are bundled via the `?inline` import in `index.ts`.
 
-5. **`@wippy-fe/theme`** provides the dev-time fallback CSS variables (`theme-config.css`). Import it via `@import "@wippy-fe/theme/theme-config.css"` in your `styles.css`. At runtime, the host injects the real theme via `hostCssKeys: ['themeConfigUrl']`. See `@wippy-fe/theme/THEMING.md` for the full list of available CSS variables and Tailwind utility classes.
+4. **Non-Tailwind components**: write plain CSS classes using the semantic `--p-*` variables. See `websocket-log/src/styles.css` for a complete example.
 
-6. **Tailwind components** import `tailwind.css` (which has the `@tailwind` directives) from `styles.css`. Both files are bundled via the `?inline` import in `index.ts`.
-
-7. **Non-Tailwind components** write plain CSS classes using the semantic `--p-*` variables. See `websocket-log/src/styles.css` for a complete example.
+5. **Color rules** (these are the same as for web apps; full reasoning in [theming.md → Reference — Dark mode](theming.md#reference--dark-mode)):
+   - Use semantic vars (`--p-text-color`, `--p-content-background`, `--p-text-muted-color`, `--p-content-border-color`, `--p-highlight-background`, `--p-primary-color`) for theme-dependent colors — they flip with dark mode.
+   - Never use raw `--p-surface-N` for theme-dependent colors — the numbered scale is fixed and does NOT flip.
+   - Use semantic severity classes (`danger-*` / `success-*` / `warn-*` / `info-*` / `help-*` / `accent-*`) — never `red-*` / `green-*` / `orange-*` / `sky-*` / `purple-*` / `teal-*` for colors that convey meaning.
+   - Derived shades via `color-mix()`:
+     ```css
+     background: color-mix(in srgb, var(--p-content-background) 85%, var(--p-text-color) 15%);
+     ```
 
 ---
 

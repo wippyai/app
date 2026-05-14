@@ -2,6 +2,8 @@
 
 Use this checklist to verify that a generated Wippy app is complete and correctly configured.
 
+> **Before going section-by-section: check the FE isolation paradigm is followed.** A Wippy app is a standalone universal bundle that has zero knowledge of where it's served. `base: ''` is mandatory, `outDir` is set by the build script (not the vite.config), and `package.json` describes the app, not its mount point. Full rules: [fe-compliance-checklist.md §0](fe-compliance-checklist.md#0-the-fe-isolation-paradigm).
+
 ---
 
 ## 1. Required Files
@@ -259,18 +261,57 @@ Use this checklist to verify that a generated Wippy app is complete and correctl
 - [ ] Pages use lazy loading in router: `() => import('../pages/xyz.vue')`
 
 ### Styling
+
+> Full paradigm and IF/THEN rules: [theming.md](theming.md). The bullets below are the checklist; the guide has the *why*.
+
+- [ ] Component author followed the AUTHOR waterfall (PrimeVue → custom HTML with theme colors → `color-mix()` → custom CSS as last resort) — see [theming.md § The AUTHOR waterfall](theming.md#waterfall-a--author-when-building-ui-in-an-app-or-web-component)
 - [ ] Uses Tailwind utility classes
 - [ ] Uses PrimeVue components where appropriate
-- [ ] Includes dark mode variants (`dark:` prefix)
+- [ ] Custom CSS retunes for dark mode via `@media (prefers-color-scheme: dark)` (or relies on `--p-*` vars, which already do)
 - [ ] Uses CSS variables for theme colors (`var(--p-*)`)
-- [ ] Severity colors use semantic names (`danger-*`, `success-*`, `warn-*`, `info-*`, `help-*`) — never raw Tailwind names (`red-*`, `green-*`, etc.) for semantic uses
+- [ ] Severity colors use semantic names (`danger-*`, `success-*`, `warn-*`, `info-*`, `help-*`, `accent-*`) — never raw Tailwind names (`red-*`, `green-*`, etc.) for semantic uses
+- [ ] No `:root { --p-* }` overrides in `src/styles.css` — those belong in the facade (`css_variables`) or per-page `configOverrides.customization.cssVariables`
+- [ ] No raw `.p-button` / `.p-dialog` / `.p-inputtext` selectors in `src/styles.css` — those belong in `customization.customCSS`
+
+### Tailwind class-detection (the JIT gotcha)
+
+Tailwind v3 JIT only emits rules for classes it can find as **literal strings** in scanned source files. A class that only exists at runtime (via string concatenation / template-literal interpolation) is silently purged from the build, so it has no effect at runtime even though the className is set correctly on the DOM element. Symptom: an element has `class="text-white"` in the DOM, but `getComputedStyle(el).color` is the inherited page text color, not white — and `.text-white { ... }` is absent from the emitted CSS.
+
+✅ Detectable patterns (use these):
+```html
+<button class="bg-success-500 text-white">                            <!-- static literal -->
+<button :class="{ 'text-white': cond, 'bg-warn-500': stale }">        <!-- literal keys in object syntax -->
+<button :class="['text-white', extraClass]">                          <!-- literal in array -->
+<button :class="cond ? 'text-white' : 'text-zinc-500'">               <!-- literal in ternary -->
+```
+
+❌ Undetectable patterns (Tailwind cannot statically resolve, will purge):
+```html
+<button :class="`text-${shade}-500`">                                  <!-- template-literal interpolation -->
+<button :class="'text-' + color">                                      <!-- string concatenation -->
+<button :class="computeColor()">  <!-- where computeColor returns a constructed class name -->
+```
+
+When you must drive a class from a variable, list every possible value as a literal somewhere Tailwind scans:
+```ts
+// Tailwind scans this file and sees each literal class name.
+const TONE: Record<Severity, string> = {
+  warn: 'text-warn-500 bg-warn-500/10',
+  danger: 'text-danger-500 bg-danger-500/10',
+  success: 'text-success-500 bg-success-500/10',
+}
+// then in template:
+<span :class="TONE[severity]">
+```
+
+Or, as a last resort, add the dynamic class names to `tailwind.config.ts` under `safelist:`. Inline `:style` with CSS-var values is also a valid escape hatch when the dynamic dimension can't be enumerated.
 
 ### Icons
 - [ ] Uses `<Icon icon="tabler:*">` component from `@iconify/vue`
-- [ ] Does NOT use button icon props
+- [ ] Does NOT use button icon props (see [theming.md § Iconography](theming.md#iconography-iconify-discipline))
 
 ### Host Services
-- [ ] Uses `host.toast()` for notifications (not PrimeVue ToastService)
+- [ ] Uses `host.toast()` for notifications (not PrimeVue ToastService) — see [theming.md § What the Wippy host provides](theming.md#what-the-wippy-host-provides-the-substrate)
 - [ ] Uses `host.confirm()` for confirmations (not PrimeVue ConfirmationService)
 
 ---
