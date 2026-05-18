@@ -21,8 +21,8 @@ modules:
       version: 0.4.8
       hash: ed5a6f160c66b6805f531e41233ca8b3946753fd2a95945f3d77482d24482c95
     - name: wippy/facade
-      version: 0.6.2
-      hash: a4a0a12cc42af28b3aaa5cd1ee80b1ae362573a712e31d5425fc00a6b7b707a7
+      version: 0.6.4
+      hash: 81c14947d81dd18152f05cec368c781790fc8e327d185b27fe5fc48868d5f02e
     - name: wippy/llm
       version: 0.4.28
       hash: 4e99f9034d84b22d3c40e213843e5e3a1efc9b5ad837a3e84c3a53abc72ae562
@@ -48,7 +48,7 @@ modules:
       version: 0.3.23
       hash: 8a4d01de4de4a78a6e319a9b03b8f1ed5aa89e0d3cc271869d7583041d136140
     - name: wippy/views
-      version: 0.4.30
-      hash: 9c7fec0eb369af49e484a6eb896055f8d7dfed04c77828eac1ec4aeacb7d0808
+      version: 0.4.31
+      hash: 3908a9c6cf6e0c10c5bfb14fccadfc4b15d10ff8ccf73b61954f3d4cdb74c85d
 options:
     unpack_modules: true
