@@ -45,6 +45,7 @@ Full proxy API type definitions ship with the `@wippy-fe/proxy` npm package at `
 | [web-component-loading.md](web-component-loading.md) | How the host autoloads `view.component` entries: registration → API filter → script injection → `define()` chain, the `@wippy-fe/proxy` eager-getter contract (root cause of `Proxy globals not found`), externals + pinia gotcha, web-host version floor, diagnostic recipe | Tag silently renders as unknown, `customElements.get` returns undefined, `Proxy globals not found`, `process is not defined` in a WC bundle |
 | [app-guide.md](app-guide.md) | Web app development: routing, Vite config, `window.$W` proxy, Vue Router, layouts | Building a web app |
 | [app-checklist.md](app-checklist.md) | Pre-submission checklist for web apps | Before submitting a web app |
+| [fe-compliance-checklist.md](fe-compliance-checklist.md) | Exhaustive compliance checklist for `view.page` and `view.component` modules. **AI auditors:** start at **Appendix D — AI Audit Playbook** for the phase order, swarm decision matrix, and moderator output schema. | Auditing a module before merge; AI-driven review of a PR |
 
 ### Reference
 

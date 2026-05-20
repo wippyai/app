@@ -2,6 +2,8 @@
 
 Use this checklist to verify that a generated Wippy app is complete and correctly configured.
 
+> **AI auditors:** this is the older, page-app-only checklist. Prefer [`fe-compliance-checklist.md`](fe-compliance-checklist.md), specifically **Appendix D — AI Audit Playbook**, which defines the phase order, swarm decision matrix, and moderator output schema. This checklist remains valid for human reviewers doing quick page-app sanity checks.
+
 > **Before going section-by-section: check the FE isolation paradigm is followed.** A Wippy app is a standalone universal bundle that has zero knowledge of where it's served. `base: ''` is mandatory, `outDir` is set by the build script (not the vite.config), and `package.json` describes the app, not its mount point. Full rules: [fe-compliance-checklist.md §0](fe-compliance-checklist.md#0-the-fe-isolation-paradigm).
 
 ---

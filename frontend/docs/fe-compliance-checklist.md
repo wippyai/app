@@ -2,7 +2,7 @@
 
 A single, exhaustive checklist for shipping Wippy child apps (`view.page`) and web components (`view.component`) — covering YAML registration, FE source, build pipeline, theming, proxy API, router/host integration, and host-less mode. Every rule cites a source (canonical doc, host contract, gold-standard reference, or real-world incident) and most have a copy-paste verification command.
 
-Audience: human reviewers, AI agents auditing a fresh module, and CI gates.
+Audience: human reviewers, AI agents auditing a fresh module (see **Appendix D — AI Audit Playbook** for the agent-oriented entry point), and CI gates.
 
 This doc supersedes the older `app-checklist.md` for new work. The older checklist remains valid for the page-app subset; this one extends it with web components, host-less mode, real-world fixes, and verification recipes.
 
@@ -58,6 +58,16 @@ Source references use:
 ## 0. The FE isolation paradigm
 
 > Cite as: "**check FE isolation paradigm is followed**".
+
+<details>
+<summary><b>Additional guide for AI</b> — click to expand</summary>
+
+- **Phase:** P1 Structural + P4 Cross-cutting (isolation is a contract, not a build artifact). See Appendix D.
+- **Audit method:** read this section's paradigm; spot-check `app.html`, `app.ts` / `index.ts` imports, and `meta.url` / `fs.directory` in `_index.yaml`; verify no host coupling (no hardcoded mount URLs, no host package imports).
+- **Swarm split:** solo (small, paradigm-only audit).
+- **Cite findings as:** `path:line` against §0 isolation rules; moderator keys violations to §11.
+
+</details>
 
 A Wippy FE module (`view.page` or `view.component`) is a **standalone, universal build artifact** that has ZERO knowledge of where or how it is served. The `_index.yaml` registry entries on the BE side are the **serving facade** — they declare, for THIS Wippy deployment, where the bundle is mounted (`meta.url`), how it's reached (`meta.entry_point` / `meta.base_path`), and where the bytes come from (`fs.directory` + `http.static`, or any other source: `fs.embed`, in-memory FS, upstream proxy, DB-backed FS).
 
@@ -167,6 +177,13 @@ A "page in iframe with no nav-owner" — common in artifact viewers, embedded de
 Conversely, a `view.component` entry with `auto_register: true` and `announced: true` will appear in tag-explorer registries; with `announced: false` it's an internal building block.
 
 **For `view.component` entries, `announced: true` is a HARD requirement to participate in the host's autoload.** The `/api/public/components/list` endpoint served by `wippy/views` filters server-side by `announced == true` (see `wippy/views/api/list_components.lua`); `auto_register: true` alone is *not* enough to make the host inject the WC's `<script type="module">` tag at boot. Symptom of getting this wrong: `customElements.get('your-tag')` stays `undefined`, Vue silently renders an empty `<your-tag></your-tag>` with no shadow root content, no console error. Loading & registration mechanics — including this filter, the `@wippy-fe/proxy` eager-getter contract, and required `vite.config.ts` externals — are documented in [web-component-loading.md](web-component-loading.md).
+
+<details>
+<summary><b>Additional guide for AI</b> — click to expand</summary>
+
+If you're an AI agent auditing a module, **start at Appendix D — AI Audit Playbook**. It defines the phase order (P1 Structural → P2 Build → P3 Runtime, with P4 Cross-cutting in parallel), the swarm decision matrix (when to spawn sub-agents and how to slice §3 / §4 / §5), and the moderator's required output schema. Decide page vs. component using the table above, then jump to the relevant section's "Additional guide for AI" callout.
+
+</details>
 
 ---
 
@@ -337,6 +354,16 @@ All injection flags are technically MAY — the host has sane defaults — but p
 ---
 
 ## 3. Page apps — manifest, build, runtime
+
+<details>
+<summary><b>Additional guide for AI</b> — click to expand</summary>
+
+- **Phase:** P1 Structural → P2 Build & types → P3 Runtime (in series — stop on P1 fail). See Appendix D.
+- **Audit method:** jq on `package.json`, grep on `vite.config.ts` / `app.html` / `app.ts`; then `vue-tsc --noEmit` + `vite build`; then boot via `bg-manager bg_run` and exercise the router. Use §10 recipes verbatim — do not invent commands.
+- **Swarm split:** 4 sub-agents — (3.1+3.2 build config), (3.3+3.4 app.html + bootstrap), (3.5+3.6 router + constants), (3.7+3.9 styles + subscription cleanup). Moderator consolidates against §11 page-app rules.
+- **Cite findings as:** `path:line`; moderator keys violations to §11 page-app REJECT rules.
+
+</details>
 
 ### 3.1 `package.json`
 
@@ -894,6 +921,16 @@ Anti-patterns (REJECT):
 
 ## 4. Web components — manifest, build, runtime
 
+<details>
+<summary><b>Additional guide for AI</b> — click to expand</summary>
+
+- **Phase:** P1 Structural → P2 Build & types → P4 Cross-cutting (theme compat, host-less harness). See Appendix D.
+- **Audit method:** jq + grep on the library-mode `vite.config.ts` and `index.ts`; build into `dist/`; load via the host-less harness (§9) and confirm the custom tag registers. Use §10 recipes verbatim.
+- **Swarm split:** 3 sub-agents — (4.1+4.2 build config), (4.3+4.6 entry + tsconfig), (4.4+4.5+4.8 theme compat + styles + persistence). Moderator consolidates against §11 WC rules.
+- **Cite findings as:** `path:line`; moderator keys violations to §11 web-component REJECT rules.
+
+</details>
+
 ### 4.1 `package.json`
 
 Reference: `gold:app-template/frontend/web-components/mermaid/package.json`.
@@ -1171,6 +1208,16 @@ For state that must survive WC unmount or iframe destruction, use `@wippy-fe/pin
 ---
 
 ## 5. Theming
+
+<details>
+<summary><b>Additional guide for AI</b> — click to expand</summary>
+
+- **Phase:** P4 Cross-cutting (mostly; §5.1.2 placement rules are P1 Structural). See Appendix D.
+- **Audit method:** read §5.0 escalation levels first to scope the audit; grep for `@light` / `@dark` / `--p-*` vars and any `:root` selectors in app `.css` files; Playwright dark-mode flip to verify §5.4 parity.
+- **Swarm split:** 3 sub-agents — (5.1+5.2 facade-first + var taxonomy), (5.3+5.4 REPLACE/MERGE + @light/@dark), (5.5+5.6 scoping + iconify discipline). Moderator consolidates against §11 theming rules.
+- **Cite findings as:** `path:line`; moderator keys violations to §11 theming REJECT rules.
+
+</details>
 
 ### 5.0 Visual-matching escalation (HEAVILY recommended)
 
@@ -1612,6 +1659,16 @@ A hardcoded absolute base (e.g. `base: '/app/keeper/'`) ties the bundle to a spe
 
 Run these before submitting. Each maps to a section.
 
+<details>
+<summary><b>Additional guide for AI</b> — click to expand</summary>
+
+- **Phase:** cross-phase — §10 is the **canonical source for verification commands**. Do not invent variants.
+- **Audit method:** sub-agents MUST run §10 recipes **verbatim** before declaring PASS, and MUST include the captured output tail as evidence. Moderator MUST flag any command not present in §10.
+- **Swarm split:** not applicable — §10 is consumed by sub-agents auditing other sections.
+- **Cite findings as:** every PASS report includes the §10.x recipe number and the captured output tail. Anti-pattern: "PASS — looks fine" without the command output (D.7 #2).
+
+</details>
+
 ### 10.1 Bootstrap & build
 
 ```bash
@@ -1920,6 +1977,17 @@ Fix: keep peerDependencies, vite externals, and importmap in sync. Verification 
 
 The checklist's REJECT rules were validated against the two gold standards. Here's the per-rule result:
 
+<details>
+<summary><b>Additional guide for AI</b> — click to expand</summary>
+
+- **Phase:** P4 Cross-cutting (gold-standard diff is a technique, not its own phase). See Appendix D.
+- **Audit method:** diff the target module's structure against `gold:app-template/frontend/applications/main/` (page apps) **or** `gold:app-template/frontend/web-components/mermaid/` (web components). **Pin the gold standard by app type** — never compare a page app against the WC gold (Appendix D.7 anti-pattern #4).
+- **Swarm split:** solo — one agent comparing one module against one gold standard.
+- **Cite findings as:** `gold:path:line` vs. `target:path:line`; moderator surfaces structural diffs in the §11-keyed fix list.
+
+</details>
+
+
 ### `app-template/frontend/applications/main/` — page-app gold standard
 
 | Rule | Status | Notes |
@@ -2097,6 +2165,181 @@ proxy:
 ```
 
 CSS injections are applied in this order: `themeConfig → iframe → primevue → markdown → customVariables → customCss`. A MutationObserver pins the customCss `<style>` tag to the end of `<head>` to preserve precedence.
+
+---
+
+## Appendix D — AI Audit Playbook
+
+<details>
+<summary><b>For AI auditors</b> — click to expand the full playbook (humans may skip)</summary>
+
+This appendix is the entry point for AI agents auditing a Wippy FE module against this checklist. It defines the phase order, when to spawn a sub-agent swarm vs. work solo, the moderator role with a required output schema, the tool mapping per phase, and the most common failure modes to avoid.
+
+The rest of the checklist (sections §0–§14, Appendices A–C) is the source of truth for **what** to check. This appendix is the source of truth for **how** an AI runs the audit.
+
+### D.1 When to use this appendix
+
+Apply this playbook when:
+
+- Auditing a fresh module before merging it.
+- Reviewing a PR that touches FE files.
+- Validating a gold-standard candidate against the existing gold (`gold:app-template/frontend/applications/main/` for pages, `gold:app-template/frontend/web-components/mermaid/` for WCs).
+- Investigating a CI gate failure tied to this checklist.
+
+**Read-only contract for sub-agents.** Sub-agents MUST NOT run state-changing commands — no `npm install`, no `vite build`, no browser commands that mutate disk or remote state. They run grep, jq, file reads, and parse what's already on disk. Only the moderator (or the orchestrating Claude session) runs builds and browser checks. This rule exists to prevent N parallel sub-agents from racing on the same `node_modules/` directory or competing for the same dev-server port.
+
+### D.2 Phase taxonomy
+
+| Phase | Name | What it checks | Tools | Depends on |
+|---|---|---|---|---|
+| **P1** | Structural | Manifest / YAML / tsconfig / vite shape — pure static analysis | Grep, jq, file reads | — |
+| **P2** | Build & types | `npm install`, `vue-tsc --noEmit`, `vite build` | `bg-manager sync_run` | P1 PASS |
+| **P3** | Runtime | Boot, navigation, dark/light, host-less mode, HTTP smoke | `bg-manager bg_run`, `mcp__playwright`, `curl` | P2 PASS |
+| **P4** | Cross-cutting | Theming parity, proxy contract, subscription leaks, gold-standard diff | Grep + browser + diff | P1 PASS (runs parallel to P2/P3) |
+
+**Stop-on-fail rule.** If P1 fails, do NOT run P2 or P3 — fix the structural issues first. P4 may run in parallel to P2/P3 once P1 passes, since P4 mostly does its own static analysis and only borrows the browser at the end.
+
+**Why this order:** running P3 (boot) on a module that fails P1 (manifest) wastes minutes per failing module and produces noisy errors that obscure the real issue. The phase order mirrors the cost gradient (cheap → expensive).
+
+### D.3 Swarm decision matrix
+
+| Trigger | Action | Moderator? |
+|---|---|---|
+| 1 module, ≤2 small sections in scope | Solo agent, no moderator | — |
+| 1 module, heavy section (§3, §4, or §5) | Use that section's swarm split (3–4 sub-agents — see callouts) | Yes |
+| ≥3 modules to audit | One sub-agent per module + §-cut as above where heavy sections apply | Yes |
+| Audit + remediate combined | Audit swarm → moderator → remediation tasks → re-audit swarm | Yes |
+
+**Heavy-section cut lists (restated here so the moderator's prompt is self-contained):**
+
+- **§3 (page apps) — 4 sub-agents:** (3.1+3.2 build config), (3.3+3.4 app.html + bootstrap), (3.5+3.6 router + constants), (3.7+3.9 styles + subscription cleanup).
+- **§4 (web components) — 3 sub-agents:** (4.1+4.2 build config), (4.3+4.6 entry + tsconfig), (4.4+4.5+4.8 theme compat + styles + persistence).
+- **§5 (theming) — 3 sub-agents:** (5.1+5.2 facade-first + var taxonomy), (5.3+5.4 REPLACE/MERGE + @light/@dark), (5.5+5.6 scoping + iconify).
+
+This aligns with the global rule in the project's `CLAUDE.md`: *"for PRs touching 3+ files or multiple modules, spawn MANY INDEPENDENT agents to review in parallel — split by area/module and run concurrently."*
+
+### D.4 Sub-agent role + prompt template
+
+Sub-agents are **read-only**, **single-section**, **citation-required**. Paste this template and fill the placeholders:
+
+```
+You are auditing §{section} of fe-compliance-checklist.md against the
+module at {module_path}. Optional reference: gold standard at
+{gold_standard_path}.
+
+Constraints:
+- Read-only. Do NOT run npm install, vite build, or any browser command.
+- Use the verification commands from §10 verbatim — do NOT invent variants.
+- Cite every PASS/FAIL with path:line. Bare "looks fine" is not acceptable.
+- Distinguish MUST from SHOULD/MAY — don't over-reject on SHOULD violations.
+- Load only §{section} + Appendices A/B/C as needed. Don't load the full
+  checklist — it doesn't fit your context budget and you don't need it.
+
+Output a table with these columns:
+  rule_id | severity | status | path:line | evidence
+
+End with a one-line summary:
+  "{N PASS, M FAIL, K SKIP — keys to §11 rules: [11.x, 11.y, ...]}"
+```
+
+Substitute `{section}`, `{module_path}`, `{gold_standard_path}` per the swarm split. Spawn each sub-agent with `subagent_type=Explore` (read-only, fast) unless the sub-agent genuinely needs to execute code, in which case use `general-purpose`.
+
+### D.5 Moderator role + prompt template + required output schema
+
+The moderator reads all sub-agent outputs, runs the state-changing P2/P3 commands (the ones sub-agents are forbidden from running), resolves conflicts, and emits **exactly this schema** — no synthesis essay, no prose-only verdict:
+
+```yaml
+decision: REJECT | ACCEPT
+phase_results:
+  P1: PASS | FAIL
+  P2: PASS | FAIL | SKIPPED
+  P3: PASS | FAIL | SKIPPED
+  P4: PASS | FAIL
+conflicts:
+  # Empty array if no sub-agents disagreed.
+  - rule: "§11.x"
+    sub_a_says: PASS
+    sub_b_says: FAIL
+    resolution:
+      evidence: "path:line"
+      verdict: "FAIL"
+fix_list:
+  # Prioritized 1 = blocker, 2 = should-fix, 3+ = nice-to-have.
+  # priority ≥ 3 NEVER blocks ACCEPT.
+  - { priority: 1, rule: "§11.x", path: "src/...", line: 42, action: "..." }
+```
+
+**Moderator prompt template:**
+
+```
+You are the moderator for an FE compliance audit of {module_path}.
+
+Inputs you have:
+- Sub-agent outputs (tables of {rule_id, severity, status, path:line, evidence})
+- §11 (acceptance criteria / REJECT rules)
+- Appendix D (this playbook)
+
+Your job:
+1. Run P2 (install/build/type-check) and P3 (boot + browser smoke) per the
+   tool mapping in §D.6.
+2. Resolve any conflicts between sub-agents using the cited evidence — the
+   one with a path:line citation wins. If both cite, prefer the more recent
+   file mtime.
+3. Build the fix_list, keyed strictly to §11 rule numbers. SHOULD/MAY
+   violations go at priority ≥ 3.
+4. Emit ONLY the YAML schema specified in Appendix D.5. No prose.
+
+decision: REJECT if any §11 MUST rule has status FAIL after conflict
+resolution; otherwise ACCEPT.
+```
+
+### D.6 Tool mapping (what runs which phase)
+
+| Need | Tool | Notes |
+|---|---|---|
+| P1 grep / file reads | `Grep` tool (ripgrep) | filter by `--glob` per section |
+| P1 jq on `package.json` | `mcp__bg-manager__sync_run` invoking `jq` | structured manifest reads |
+| P2 install / build | `mcp__bg-manager__sync_run` with `timeout_sec: 120` | auto-converts to bg if it exceeds timeout |
+| P2 type-check | `vue-tsc --noEmit` via `sync_run` | non-trivial duration; expect 30–60s |
+| P3 boot wippy / dev server | `mcp__bg-manager__bg_run` with `notifyReady: true` and `notifyPort: true` | use triggers, do not poll |
+| P3 browser check | `mcp__playwright` tools | snapshot, click, evaluate; emulate dark mode for §5.4 |
+| P3 HTTP smoke | `curl` via `sync_run` | one-shot status-code checks |
+| P4 gold-standard diff | `git diff --no-index gold/ target/` via `sync_run` | read-only, fast |
+
+**Moderator-only tools** (sub-agents must not call these): `sync_run` and `bg_run` for builds/boots, `playwright` browser tools, any file-write tools.
+
+### D.7 Common AI failure modes & anti-patterns
+
+These are the recurring ways AI audits go wrong. The moderator's job includes catching these:
+
+1. **Sub-agent invents verification commands.** Symptom: a sub-agent runs `grep -E 'foo' file.ts` when §10 specifies a different exact grep. *Fix:* moderator MUST flag any command not present in §10 and downgrade those PASS reports to UNVERIFIED.
+
+2. **Sub-agent declares PASS without running the cited command.** Symptom: "PASS — package.json looks fine." *Fix:* schema requires an `evidence` column with a path:line or a captured output tail. No evidence → status becomes SKIP, not PASS.
+
+3. **Moderator merges contradictions silently.** Symptom: sub-agent A says PASS, B says FAIL, moderator picks one and never mentions the disagreement. *Fix:* the `conflicts:` block in the D.5 schema is mandatory whenever ANY two sub-agents disagree on the same rule.
+
+4. **Agent uses the wrong gold standard.** Symptom: a page-app audit cites diffs against `gold:app-template/frontend/web-components/mermaid/`. *Fix:* §14 and per-section callouts pin the gold standard by app type — the sub-agent prompt template must hardcode the correct one.
+
+5. **Agent treats SHOULD/MAY as MUST and over-rejects.** Symptom: a module with 0 MUST violations but a SHOULD warning gets `decision: REJECT`. *Fix:* §11 enumerates MUST rules only; SHOULD/MAY violations go into `fix_list` at priority ≥ 3 and NEVER flip ACCEPT to REJECT.
+
+### D.8 Context budget rules
+
+- **Sub-agent context:** ONE section + Appendices A/B/C (referenced, not loaded) + the gold-standard path. **Never the full checklist.** The checklist is ~30K words — loading it into every sub-agent is wasted budget.
+- **Moderator context:** §11 (acceptance criteria) + this appendix + all sub-agent outputs. Moderator does NOT need to re-read §0–§10.
+- **Orchestrator (the calling Claude session):** decides scope (which sections, how many modules), spawns the swarm, then hands off to the moderator. Does NOT do the audit itself in parallel — that duplicates work.
+
+### D.9 Output expectations
+
+The orchestrating Claude session should surface, in order:
+
+1. The moderator's `decision:` (REJECT or ACCEPT) — one word.
+2. Any `conflicts:` resolved during moderation, in one short paragraph.
+3. The `fix_list:` as a numbered to-do list with `path:line` and §11 rule citations.
+4. Total run time and which phases ran (so the user can re-run cheaply if needed).
+
+No prose summary of "what we checked" — the user can read the schema. Brevity wins.
+
+</details>
 
 ---
 
