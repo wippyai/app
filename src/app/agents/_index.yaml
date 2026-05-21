@@ -50,6 +50,7 @@ entries:
       title: Wippy Artifacts
       tags:
         - artifacts
+    build_func_id: app.agents:build_artifacts_catalog
     prompt: |
       You have the CreateArtifact tool to create rich content artifacts.
 
@@ -76,6 +77,44 @@ entries:
       framework gave you that exact tag string in the tool result.
     tools:
       - app.agents:create_artifact
+
+  - name: debug_agent_prompt
+    kind: function.lua
+    meta:
+      comment: |
+        Compiles an agent and returns its final system prompt. Used to verify
+        build_func contributions without burning LLM tokens.
+    source: file://debug_agent_prompt.lua
+    modules:
+      - http
+    imports:
+      compiler: wippy.agent.compiler:compiler
+      agent_registry: wippy.agent.discovery:registry
+    method: handler
+
+  - name: debug_agent_prompt.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api.public
+    method: GET
+    func: debug_agent_prompt
+    path: /debug/agent-prompt
+
+  - name: build_artifacts_catalog
+    kind: function.lua
+    meta:
+      type: function
+      comment: |
+        Reads view.component registry + bundled wippy-meta.json and emits a
+        markdown catalog of usable tag_names/props/events. Wired into
+        wippy_artifacts_trait via build_func_id — runs once per agent compile.
+    source: file://build_artifacts_catalog.lua
+    modules:
+      - json
+    imports:
+      component_registry: wippy.views:component_registry
+      bundled_meta: wippy.views:bundled_meta
+    method: execute
 
   - name: create_artifact
     kind: function.lua

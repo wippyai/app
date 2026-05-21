@@ -100,6 +100,7 @@ Use this checklist to verify that a generated Wippy app is complete and correctl
 
 - [ ] `base` is set to `""` (empty string) - **CRITICAL**
 - [ ] `plugins` includes `vue()`
+- [ ] `plugins` includes `wippyPagePlugin()` from `@wippy-fe/vite-plugin` ≥ `0.0.32` - **REQUIRED**
 - [ ] `build.target` is `"esnext"`
 - [ ] `build.rollupOptions.input` uses object format with `resolve(__dirname, 'app.html')`
 - [ ] `build.rollupOptions.external` includes ALL required:
@@ -114,6 +115,23 @@ Use this checklist to verify that a generated Wippy app is complete and correctl
   - `'nanoevents'`
   - `'luxon'`
 - [ ] `build.sourcemap` is `true`
+
+---
+
+## 3a. Bundled `wippy-meta.json` (required for `wippy/views` ≥ `0.5.0`)
+
+The build MUST produce `dist/wippy-meta.json` — the canonical resolved `wippy` block that the views API serves. The vite plugin handles this automatically; do not hand-author. Background: [host-spec.md § Bundled meta](host-spec.md#bundled-meta-the-wippy-metajson-contract).
+
+`@wippy-fe/vite-plugin` ≥ `0.0.32` enforces this at build time — bad `wippy` shape FAILS the build (missing `wippy.path`, present `wippy.tagName`, wrong `wippy.type`, missing `name`/`version`, malformed `tagName`, etc.). If the build fails with a `[@wippy-fe/vite-plugin]` error, fix the `package.json` shape per the message — don't downgrade the plugin.
+
+- [ ] `@wippy-fe/vite-plugin` ≥ `0.0.32` is in `devDependencies`
+- [ ] `vite.config.ts` imports `wippyPagePlugin` (NOT the old name `wippyPackagePlugin`)
+- [ ] `vite.config.ts` plugins array includes `wippyPagePlugin()`
+- [ ] After `pnpm build` / `vite build`: `dist/wippy-meta.json` exists
+- [ ] `dist/wippy-meta.json` is a single JSON object whose contents match the `wippy` block from `package.json` with every `"file://..."` string replaced by the file's UTF-8 contents
+- [ ] `dist/app.html` contains an inline `<script type="application/json" data-role="@wippy/package">` with the same resolved JSON (used by dev-proxy in host-less mode)
+- [ ] Any `file://<rel>` reference inside the `wippy` block points at a file using the `<field-name-kebab>.do-not-link.<ext>` naming convention (e.g. `custom-css.do-not-link.css`) — the plugin throws if the basename violates this
+- [ ] `app.html` does NOT `<link rel="stylesheet">` any `*.do-not-link.css` file — the proxy injects them at runtime
 
 ---
 

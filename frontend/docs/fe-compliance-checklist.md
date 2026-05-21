@@ -422,7 +422,7 @@ Reference: `gold:app-template/frontend/applications/main/package.json`.
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
     "@wippy-fe/types-global-proxy": "^0.0.28",
-    "@wippy-fe/vite-plugin": "^0.0.28",
+    "@wippy-fe/vite-plugin": "^0.0.32",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.0.0",
@@ -508,12 +508,12 @@ node -e 'const p=require("./package.json");const m=["specification","title"].fil
 
 ### 3.2 `vite.config.ts`
 
-Reference: `gold:main/vite.config.ts` (plus `wippyPackagePlugin()` which the gold standard predates; new apps SHOULD include it).
+Reference: `gold:main/vite.config.ts` (plus `wippyPagePlugin()` which the gold standard predates; new apps SHOULD include it).
 
 ```ts
 import { resolve } from 'node:path'
 import vue from '@vitejs/plugin-vue'
-import { wippyPackagePlugin } from '@wippy-fe/vite-plugin'
+import { wippyPagePlugin } from '@wippy-fe/vite-plugin'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
@@ -525,7 +525,7 @@ export default defineConfig({
         },
       },
     }),
-    wippyPackagePlugin(),
+    wippyPagePlugin(),
   ],
   base: '',
   resolve: {
@@ -562,7 +562,7 @@ Rules:
 
 - MUST set `base: ''` (relative paths; bundle is portable to any URL prefix). `gold:main/vite.config.ts:15`. A hardcoded absolute base (e.g. `/app/keeper/`) is **REJECT** — see §9.5. The URL prefix is the host's job (via YAML `meta.url` + `meta.base_path`); the bundle must not embed it.
 - MUST include `vue()` plugin.
-- SHOULD include `wippyPackagePlugin()` from `@wippy-fe/vite-plugin` (default; opt out only if your team explicitly does NOT want host-less mode support — rare). Plugin injects the package.json `wippy` block into the built HTML so dev-proxy seeds the right defaults; harmless under a real host.
+- SHOULD include `wippyPagePlugin()` from `@wippy-fe/vite-plugin` (default; opt out only if your team explicitly does NOT want host-less mode support — rare). Plugin injects the package.json `wippy` block into the built HTML so dev-proxy seeds the right defaults; harmless under a real host.
 - SHOULD pass `template.compilerOptions.isCustomElement` if your templates render custom-element tags. Predicate is project-specific (e.g. `tag.startsWith('example-')` for app-template demos, `tag.startsWith('wippy-')` for first-party WCs).
 - MUST set `build.target: 'esnext'`.
 - MAY set `build.cssCodeSplit: false` to inline all CSS into a single bundle. Default `true` (CSS code split) is also fine for multi-page apps that benefit from per-route CSS chunks. Either is acceptable — choose based on app shape.
@@ -576,7 +576,7 @@ Rules:
 ```bash
 grep -E "base:\\s*['\"]" path/to/vite.config.ts            # must show: base: ''
 grep -A 25 "external:" path/to/vite.config.ts              # check coverage of imported host packages
-grep -E "wippyPackagePlugin" path/to/vite.config.ts        # SHOULD be present
+grep -E "wippyPagePlugin" path/to/vite.config.ts        # SHOULD be present
 ```
 
 ### 3.3 `app.html`
@@ -997,7 +997,7 @@ Reference: `gold:app-template/frontend/web-components/mermaid/package.json`.
 - MUST list `dist/`, `src/`, `package.json` in `files` (so `npm pack` ships the right bits).
 
 **`wippy` block (WC-specific)**:
-- MUST `wippy.type: "widget"` (NOT `"page"` or `"web-component"`). The YAML registry uses `view.component`; package.json uses `widget`. Both refer to the same kind.
+- MUST `wippy.type: "widget"` OR `"component"` (NOT `"page"` or `"web-component"`). The YAML registry uses `view.component`; package.json accepts either `"widget"` (historical, app-template convention) or `"component"` (newer alias). The vite plugin's validator accepts both. NEVER `"web-component"` — rejected.
 - MUST `wippy.tagName` (camelCase) — the custom element tag. Must contain a hyphen. Project conventions vary (`example-`, `dam-`, `wippy-`). The YAML uses `tag_name` (snake_case) with the same value.
 - MUST `wippy.description` — a **verbose AI/human-readable usage explanation** (not a one-line label). Must explain HOW to use the WC: the expected call shape (which props vs children), supported input forms, fallback paths, notable perf characteristics. The `gold:mermaid/package.json:40` description ("Renders Mermaid diagrams. Pass the Mermaid source in props.definition; never inline as text content. All diagram types are supported. Flowchart, sequence, class, ER, state, and xychart render fast … Pie, gantt, mindmap … fall back to a heavier renderer that loads on first use …") is the canonical shape. Top-level `description` in package.json SHOULD mirror this for npm/pack consumers. Mirror the same string into YAML `meta.description` (§2.2).
 - MUST `wippy.props` JSON Schema. Every property MUST have `type`, `default`, `description`.
@@ -1542,7 +1542,7 @@ diff /tmp/ext /tmp/imp  # may show divergences (host's runtime importmap may add
 
 ## 9. Host-less mode
 
-Host-less = boot the SPA via a static HTTP server with no real Wippy host running. `dev-proxy.js` provides a host shim plus a "dev overlay" UI for accepting/editing the config. Host-less mode is the **default supported workflow** for new apps; the `wippyPackagePlugin()` and importmap+`<wippy-loading>` patterns described below should be present unless a team has a very-good reason to opt out (rare). (`docs:host-less-mode.md`.)
+Host-less = boot the SPA via a static HTTP server with no real Wippy host running. `dev-proxy.js` provides a host shim plus a "dev overlay" UI for accepting/editing the config. Host-less mode is the **default supported workflow** for new apps; the `wippyPagePlugin()` and importmap+`<wippy-loading>` patterns described below should be present unless a team has a very-good reason to opt out (rare). (`docs:host-less-mode.md`.)
 
 ### 9.1 Importmap (esm.sh)
 
@@ -1588,14 +1588,14 @@ Rules:
 - MUST have `data-role="@wippy/scripts"` so the host (when running) can find and replace it.
 - MUST have `src=` set; raw `<script data-role="@wippy/scripts"></script>` placeholder is acceptable only when a real host injects the src at boot.
 
-### 9.3 wippyPackagePlugin (default)
+### 9.3 wippyPagePlugin (default)
 
 ```ts
 // vite.config.ts
-import { wippyPackagePlugin } from '@wippy-fe/vite-plugin'
+import { wippyPagePlugin } from '@wippy-fe/vite-plugin'
 
 export default defineConfig({
-  plugins: [vue(), wippyPackagePlugin(), /* … */],
+  plugins: [vue(), wippyPagePlugin(), /* … */],
   /* … */
 })
 ```
@@ -1618,13 +1618,74 @@ Dev-proxy reads the JSON synchronously at boot and seeds:
 so the dev-overlay shows the correct values pre-populated.
 
 Rules:
-- SHOULD include `wippyPackagePlugin()` in `vite.config.ts`. This is the **default** for new apps; opt out only with a very good reason (e.g. shipping a host-only bundle that explicitly does not support host-less dev), and document the reason in your project's CLAUDE.md. The plugin is harmless under a real host and provides dev-overlay seeding under host-less mode — opting out trades that away in exchange for nothing in most cases.
-- MUST install `@wippy-fe/vite-plugin@^0.0.28` or later in devDependencies.
+- SHOULD include `wippyPagePlugin()` in `vite.config.ts`. This is the **default** for new apps; opt out only with a very good reason (e.g. shipping a host-only bundle that explicitly does not support host-less dev), and document the reason in your project's CLAUDE.md. The plugin is harmless under a real host and provides dev-overlay seeding under host-less mode — opting out trades that away in exchange for nothing in most cases.
+- MUST install `@wippy-fe/vite-plugin@^0.0.32` or later in devDependencies. The `0.0.32` release adds **strict build-time validation** — bad `package.json` shape (missing `name`/`version`/`wippy` block, wrong `wippy.type`, missing or forbidden `wippy.path`/`wippy.tagName`, malformed `tagName`) FAILS the build with an actionable error. The `0.0.31` release was the transitional version that only emitted `wippy-meta.json` without validation — upgrade to `0.0.32` to opt into the safety net. See §9.3b version correlation table.
 - The plugin is harmless under a real host (the host ignores the `@wippy/package` script tag).
 
 **VERIFY** the script is in the built HTML:
 ```bash
 npm run build && grep -c 'data-role="@wippy/package"' dist/app.html  # SHOULD = 1
+```
+
+### 9.3a wippyComponentPlugin (web components)
+
+`view.component` packages have no HTML entry to inject into, so the page plugin doesn't apply. Use `wippyComponentPlugin()` from the same `@wippy-fe/vite-plugin` package — it's emit-only:
+
+```ts
+// vite.config.ts (web component)
+import { wippyComponentPlugin } from '@wippy-fe/vite-plugin'
+
+export default defineConfig({
+  plugins: [vue(), wippyComponentPlugin(), /* … */],
+  /* … */
+})
+```
+
+The component plugin emits `dist/wippy-meta.json` (the resolved `wippy` block) only — no HTML transform, no inline script tag.
+
+Rules:
+- MUST be present in every `view.component` build that ships against `wippy/views ≥ 0.5.0`.
+- MUST install `@wippy-fe/vite-plugin@^0.0.32` or later in devDependencies (same package as the page plugin).
+
+**VERIFY** the meta file is in the dist:
+```bash
+npm run build && test -f dist/wippy-meta.json && echo "OK: wippy-meta emitted" || echo "MISSING: wippy-meta.json"
+```
+
+### 9.3b The `wippy-meta.json` contract + version correlation
+
+The presence of `dist/wippy-meta.json` next to the served entry is a **hard requirement** for `wippy/views ≥ 0.5.0`. The file is the resolved `wippy` block from `package.json` as a single JSON object — with every `"file://<rel>"` string replaced by the referenced file's UTF-8 contents at build time.
+
+Two endpoints read it:
+
+| Endpoint | What it serves |
+|---|---|
+| `GET /api/public/pages/content/{id}` | resolved `wippy-meta.json` next to the served `app.html` (view.page) |
+| `GET /api/public/components/list` + `/components/by-tag/{tag}` | resolved `wippy-meta.json` next to each `index.js` (view.component) |
+
+**YAML-first priority**: the operator's `_index.yaml` registry entry overlays the bundled meta per-field. If `meta.tag_name`, `meta.title`, `meta.description`, `meta.props`, `meta.events`, or `meta.entry_point` is set in YAML, that wins. Otherwise the bundled meta fills in. Well-migrated YAML entries shrink to deploy-aware fields (`url`, `base_path`, `entry_point`, `auto_register`, `announced`, `secure`) + optional `meta.config_overrides`.
+
+**Fallback when missing**: if `wippy-meta.json` is absent next to the entry, views falls back to a deprecated YAML-synthesis path AND emits a per-process deprecation warning the first time each missing entry is observed. The synthesis path will be removed in a future release; treat the warning as a release-blocker.
+
+**`file://` references** in the wippy block let bulky string fields (CSS, Markdown) live in their own files. The referenced file MUST follow the `<field-name-kebab>.do-not-link.<ext>` convention (basename is the kebab-case spelling of the wippy block field it populates). The `.do-not-link.` infix is an explicit directive — never `<link rel="stylesheet">` the file from `app.html`. The proxy injects it at runtime via the meta payload. Full rationale in [host-spec.md § Bundled meta](host-spec.md#bundled-meta-the-wippy-metajson-contract) and the [canonical spec](https://github.com/Sannin/gen-2-chat/blob/webcomponents/web_components.spec.md#package-metadata-source-of-truth).
+
+#### Version correlation table
+
+| `wippy/views` (BE module) | `@wippy-fe/vite-plugin` (FE plugin) | Contract |
+|---|---|---|
+| `< 0.4.32` | `< 0.0.31` | Legacy YAML-synthesis only. `wippy-meta.json` not consumed even if present. |
+| `0.4.32` | `0.0.31` (transitional) | Plugin emits `wippy-meta.json`; views still synthesizes from YAML. No-op on the views side; safe to deploy ahead of the views bump. No package.json validation. |
+| `≥ 0.5.0` | `0.0.31` | Views reads `wippy-meta.json` as source-of-truth with YAML-overlay. Plugin emits but does NOT validate package.json shape. |
+| **`≥ 0.5.0`** | **`≥ 0.0.32`** | **Canonical contract.** Same as `0.0.31` PLUS **strict build-time package.json validation** — plugin throws on missing `name`/`version`/`wippy` block, wrong `wippy.type`, missing/forbidden `wippy.path` or `wippy.tagName`, malformed Custom Element `tagName`, and `file://` basenames that don't follow the `*.do-not-link.<ext>` convention. |
+| Future | (TBD) | YAML-synthesis fallback removed. `wippy-meta.json` becomes truly mandatory. |
+
+Roll-out pattern when bumping: ship FE plugin first (`0.0.32`), then bump BE views (`0.5.0`). Old FE bundles without `wippy-meta.json` continue to work against new views via the synthesis fallback, with a warning. Brand-new FE bundles with `wippy-meta.json` continue to work against old views (the file is ignored).
+
+**VERIFY** the meta file is in the dist and contains resolved content (no `file://` strings):
+```bash
+npm run build
+test -f dist/wippy-meta.json && echo "OK: emitted" || echo "REJECT: missing"
+grep -c 'file://' dist/wippy-meta.json | { read n; [ "$n" = "0" ] && echo "OK: all file:// resolved" || echo "REJECT: $n unresolved file:// refs"; }
 ```
 
 ### 9.4 wippy-loading
@@ -1673,7 +1734,7 @@ Run these before submitting. Each maps to a section.
 
 ```bash
 # 10.1.1 — wippy.specification + wippy.type
-node -e 'const p=require("./package.json"); if(p.specification!=="wippy-component-1.0") throw new Error("bad specification"); const t=p.wippy?.type; if(t!=="page" && t!=="widget") throw new Error("bad wippy.type"); console.log("OK")'
+node -e 'const p=require("./package.json"); if(p.specification!=="wippy-component-1.0") throw new Error("bad specification"); const t=p.wippy?.type; if(t!=="page" && t!=="widget" && t!=="component") throw new Error("bad wippy.type"); console.log("OK")'
 
 # 10.1.2 — markdown injection if app uses markdown (page apps only)
 grep -A 10 'wippy.proxy.injections.css' package.json | grep -c '"markdown": true'  # 1 if uses markdown, 0 otherwise
@@ -1681,8 +1742,8 @@ grep -A 10 'wippy.proxy.injections.css' package.json | grep -c '"markdown": true
 # 10.1.3 — base relative
 grep -E "base:\\s*['\"]" vite.config.ts                # must show: base: ''
 
-# 10.1.4 — wippyPackagePlugin present (host-less default)
-grep -c "wippyPackagePlugin" vite.config.ts            # SHOULD = 1
+# 10.1.4 — wippyPagePlugin present (host-less default)
+grep -c "wippyPagePlugin" vite.config.ts            # SHOULD = 1
 
 # 10.1.5 — type-check
 npx vue-tsc --build --force || npx vue-tsc --noEmit    # exit 0
@@ -1774,7 +1835,7 @@ npm run build
 
 # checks on dist/app.html
 grep -c 'data-role="@wippy/scripts"' dist/app.html         # must = 1
-grep -c 'data-role="@wippy/package"' dist/app.html         # SHOULD = 1 (when wippyPackagePlugin enabled)
+grep -c 'data-role="@wippy/package"' dist/app.html         # SHOULD = 1 (when wippyPagePlugin enabled)
 grep -c '<script type="importmap">' dist/app.html          # must = 1
 grep -c '<wippy-loading' dist/app.html                     # must >= 1
 grep 'src="\\./app.js"' dist/app.html                      # match (relative path)
@@ -1826,7 +1887,7 @@ REJECT a submission if any of the following are true.
 
 ### Manifest (§3.1, §4.1)
 1. `package.json.specification` is not `"wippy-component-1.0"`.
-2. `wippy.type` is not `"page"` (page apps) or `"widget"` (web components).
+2. `wippy.type` is not `"page"` (page apps), `"widget"` (web components, historical), or `"component"` (web components, newer alias accepted by the vite plugin validator).
 3. Page app: `wippy.path` does not point to the actual built artifact (e.g. `dist/app.html`).
 4. WC: `wippy.tagName` is missing or does not contain a hyphen.
 5. WC: `wippy.props` is missing OR has properties without `type`/`default`/`description`.
@@ -1929,7 +1990,7 @@ When you knowingly diverge from canonical, document it in your project's CLAUDE.
 | No PrimeVue plugin in app | App uses raw HTML buttons + custom CSS | YES (intentional UI choice) |
 | Custom `inlineCssPlugin` in vite.config | Single-file deployment | YES |
 | Raw `localStorage.*` for ad-hoc persistence keys (e.g. `@<app>/last-route`, `@<app>/theme`) | Avoid pinia overhead for one or two keys | DISCOURAGED. Prefer the canonical stack: facade module owns theme; `@wippy-fe/router` factory owns route restoration; `@wippy-fe/pinia-persist` owns durable state. Raw `localStorage` should be a measured exception in a leaf component, not the default. Modules that inherit a facade and a real router should not need it at all. |
-| Skip `wippyPackagePlugin()` | Want a very-good-reason: e.g. shipping a host-only bundle that explicitly does not support host-less dev | RARELY YES. Default is to include it. The plugin is harmless under a real host; opting out trades away dev-overlay support and packaging-block injection in exchange for nothing in most cases. Document the very-good reason in CLAUDE.md. |
+| Skip `wippyPagePlugin()` | Want a very-good-reason: e.g. shipping a host-only bundle that explicitly does not support host-less dev | RARELY YES. Default is to include it. The plugin is harmless under a real host; opting out trades away dev-overlay support and packaging-block injection in exchange for nothing in most cases. Document the very-good reason in CLAUDE.md. |
 
 ---
 
@@ -2018,7 +2079,7 @@ The checklist's REJECT rules were validated against the two gold standards. Here
 
 **No REJECTs.** Gold standard passes the entire checklist.
 
-**Note on §9.3 `wippyPackagePlugin()`**: gold standard predates this enhancement and does NOT yet include the plugin. New apps SHOULD include it (default for host-less mode support). When the gold standard is next refreshed, `wippyPackagePlugin()` should be added.
+**Note on §9.3 `wippyPagePlugin()`**: gold standard predates this enhancement and does NOT yet include the plugin. New apps SHOULD include it (default for host-less mode support). When the gold standard is next refreshed, `wippyPagePlugin()` should be added.
 
 ### `app-template/frontend/web-components/mermaid/` — WC gold standard
 
@@ -2361,8 +2422,8 @@ No prose summary of "what we checked" — the user can read the schema. Brevity 
 | Date | Notes |
 |---|---|
 | 2026-05-06 (rev 1) | Initial draft from canonical docs + host contracts + KB + keeper-v5 audit |
-| 2026-05-06 (rev 2) | Validated against gold standards `applications/main` and `web-components/mermaid`; fixed false-positive REJECT rules; clarified `url`/`base_path`/`entry_point` semantics (URL prefixes, not physical paths; `base_path` becomes HTML `<base>`); softened `wippy.proxy.injections` to MAY-with-recommended; softened `cssCodeSplit` and sourcemap rules; clarified `view.page` ≠ nav-owner (announced flag); promoted `@wippy-fe/router` factory pattern (`createAppRouter as createAppRouterFactory`); `wippyPackagePlugin()` is default (opt-out); WC `wippy.type: "widget"`; added `wippy.scripts.test` |
-| 2026-05-06 (rev 3) | Reframed `config_overrides` as ISOLATION-only EVERYWHERE (§2.1, §2.3, §5); §5.1 now leads with the facade module as the main customization site, with HEAVY (`drewaltizer-wippy/src/drewapp/deps`) and LIGHT (`app-template/src/app/deps`) facade examples plus the `iframe-demo-themed` page-level isolation demo; required `meta.description` and `wippy.description` to be verbose AI/human-readable usage explanations (§2.2, §4.1, REJECT 5a); promoted `make.bat` + `make.ps1` to MUST-ship next to every Makefile (§8.2, REJECT 55a); promoted hardcoded base to 100% REJECT (§9.5, no documented-exception escape hatch); dropped `applyThemeOverride` row from §12; dropped hand-rolled router exception (use `@wippy-fe/router@^0.0.28`); reframed raw localStorage as DISCOURAGED (§12) — facade owns theme, router owns route restoration, pinia-persist owns durable state; tightened `wippyPackagePlugin()` opt-out wording to require a very-good reason; removed §13.1 (compiled-JS), §13.4 (directories.src collision), §13.5 (cross-namespace migration ordering); replaced bg-manager-MCP fix in §13 with wippy CLI port-override examples; added §10.7 Playwright/browser-emulator dark+light+contrast verification recommendation (REJECT 46a) |
+| 2026-05-06 (rev 2) | Validated against gold standards `applications/main` and `web-components/mermaid`; fixed false-positive REJECT rules; clarified `url`/`base_path`/`entry_point` semantics (URL prefixes, not physical paths; `base_path` becomes HTML `<base>`); softened `wippy.proxy.injections` to MAY-with-recommended; softened `cssCodeSplit` and sourcemap rules; clarified `view.page` ≠ nav-owner (announced flag); promoted `@wippy-fe/router` factory pattern (`createAppRouter as createAppRouterFactory`); `wippyPagePlugin()` is default (opt-out); WC `wippy.type: "widget"`; added `wippy.scripts.test` |
+| 2026-05-06 (rev 3) | Reframed `config_overrides` as ISOLATION-only EVERYWHERE (§2.1, §2.3, §5); §5.1 now leads with the facade module as the main customization site, with HEAVY (`drewaltizer-wippy/src/drewapp/deps`) and LIGHT (`app-template/src/app/deps`) facade examples plus the `iframe-demo-themed` page-level isolation demo; required `meta.description` and `wippy.description` to be verbose AI/human-readable usage explanations (§2.2, §4.1, REJECT 5a); promoted `make.bat` + `make.ps1` to MUST-ship next to every Makefile (§8.2, REJECT 55a); promoted hardcoded base to 100% REJECT (§9.5, no documented-exception escape hatch); dropped `applyThemeOverride` row from §12; dropped hand-rolled router exception (use `@wippy-fe/router@^0.0.28`); reframed raw localStorage as DISCOURAGED (§12) — facade owns theme, router owns route restoration, pinia-persist owns durable state; tightened `wippyPagePlugin()` opt-out wording to require a very-good reason; removed §13.1 (compiled-JS), §13.4 (directories.src collision), §13.5 (cross-namespace migration ordering); replaced bg-manager-MCP fix in §13 with wippy CLI port-override examples; added §10.7 Playwright/browser-emulator dark+light+contrast verification recommendation (REJECT 46a) |
 | 2026-05-06 (rev 4) | Added §5.0 visual-matching escalation pattern (CSS vars → customCSS for PrimeVue → custom components only as last resort); REJECT 46b for custom-when-PrimeVue-existed. Added §5.1.2 strict placement rule (host vars/PrimeVue selectors → YAML/`package.json` customization, NEVER `:root` or raw `.p-*` rules in `.css` files); REJECT 42b + 43a. Refined §2.3 + §5.1.1: `config_overrides` is isolating only for `cssVariables`/`customCSS` (replace), but additive/safe for `icons`/`iconSets` (merge) — the canonical per-page icon-pack registration path. Added §5.6 iconify discipline (permissive packs preferred — tabler/lucide/phosphor/material-symbols/mdi/heroicons; custom icons registered via AppConfig `customization.icons` + the bootstrap `addCollection`, NEVER ad-hoc); REJECT 46c (raw SVG for reusable icons), 46d (off-bootstrap `addCollection`), 46e (icon-font CSS alongside Iconify). |
 
 When updating: keep section numbering stable so external references hold. Add new rules under the relevant section; never delete a rule that's still active.

@@ -33,6 +33,15 @@
         "iconifyIcons": true,
         "errorCapture": true
       }
+    },
+    "configOverrides": {
+      "customization": {
+        "cssVariables": {
+          "--p-primary": "#d97706",
+          "--p-primary-color": "#d97706"
+        },
+        "customCSS": "file://custom-css.do-not-link.css"
+      }
     }
   },
   "scripts": {
@@ -44,11 +53,12 @@
     "lint:fix": "eslint src --ext .ts,.vue --fix"
   },
   "dependencies": {
-    "@wippy-fe/theme": "^0.0.26"
+    "@wippy-fe/theme": "^0.0.32"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
-    "@wippy-fe/types-global-proxy": "^0.0.26",
+    "@wippy-fe/vite-plugin": "^0.0.32",
+    "@wippy-fe/types-global-proxy": "^0.0.32",
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
     "tailwindcss": "3",
@@ -60,7 +70,7 @@
   },
   "peerDependencies": {
     "@iconify/vue": "^5.0.0",
-    "@wippy-fe/proxy": "^0.0.26",
+    "@wippy-fe/proxy": "^0.0.32",
     "axios": "^1.0.0",
     "vue": "^3.5.0",
     "vue-router": "^4.0.0"

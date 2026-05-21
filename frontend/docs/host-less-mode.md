@@ -144,22 +144,37 @@ The host's `processWebPage` (`gen-2-chat/src/shared/api/web-components/index.ts:
 
 Every Wippy app's `package.json` carries metadata that determines runtime defaults — proxy injections (`wippy.proxy.injections.css.*`), per-page theming overrides (`wippy.configOverrides.customization`), iconify icon collections, etc. In hosted mode the host reads these from the registry. In host-less mode dev-proxy needs the same data to apply the same defaults.
 
-The canonical pattern is `wippyPackagePlugin()` from `@wippy-fe/vite-plugin`, added once to your `vite.config.ts`. The plugin reads your `package.json` at build time and inlines it into `app.html` as a JSON script tag with `data-role="@wippy/package"`:
+The canonical pattern is `wippyPagePlugin()` from `@wippy-fe/vite-plugin` ≥ `0.0.32`, added once to your `vite.config.ts`. The plugin reads your `package.json` at build time and does **two** things:
+
+1. **Resolves `file://` references** in the `wippy` block (any string value of the form `"file://<relative>"` is replaced with the referenced file's UTF-8 contents — see `*.do-not-link.<ext>` naming convention in [host-spec.md](host-spec.md#bundled-meta-the-wippy-metajson-contract)).
+2. **Emits two outputs** with the resolved JSON:
+   - `<head>`-injected `<script type="application/json" data-role="@wippy/package">` for host-less / dev-proxy boot.
+   - `dist/wippy-meta.json` for wippy-hosted mode — `wippy/views` ≥ `0.5.0` reads this file when serving `/pages/content/{id}` and `/components/by-tag/{tag}` instead of synthesizing from YAML.
 
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { wippyPackagePlugin } from '@wippy-fe/vite-plugin'
+import { wippyPagePlugin } from '@wippy-fe/vite-plugin'
 
 export default defineConfig({
   plugins: [
     vue(),
-    wippyPackagePlugin(),
+    wippyPagePlugin(),
   ],
   // …
 })
 ```
+
+**For web components** (`view.component`, ESM-only — no HTML entry to inject into) use `wippyComponentPlugin()` from the same package. It only emits `dist/wippy-meta.json`; no `transformIndexHtml` step.
+
+```ts
+// vite.config.ts for a web component
+import { wippyComponentPlugin } from '@wippy-fe/vite-plugin'
+export default defineConfig({ plugins: [wippyComponentPlugin()] })
+```
+
+> **Renamed in `0.0.31`.** `wippyPackagePlugin` (the old single export) is the predecessor of today's `wippyPagePlugin`. If you're on the old import name, switch — both the rename and the meta-emit landed in `0.0.31` and the old name is gone. The component-only path (`wippyComponentPlugin`) is new in the same release.
 
 The plugin emits this into the top of `<head>` in the built `app.html`:
 

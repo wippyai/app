@@ -14,6 +14,54 @@ Web Apps follow the [Proxy API](./proxy-api.md)
 
 > **Architectural principle: the FE isolation paradigm.** A Wippy FE module is a **standalone, universal build artifact** that has ZERO knowledge of where or how it is served. The package itself carries only its source + a `package.json` describing what it is (tag, props, events, build entry). The BE-side `_index.yaml` registry entries are the **serving facade** that, per deployment, declare WHERE the bundle is mounted and HOW the bytes are sourced. The same built bundle ships unchanged to any deployment. **Full rules, audit checklist, and "FE isolation paradigm" reference: [fe-compliance-checklist.md §0](fe-compliance-checklist.md#0-the-fe-isolation-paradigm).**
 
+## Bundled meta: the `wippy-meta.json` contract
+
+For `wippy/views` ≥ `0.5.0`, every served `view.page` and `view.component` MUST ship a `wippy-meta.json` next to its entry point. This file is the **canonical source** of identity + presentation metadata served by the views API.
+
+| Endpoint | Reads from |
+|---|---|
+| `GET /api/public/pages/content/{id}` | `dist/wippy-meta.json` next to `app.html` |
+| `GET /api/public/components/list` | `dist/wippy-meta.json` next to `index.js` (per entry, batched) |
+| `GET /api/public/components/by-tag/{tag}` | same as above, single entry |
+
+The shape is the resolved `wippy` block from `package.json` as a single JSON object. All `file://<relative>` references inside the block are replaced at build time with the referenced file's UTF-8 contents. See the [canonical spec](https://github.com/Sannin/gen-2-chat/blob/webcomponents/web_components.spec.md#package-metadata-source-of-truth) — that doc is the contract source-of-truth.
+
+### How to produce it
+
+Three paths, all valid; pick the one that matches your build tool:
+
+| Build | Tooling | What you do |
+|---|---|---|
+| **Vite** | `@wippy-fe/vite-plugin` ≥ `0.0.32` | Add `wippyPagePlugin()` (pages) or `wippyComponentPlugin()` (web components) to `vite.config.ts`. Plugin emits `dist/wippy-meta.json` on every build. For pages it also injects the same resolved JSON inline as `<script type="application/json" data-role="@wippy/package">` for host-less mode — covered in [host-less-mode.md](host-less-mode.md#exposing-packagejson-to-dev-proxy-canonical-scaffold). **`0.0.32` adds strict validation** — the plugin throws at build time on shape violations (missing `name`/`version`/`wippy` block, wrong `wippy.type`, missing or forbidden `wippy.path`/`wippy.tagName`, malformed `tagName`). See the [canonical spec](https://github.com/Sannin/gen-2-chat/blob/webcomponents/web_components.spec.md#package-metadata-source-of-truth) for the full enforcement list. |
+| **Rollup / esbuild / webpack** | none — write a script | Post-build, load `package.json`, recursively resolve any string-valued `"file://<relative>"` inside the `wippy` block against the package's directory, write the resolved object to `<outDir>/wippy-meta.json`. Match the vite-plugin's output shape exactly. |
+| **No build** | none | Hand-author `wippy-meta.json` in the served folder, sync it with `package.json` manually. Discouraged but valid for tiny static cases. |
+
+### `file://` resolution + naming convention
+
+Inline string fields in `package.json` are awkward for CSS / Markdown / long descriptions. The `wippy` block supports `"file://<relative>"` references for any string value:
+
+```json
+{
+  "wippy": {
+    "configOverrides": {
+      "customization": {
+        "customCSS": "file://custom-css.do-not-link.css"
+      }
+    }
+  }
+}
+```
+
+The referenced file MUST use the `<field-name-kebab>.do-not-link.<ext>` naming convention — basename is the kebab-case spelling of the wippy block field it populates. The `.do-not-link.` infix is a directive: **never link the file directly from `app.html` with `<link rel="stylesheet">`**. The proxy injects it at runtime via the wippy-meta payload. (Validated against blind LLM agents — short imperative suffixes were the only pattern that reliably stopped agents from `<link>`-ing the file. See the spec for the test rationale.)
+
+### YAML-first priority
+
+The operator's `_index.yaml` registry entry is the **deploy-aware overlay** on top of the bundled meta. Each field in the views response resolves YAML-first: if `meta.tag_name`, `meta.title`, `meta.description`, `meta.props`, `meta.events`, `meta.entry_point` is set in YAML, that wins. Otherwise, the bundled `wippy-meta.json` fills the gap. Well-migrated YAML entries shrink to identity + routing fields (`url`, `base_path`, `entry_point`, `auto_register`, `announced`, `secure`) plus optional `meta.config_overrides`.
+
+### Fallback when missing
+
+When `wippy-meta.json` is absent next to the served entry, views falls back to a YAML-synthesis path (the pre-0.5.0 behavior) AND emits a per-process deprecation warning the first time each missing entry is observed. The synthesis path will be removed in a future release; treat the warning as a release-blocker.
+
 ## Package Naming Convention
 
 Package names **MUST** follow this format and be **unique**:

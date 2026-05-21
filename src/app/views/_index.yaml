@@ -1,6 +1,15 @@
 version: "1.0"
 namespace: app.views
 
+# All entries below are MIGRATED to wippy-meta.json (vite plugin emits it).
+# Per views ≥ 0.5.0, only registry-routing + deployment-policy fields stay
+# in YAML. The FE module's package.json `wippy` block is the source of
+# truth for title / props / events / proxy.injections / customCSS.
+#
+# `meta.entry_point` is the operator's deploy-aware override of the
+# source-relative path in package.json (e.g. `dist/app.html` →
+# `app.html` because vite's --outDir flattens it).
+
 entries:
   - name: main
     kind: registry.entry
@@ -15,29 +24,7 @@ entries:
       url: /app
       base_path: app/main
       entry_point: app.html
-      # Claim a top-level URL — gen-2-chat FE registers a dynamic route.
-      # Visiting /home (or /home/anything) on the host renders this page.
-      # v1 canonical form: /<literal>/:part(.*)* or /:part(.*)*
       mountRoute: /home/:part(.*)*
-      # config_overrides: Per-page AppConfig overrides. Injected into child iframe
-      # as window.__WIPPY_CONFIG_OVERRIDES__ before proxy.js loads.
-      # cssVariables/customCSS replace (not merge), iconSets merge additively.
-      # Example: override primary color to red for this page only:
-      # config_overrides:
-      #   customization:
-      #     cssVariables:
-      #       "--p-primary": "#ef4444"
-    proxy:
-      enabled: true
-      css:
-        fonts: true
-        theme_config: true
-        iframe: true
-        prime_vue: true
-        custom_css: true
-        custom_variables: true
-      tailwind_config: true
-      iconify_icons: true
 
   - name: iframe-demo
     kind: registry.entry
@@ -53,22 +40,10 @@ entries:
       base_path: app/iframe-demo
       entry_point: app.html
       mountRoute: /demo/:part(.*)*
-    proxy:
-      enabled: true
-      css:
-        fonts: true
-        theme_config: true
-        iframe: true
-        prime_vue: true
-        custom_css: true
-        custom_variables: true
-      tailwind_config: true
-      iconify_icons: true
 
-  # Same app, but with a FULLY overridden color palette — demonstrates how
-  # configOverrides let you retheme an entire page. All 5 semantic color
-  # families are replaced: primary→rose, danger→orange, warn→teal,
-  # secondary→violet, accent→amber.
+  # Variant: shares iframe-demo's bundle, adds a custom palette via
+  # meta.config_overrides (deep-merged over bundled wippy.configOverrides;
+  # YAML wins per nested key — must use camelCase to match).
   - name: iframe-demo-themed
     kind: registry.entry
     meta:
@@ -82,17 +57,16 @@ entries:
       url: /app
       base_path: app/iframe-demo
       entry_point: app.html
+      mountRoute: /demo-themed/:part(.*)*
       config_overrides:
         customization:
           cssVariables:
-            # Pastel palette — soft muted tones, still blue-hued primary
-            "--p-primary": "#7c9ed9"           # Soft blue (pastel)
+            "--p-primary": "#7c9ed9"
             "--p-primary-color": "#7c9ed9"
-            "--p-danger": "#e8a0a0"            # Soft rose
-            "--p-warn": "#c5c88a"              # Soft olive/sage
-            "--p-secondary": "#b4a7d6"         # Soft lavender
-            "--p-accent": "#8cc5b5"            # Soft mint
-            # Warm creamy surface (noticeably warm, almost parchment)
+            "--p-danger": "#e8a0a0"
+            "--p-warn": "#c5c88a"
+            "--p-secondary": "#b4a7d6"
+            "--p-accent": "#8cc5b5"
             "--p-surface-0": "#fffcf7"
             "--p-surface-50": "#faf6ef"
             "--p-surface-100": "#f3ede3"
@@ -105,228 +79,90 @@ entries:
             "--p-surface-800": "#3a342b"
             "--p-surface-900": "#262019"
             "--p-surface-950": "#141008"
-          # Override font to Quicksand (rounded, friendly)
           customCSS: |
             @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
             :root, body, * { font-family: 'Quicksand', sans-serif !important; }
-    proxy:
-      enabled: true
-      css:
-        fonts: true
-        theme_config: true
-        iframe: true
-        prime_vue: true
-        custom_css: true
-        custom_variables: true
-      tailwind_config: true
-      iconify_icons: true
 
   - name: reaction-bar
     kind: registry.entry
     meta:
       type: view.component
       name: reaction-bar
-      title: Reaction Bar
       tag_name: example-reaction-bar
-      entry_point: index.js
       announced: true
       secure: false
       auto_register: true
       url: /app/wc/reaction-bar
-      props:
-        type: object
-        properties:
-          reactions:
-            type: array
-            items:
-              type: string
-            default: ["👍", "👎", "❤️", "🎉", "🤔"]
-            description: Array of emoji reactions to display
-          allow-multiple:
-            type: boolean
-            default: false
-            description: Whether multiple reactions can be active simultaneously
-      events:
-        type: object
-        properties:
-          reaction:
-            type: object
-            properties:
-              emoji:
-                type: string
-              count:
-                type: number
-              active:
-                type: boolean
-            description: Fired when a reaction is toggled
+      entry_point: index.js
 
   - name: websocket-log
     kind: registry.entry
     meta:
       type: view.component
       name: websocket-log
-      title: WebSocket Log
       tag_name: example-websocket-log
-      entry_point: index.js
       announced: true
       secure: false
       auto_register: true
       url: /app/wc/websocket-log
-      props:
-        type: object
-        properties:
-          topics:
-            type: array
-            items:
-              type: string
-            default: ["@message"]
-            description: Array of WebSocket topics to subscribe to
-          max-entries:
-            type: number
-            default: 100
-            description: Maximum number of log entries to keep
+      entry_point: index.js
 
   - name: chart-circle
     kind: registry.entry
     meta:
       type: view.component
       name: chart-circle
-      title: Chart Circle
       tag_name: example-chart-circle
-      entry_point: index.js
       announced: true
       secure: false
       auto_register: true
       url: /app/wc/chart-circle
-      props:
-        type: object
-        properties:
-          labels:
-            type: array
-            items:
-              type: string
-            default: ["Red", "Blue", "Yellow"]
-            description: Labels for chart segments
-          values:
-            type: array
-            items:
-              type: number
-            default: [300, 50, 100]
-            description: Values for chart segments
-          title:
-            type: string
-            default: "Sample Chart"
-            description: Chart title
+      entry_point: index.js
 
   - name: mermaid
     kind: registry.entry
     meta:
       type: view.component
       name: mermaid
-      title: Mermaid Diagram
       tag_name: example-mermaid
-      entry_point: index.js
       announced: true
       secure: false
       auto_register: true
       url: /app/wc/mermaid
-      props:
-        type: object
-        properties:
-          definition:
-            type: string
-            default: ""
-            description: Mermaid diagram definition string
-          transparent:
-            type: boolean
-            default: true
-            description: Whether the diagram background is transparent
+      entry_point: index.js
 
   - name: markdown
     kind: registry.entry
     meta:
       type: view.component
       name: markdown
-      title: Markdown Viewer
       tag_name: example-markdown
-      entry_point: index.js
       announced: true
       secure: false
       auto_register: true
       url: /app/wc/markdown
-      props:
-        type: object
-        properties:
-          content:
-            type: string
-            default: ""
-            description: Markdown text to render
-          allowed-tags:
-            type: array
-            items:
-              type: string
-            default: []
-            description: Override sanitization tag whitelist (empty = use built-in defaults)
-          allowed-attributes:
-            type: string
-            default: ""
-            description: JSON object of tag→attributes mappings for sanitize-html
+      entry_point: index.js
 
   - name: counter-persist
     kind: registry.entry
     meta:
       type: view.component
       name: counter-persist
-      title: Counter Persist
       tag_name: example-counter-persist
-      entry_point: index.js
       announced: true
       secure: false
       auto_register: true
       url: /app/wc/counter-persist
-      props:
-        type: object
-        properties:
-          persist-key:
-            type: string
-            description: Key prefix for state persistence. Different keys = separate state.
-      events:
-        type: object
-        properties:
-          count-changed:
-            type: object
-            properties:
-              count:
-                type: number
-            description: Fired when count value changes
+      entry_point: index.js
 
   - name: model-gallery
     kind: registry.entry
     meta:
       type: view.component
       name: model-gallery
-      title: Model Gallery
       tag_name: example-model-gallery
-      entry_point: index.js
       announced: true
       secure: false
       auto_register: true
       url: /app/wc/model-gallery
-      props:
-        type: object
-        properties:
-          show-details:
-            type: boolean
-            default: true
-            description: Whether to show model details (description, capabilities)
-      events:
-        type: object
-        properties:
-          model-selected:
-            type: object
-            properties:
-              name:
-                type: string
-              provider:
-                type: string
-            description: Fired when a model card is clicked
+      entry_point: index.js
