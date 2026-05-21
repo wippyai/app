@@ -1,5 +1,6 @@
 import { addCollection } from '@iconify/vue'
 import { VueQueryPlugin } from '@tanstack/vue-query'
+import { addIcons } from '@wippy-fe/proxy'
 import { createWippyPersist, preloadWippyState } from '@wippy-fe/pinia-persist'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
@@ -24,12 +25,9 @@ export async function createMainApp() {
     ? (routePath.startsWith('/') ? routePath : '/' + routePath)
     : '/'
 
-  if (config.customization?.icons) {
-    addCollection({
-      prefix: 'custom',
-      icons: config.customization?.icons,
-    })
-  }
+  // Register both deprecated `theming.global.icons` (single set under prefix "custom")
+  // and canonical `theming.global.iconSets` (prefix→icons map). The helper iterates correctly.
+  addIcons(addCollection)
 
   const app = createApp(App)
 

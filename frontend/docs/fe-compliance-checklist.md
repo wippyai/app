@@ -112,7 +112,7 @@ A Wippy FE module (`view.page` or `view.component`) is a **standalone, universal
 
 - A FE module MUST NEVER `import('/components/x/dist/index.js')` or `fetch('/wc/x/...')` to reach another WC's physical URL. **REJECT.** Such a URL is a presumption about THIS deployment's serving layout — it breaks the moment the BE relocates the peer module, or runs it from an embedded FS. Consume another WC via the proxy / host pipeline instead:
   - **Registry-declared WCs (the common case)** — if the peer is `auto_register: true` + `announced: true` in its `view.component` entry, the host eagerly registers it in every iframe at boot. Consumer code just does `await customElements.whenDefined('wc-x')` and then uses the tag. No URL knowledge required.
-  - **Artifact-based / dynamically-loaded WCs** — call `loadWebComponent(componentId, tagName?)` from `@wippy-fe/proxy`. **`componentId` is the artifact UUID** (the host fetches the artifact's package.json via the artifact API, validates it as a Wippy package, then dynamic-imports it — see `gen-2-chat/src/proxy/shared/web-component-loader.ts`). This is the path for user-generated / AI-generated WCs delivered as artifacts.
+  - **Artifact-based / dynamically-loaded WCs** — call `loadWebComponent(componentId, tagName?)` from `@wippy-fe/proxy`. **`componentId` is the artifact UUID** (the host fetches the artifact's package.json via the artifact API, validates it as a Wippy package, then dynamic-imports it). Contract: the published `@wippy-fe/proxy` npm package (see `node_modules/@wippy-fe/proxy/index.d.ts` for the type signature; `docs:proxy-api.md` for prose). This is the path for user-generated / AI-generated WCs delivered as artifacts.
   - Registry-declared WCs without `auto_register + announced` are also addressable via `loadWebComponent()` — provided you have their artifact id. If you find yourself reaching for this in a static consumer-WC, the better fix is usually to flip `auto_register + announced` on the peer instead.
 
 **Build script owns the output path, not vite.config:**
@@ -127,7 +127,7 @@ A Wippy FE module (`view.page` or `view.component`) is a **standalone, universal
 
 - Carry `wippy.tagName`, `wippy.type`, `wippy.props`, `wippy.events`. Do NOT carry `wippy.url`, `wippy.host`, `wippy.mountPath` — those are deployment-specific and belong in the BE's `_index.yaml` `meta.*`.
 - **Source-of-truth precedence: the registry entry always wins over `package.json`.** `meta.tag_name`, `meta.props`, `meta.events` on the `view.component` entry override the corresponding `wippy.tagName` / `wippy.props` / `wippy.events` in `package.json` for THIS deployment. `package.json` carries the module's *suggested* / *default* shape — useful for host-less mode and as the package's self-description; the registry is what the running host actually consults.
-- **Open TODO**: today, props/events schemas must be kept in sync **manually** between `package.json` and the registry entry. A future change will load these dynamically from the package.json at load time so the registry only needs the override deltas. Until then: if you edit props/events on one side, edit the other.
+- **Open TODO (SHOULD)**: props/events schemas SHOULD be kept in sync **manually** between `package.json` and the registry entry. Drift is not a runtime FAIL — the registry wins per the precedence rule above — but it is a SHOULD-fix because host-less mode and tag-explorer UIs read the package.json mirror. A future change (`wippy/views` ≥ 0.5 may semi-automate this) will load these dynamically from the package.json at load time so the registry only needs the override deltas. Until then: if you edit props/events on one side, edit the other.
 
 **Re-mounting under a different URL must work without a rebuild:**
 
@@ -138,7 +138,7 @@ A Wippy FE module (`view.page` or `view.component`) is a **standalone, universal
 - [ ] `vite.config.ts` has `base: ''` (and **not** `'/something/'`).
 - [ ] `vite.config.ts` does NOT hardcode `outDir` — the build script passes `--outDir` per deployment.
 - [ ] `package.json` carries `wippy.tagName` / `wippy.type` / props / events. It does NOT carry any deployment URL or mount path.
-- [ ] Source tree has zero hardcoded references to peer modules' physical URLs. `grep -rn "/components/\|/wc/\|/app/[a-z]" src/` returns only same-module relative references.
+- [ ] Source tree has zero hardcoded references to peer modules' physical URLs. Auditor inspects results manually — strings like `/components/<peer>/`, `/wc/<peer>/`, or any absolute peer-module URL are REJECT; same-module relatives and own `meta.url` prefix are fine. (Not a §10 recipe — §10 has no cross-module-URL gate; this is a manual §0 spot-check.)
 - [ ] If the module consumes another WC, it does so via `await customElements.whenDefined('wc-x')` (for registry-declared peers with `auto_register: true` + `announced: true`) or `loadWebComponent(artifactUUID)` (for artifact-delivered peers) — never by hardcoding a URL like `/components/x/dist/index.js`.
 - [ ] No `import.meta.url`-based path math that presumes a specific serving layout. The pattern `define(import.meta.url, …)` is fine; `import.meta.url.split('/components/')[1]` is not.
 
@@ -230,7 +230,7 @@ A registry.entry is what the host actually reads at navigation/render time. The 
 | `meta.title` | MUST | Human-readable title (used in nav and page tabs) |
 | `meta.icon` | SHOULD | Iconify icon code (e.g. `tabler:home`); only relevant if `announced: true` |
 | `meta.url` | MUST | **URL prefix** at which the FS+http.router serving this bundle is mounted. Not a physical path. e.g. `url: /app` means a router/fs is registered at `/app/...`, which may be backed by a `/static/...` directory, an in-memory FS, or a remote server. |
-| `meta.base_path` | MUST | URL path appended to `url` to reach the bundle root. Combined with `url`, becomes the **HTML `<base>` injected into `entry_point`**, so relative module imports inside `app.html` resolve against the bundle root. e.g. `url=/app` + `base_path=app/main` → bundle is reached at `/app/app/main/`. The double "app" is intentional and correct. |
+| `meta.base_path` | MUST | URL path appended to `url` to reach the bundle root. Combined with `url`, becomes the **HTML `<base>` injected into `entry_point`**, so relative module imports inside `app.html` resolve against the bundle root. `base_path` MUST equal the build output subdirectory (e.g. if vite builds to `static/app/main/`, set `base_path: app/main`). The final URL is just `url + base_path` concatenation: `url=/app` + `base_path=app/main` → `/app/app/main/` (the duplicated `app` segment is just arithmetic — both contain `app` because the router mount and the output dir happen to share the prefix; `url=/foo` + `base_path=bar/main` → `/foo/bar/main/`, no duplication). Anti-pattern: `url=/app/main` + `base_path=main` (double-counts the namespace — final route `/app/main/main/`). |
 | `meta.entry_point` | MUST | URL path **relative to the bundle root** pointing at the entry HTML file. e.g. `app.html` (most common). If your bundle has `htmls/f.html`, set `entry_point: htmls/f.html`. |
 | `meta.mountRoute` | MAY | Vue Router 4 path the host claims for this page (e.g. `/home/:part(.*)*`). v1 canonical form: `/<literal>/:part(.*)*` or `/:part(.*)*`. If absent, page is reachable only at `/c/<namespace>:<name>`. |
 | `meta.secure` | SHOULD | Default `false`. Set `true` to enforce auth. |
@@ -239,7 +239,7 @@ A registry.entry is what the host actually reads at navigation/render time. The 
 | `meta.order` | MAY | Sort position in nav (when announced). |
 | `meta.group` / `meta.group_icon` / `meta.group_order` | MAY | Nav grouping. |
 | `meta.config_overrides` | MAY | **Per-page ISOLATION override only.** The MAIN way to set up themes/config is the host's facade module (see §5.1) — the facade owns `cssVariables` / `customCSS` / `host_custom_css` / `css_variables` for the whole app shell. Reach for `config_overrides` only when you explicitly want THIS specific iframe to look or behave different from the rest of the app — e.g. a demo page with a deliberately divergent palette, an artifact viewer with a fixed brand identity, or a debug page on a different `apiRoutes`. (`gold:src/app/views/_index.yaml:72-122` — `iframe-demo-themed` is the canonical demo of an isolation override; the rest of the app inherits the facade.) Structure mirrors `wippy.configOverrides` in package.json (see §5.3). |
-| `proxy` (sibling of `meta`, NOT inside meta) | SHOULD | Per-entry proxy injection config. Snake_case keys: `theme_config`, `prime_vue`, `custom_css`, `custom_variables`, `tailwind_config`, `iconify_icons`. Mirrors what package.json `wippy.proxy.injections` declares with camelCase. (`gold:src/app/views/_index.yaml`) |
+| `proxy` (sibling of `meta`, NOT inside meta) | SHOULD | Per-entry proxy injection config. Snake_case keys: `theme_config`, `prime_vue`, `custom_css`, `custom_variables`, `tailwind_config`, `iconify_icons`. Mirrors what package.json `wippy.proxy.injections` declares with camelCase. If omitted, the host applies DEFAULT_PROXY (`theme_config + iframe` true; `prime_vue / custom_css / custom_variables / markdown / iconify` all FALSE) — a PrimeVue page that omits the block silently loses theme tokens and customCSS. Declare it. (`gold:src/app/views/_index.yaml`) |
 
 **End-user URLs**:
 
@@ -286,7 +286,7 @@ curl -fsS http://<host>/api/public/pages/list | jq '.pages[] | select(.id=="<nam
 |---|---|---|
 | `meta.type` | MUST | `"view.component"` literal |
 | `meta.name` | MUST | Component logical name |
-| `meta.tag_name` | MUST | Custom-element tag. **Must contain a hyphen** (Custom Elements spec). The first segment is project convention — `example-` for app-template demos, `dam-` for layout pieces, `wippy-` reserved for first-party WCs, project-specific prefixes for everything else. |
+| `meta.tag_name` | MUST | Custom-element tag. **Must contain a hyphen** (Custom Elements spec) — REJECT (§11 #4) if not. The first segment is project convention (SHOULD): `example-` for app-template demos, `dam-` for layout pieces, `wippy-` RESERVED for first-party WCs (REJECT if used by non-first-party code), project-specific prefixes for everything else. Hyphenated-but-off-convention tags (e.g. `mermaid-diagram`) are spec-legal — auditor warns and asks for a rename rather than rejecting. |
 | `meta.entry_point` | MUST | URL relative to bundle root pointing at the entry **JS** file (e.g. `index.js`). For WCs, entry is JS not HTML. |
 | `meta.url` | MUST | URL prefix where the bundle is served (e.g. `/app/wc/mermaid`). Same semantics as for `view.page` — a router/fs map, not a physical path. |
 | `meta.base_path` | MAY | Subdirectory under `url`. Often empty for WCs (entry sits at bundle root). |
@@ -487,10 +487,10 @@ All flags are technically MAY (host has defaults). The **recommended set for a t
 | `injections.preventLinkClicks` | `false` | `true` if you don't have your own router |
 | `injections.iconifyIcons` | `false` | `true` if using CDN Iconify |
 | `injections.errorCapture` | `true` | `false` if you handle errors fully internally |
-| `injections.refreshWhenVisible` | `false` (or omit) | `true` for pages that need stale-data refresh |
-| `injections.historyPolyfill` | `true` (or omit) | leave on; host installs always-stub |
+| `injections.refreshWhenVisible` | omit | **legacy** — only relevant for old jet-based iframes; new modules omit |
+| `injections.historyPolyfill` | omit | **deprecated** — host installs the always-stub regardless; do not set |
 
-**`wippy.configOverrides`** — see §2.3. **Typically omitted.** Add only when a per-iframe deviation is intentional.
+**`wippy.configOverrides`** — see §2.3. **Typically omitted.** Add only when a per-iframe deviation is intentional. Note: keeping `injections.css.customCss` / `customVariables` enabled (above) is independent of declaring a `configOverrides` block — those flags allow the iframe to receive facade-level `customCSS` / `cssVariables`. When per-page overrides ARE needed they live in YAML `meta.config_overrides` (canonical) or `wippy.configOverrides` (host-less mirror) — **and are inherited by every child iframe and WC nested inside the page**. That inheritance is exactly why theming belongs here, not in `src/styles.css`: a `.css` file scopes to one bundle, `config_overrides` reaches the whole subtree. See §3.7 / §5.
 
 **Dependency hygiene**:
 
@@ -576,7 +576,9 @@ Rules:
 ```bash
 grep -E "base:\\s*['\"]" path/to/vite.config.ts            # must show: base: ''
 grep -A 25 "external:" path/to/vite.config.ts              # check coverage of imported host packages
-grep -E "wippyPagePlugin" path/to/vite.config.ts        # SHOULD be present
+grep -E "wippyPagePlugin" path/to/vite.config.ts           # SHOULD be present
+grep -E "assetsInlineLimit" path/to/vite.config.ts         # must = 0 (omit; default 4 KB is correct)
+grep -E "process\.env\.NODE_ENV" path/to/vite.config.ts    # must = 0 (do not hard-code)
 ```
 
 ### 3.3 `app.html`
@@ -604,7 +606,7 @@ Reference: `gold:main/app.html`.
     }
     </script>
     <script
-        src="http://localhost:5173/dev-proxy.js"
+        src="https://web-host.wippy.ai/webcomponents-1.0.32/dev-proxy.js"
         data-role="@wippy/scripts"
     ></script>
 </head>
@@ -623,7 +625,7 @@ Rules:
 - MUST contain `<script type="importmap">` with at minimum every host-provided package the app imports at runtime.
 - The importmap MUST cover every external the app actually imports (not necessarily the full vite externals array — gold standard externalizes `nanoevents`/`pinia` even though the app doesn't directly import them, and the importmap can omit those because the host's runtime importmap provides them under a real host).
 - Importmap URLs SHOULD use `https://esm.sh/<pkg>@<major>` for production. `http://localhost:5173/...` for local dev mode.
-- MUST contain exactly one `<script data-role="@wippy/scripts">`. Production CDN form: `src="https://web-host.wippy.ai/<release-tag>/dev-proxy.js"`. Local dev: `src="http://localhost:5173/dev-proxy.js"`.
+- MUST contain exactly one `<script data-role="@wippy/scripts">`. **Commit the production CDN form**: `src="https://web-host.wippy.ai/<release-tag>/dev-proxy.js"`, where `<release-tag>` matches the current `wippy.facade:fe_facade_url` default in your facade module (e.g. `webcomponents-1.0.32`). Under a real Wippy host the tag is rewritten via srcdoc injection at serve time, so the committed value only matters for host-less / direct-load previews; pinning to the facade's tag keeps both paths aligned. Local-dev `src="http://localhost:5173/dev-proxy.js"` is fine for individual dev loops but should NOT be the committed form.
 - MUST contain `<div id="app"></div>` mount point.
 - MUST contain `<wippy-loading title="...">` inside the mount instead of a hand-rolled spinner (`docs:host-less-mode.md:377`).
 - MUST contain `<script type="module" src="./src/app.ts">` (or your entry path) at end of body.
@@ -710,7 +712,7 @@ Rules:
 - MUST register the PrimeVue plugin if you use any PrimeVue component.
 - SHOULD register `createWippyPersist(preloaded)` on pinia for state persistence across iframe destructions.
 - SHOULD register `VueQueryPlugin` if you use TanStack Query.
-- MUST iterate `config.customization?.icons` and call `addCollection` (or use the gold-standard one-call form with `prefix: 'custom'`).
+- MUST register icons by calling `addIcons(addCollection)` from `@wippy-fe/proxy` (the canonical helper handles BOTH `config.theming.global.icons` — the deprecated single-set alias auto-registered under prefix `"custom"` — AND `config.theming.global.iconSets` — the canonical prefix→icons map; the helper iterates the map and calls `addCollection({prefix, icons})` per entry). Hand-rolling is REJECT: the runtime config exposes icons under `theming.global`, NOT `customization` — code that reads `config.customization?.icons` is a silent no-op. See `docs:proxy-api.md` §`addIcons`.
 - MUST NOT `console.log` boot diagnostics in production (`console.warn`/`console.error` allowed).
 
 ### 3.5 `src/router/index.ts`
@@ -870,7 +872,7 @@ Rules:
 - MUST type props with TS interface or generic: `defineProps<{ foo: string }>()`. Untyped object syntax is REJECT.
 - MUST use Composition API.
 - File names SHOULD be kebab-case. PascalCase files are a documented bulk-rename target where they exist.
-- MUST avoid `any`; prefer `unknown` + guards. Each retained `any` MUST have a justifying comment. Aim ≤ 50 across an entire app.
+- MUST avoid `any`; prefer `unknown` + guards or precise types. Each retained `any` MUST have a justifying inline comment explaining why it's unavoidable. Strict TS typing throughout — no soft cap, no magic-number allowance. Audit with `grep -REn ': any|<any>' src/`; every match should resolve to either a removal or a commented `any` with a documented reason.
 - `pages/<x>.vue` MUST be lazy-loaded in router: `() => import('../pages/x.vue')`.
 - MUST NOT use `console.log` in production code. `console.warn` and `console.error` are allowed for error reporting.
 - `npm run type-check` MUST exit 0. Both `vue-tsc --build --force` (gold standard) and `vue-tsc --noEmit` are acceptable.
@@ -998,8 +1000,8 @@ Reference: `gold:app-template/frontend/web-components/mermaid/package.json`.
 
 **`wippy` block (WC-specific)**:
 - MUST `wippy.type: "widget"` OR `"component"` (NOT `"page"` or `"web-component"`). The YAML registry uses `view.component`; package.json accepts either `"widget"` (historical, app-template convention) or `"component"` (newer alias). The vite plugin's validator accepts both. NEVER `"web-component"` — rejected.
-- MUST `wippy.tagName` (camelCase) — the custom element tag. Must contain a hyphen. Project conventions vary (`example-`, `dam-`, `wippy-`). The YAML uses `tag_name` (snake_case) with the same value.
-- MUST `wippy.description` — a **verbose AI/human-readable usage explanation** (not a one-line label). Must explain HOW to use the WC: the expected call shape (which props vs children), supported input forms, fallback paths, notable perf characteristics. The `gold:mermaid/package.json:40` description ("Renders Mermaid diagrams. Pass the Mermaid source in props.definition; never inline as text content. All diagram types are supported. Flowchart, sequence, class, ER, state, and xychart render fast … Pie, gantt, mindmap … fall back to a heavier renderer that loads on first use …") is the canonical shape. Top-level `description` in package.json SHOULD mirror this for npm/pack consumers. Mirror the same string into YAML `meta.description` (§2.2).
+- MUST `wippy.tagName` — the custom element tag. Value MUST be lowercase kebab-case with at least one hyphen (HTML custom-element spec). The JSON key is camelCase (`tagName`); the YAML registry key for the same value is snake_case (`tag_name`). Project conventions for the prefix vary (`example-`, `dam-`, `wippy-`).
+- MUST `wippy.description` — a **verbose AI/human-readable usage explanation** (not a one-line label). MUST cover all four clauses: (1) expected call shape (props vs children), (2) supported input forms, (3) fallback paths if any, (4) notable perf characteristics. Target ≥200 characters; reject anything <100 chars or missing clauses 1+2. The `gold:mermaid/package.json:40` description ("Renders Mermaid diagrams. Pass the Mermaid source in props.definition; never inline as text content. All diagram types are supported. Flowchart, sequence, class, ER, state, and xychart render fast … Pie, gantt, mindmap … fall back to a heavier renderer that loads on first use …") is the canonical shape (~430 chars). Top-level `description` in package.json SHOULD mirror this for npm/pack consumers. Mirror the same string into YAML `meta.description` (§2.2). (TBD: precise minimum to be codified against §11 REJECT 5a.)
 - MUST `wippy.props` JSON Schema. Every property MUST have `type`, `default`, `description`.
 - MAY `wippy.events` JSON Schema (omit if no custom events).
 - MUST NOT have `wippy.path` (no HTML entry).
@@ -1011,6 +1013,7 @@ Reference: `gold:app-template/frontend/web-components/mermaid/package.json`.
 - `dependencies`: bundled-into-WC packages. Canonical: `@wippy-fe/theme`, `@wippy-fe/webcomponent-core`, `@wippy-fe/webcomponent-vue`. Plus the WC's domain libs (e.g. `mermaid`, `chart.js`).
 - `devDependencies`: build toolchain. Canonical: `vite`, `@vitejs/plugin-vue`, `typescript`, `vue-tsc`, `vue` for build-time, `eslint*`, `@wippy-fe/proxy` (build-time type imports).
 - `peerDependencies`: only what the host's import map provides at runtime. Canonical minimum: `@wippy-fe/proxy`, `vue`. Add `pinia` and `@iconify/vue` if used.
+- Note: `@wippy-fe/proxy` legitimately appears in THREE places — `devDependencies` (so `tsconfig.types` can resolve it at build), `peerDependencies` (declares it as a runtime peer), and `rollupOptions.external` in `vite.config.ts` (so the bundler does NOT inline it; the host's import map serves it). All three are required.
 
 ### 4.2 `vite.config.ts` (web component, library mode)
 
@@ -1061,7 +1064,7 @@ Rules:
 - MUST set `build.target: 'esnext'`.
 - MUST use `build.lib` library mode with `formats: ['es']` (ESM only).
 - MUST set `entry` (and `input.index`) to your `src/index.ts`.
-- MUST set `preserveEntrySignatures: false` — required so the `define(import.meta.url, ...)` call lives in the entry chunk (so the `?declare-tag=` query the host autoload script appends actually reaches `import.meta.url`).
+- MUST set `preserveEntrySignatures: false` — required so the `define(import.meta.url, ...)` call lives in the entry chunk. Verify after build with `grep -F 'define(import.meta.url' dist/index.js` — the literal MUST appear in the entry file. If it doesn't, Rollup hoisted it into a sub-chunk and the `?declare-tag=` query never reaches `import.meta.url`, so `customElements.define` silently no-ops. Fix: confirm `preserveEntrySignatures: false` is set, then rebuild.
 - MUST set entry/chunk/asset file names: `[name].js`, `[name]-[hash].js`, `[name]-[hash][extname]`.
 - MUST externalize what the host provides: `vue`, `pinia`, `@iconify/vue`, `@wippy-fe/proxy`. Add only what your WC actually imports.
 - MUST **bundle** (NOT externalize) `@wippy-fe/theme`, `@wippy-fe/webcomponent-core`, `@wippy-fe/webcomponent-vue`, `@wippy-fe/pinia-persist` (if used), and your domain libs (`mermaid`, etc.).
@@ -1109,7 +1112,20 @@ Rules:
 - MUST extend `WippyVueElement<ComponentProps, Events>` (Vue) or `WippyElement` (vanilla).
 - MUST implement `static get wippyConfig()` returning:
   - `propsSchema: pkg.wippy.props as WippyPropsSchema` — single source of truth from package.json.
-  - `hostCssKeys: [...]` — which host-provided CSS bundles to inject into the shadow root. Use the const names from `@wippy-fe/webcomponent-core`: `themeConfigUrl` (theme tokens), `iframeCssUrl` (layout), `primeVueCssUrl` (PrimeVue components), `markdownCssUrl` (markdown), `preflightCssUrl` (resets). Pick the minimal set you need.
+  - `hostCssKeys: [...]` — which host-provided CSS bundles to inject into the shadow root. The `HostCssKey` union from `@wippy-fe/webcomponent-core` has exactly **four** members. Apply per-archetype:
+    - **`themeConfigUrl`** — REQUIRED for every WC (theme tokens + dark-mode `--p-*` vars). Only omit for pure SVG/Canvas with hardcoded colors. ~8 KB.
+    - **`primeVueCssUrl`** — include **iff** the WC renders PrimeVue components inside its shadow root. ~455 KB — never include "just in case".
+    - **`markdownCssUrl`** — include **iff** the WC renders markdown (anything inside a `.data-body` container). ~5 KB.
+    - **`iframeCssUrl`** — OPTIONAL; include only when the WC has its own scrollable panel where matching host scrollbar styling matters. ~1 KB. Gold WCs in this repo do not use it.
+    - **`preflightCssUrl`** — **DO NOT** put in `hostCssKeys` (NOT a member of the `HostCssKey` union; TS-rejected and a runtime no-op). If you genuinely need Tailwind v3 preflight inside shadow DOM, call `hostCss.preflightCssUrl` + `loadCss()` imperatively — but no gold WC does this.
+
+    **Archetype shortcuts** (matches every gold WC in this repo):
+    - Minimal / SVG / vanilla renderer (`chart-circle`, `websocket-log`, `mermaid`): `['themeConfigUrl']`
+    - PrimeVue-using WC (`reaction-bar`, `counter-persist`, `model-gallery`): `['themeConfigUrl', 'primeVueCssUrl']`
+    - Markdown-rendering WC (`markdown`): `['themeConfigUrl', 'markdownCssUrl']`
+    - Add `'iframeCssUrl'` only if the WC has visible scrollbars that must match the host.
+
+    Omitting `hostCssKeys` entirely defaults to all four — wasteful, not safe. Always specify explicitly.
   - `inlineCss: stylesText` — your WC-specific CSS imported via `?inline`.
   - `contentTemplate?: 'text/vnd.foo'` — optional MIME type for WCs that consume `<text>` children (rare).
 - MUST implement `static get vueConfig()` returning `{ rootComponent }`. Add `plugins: [PrimeVuePlugin, ...]` if you use PrimeVue components.
@@ -1118,7 +1134,7 @@ Rules:
 
 ### 4.4 Theme compatibility
 
-- WC root element MUST NOT have padding or margin (`docs:component-guide.md:702`). Host controls outer spacing.
+- WC root element MUST NOT have padding or margin (see `docs:component-guide.md` § "Styling Guidelines" → rule 1). Host controls outer spacing.
 - WC MUST use semantic CSS vars for theme-dependent colors: `--p-text-color`, `--p-content-background`, `--p-content-border-color`, `--p-text-muted-color`, `--p-content-hover-background`, `--p-primary-color`.
 - WC MUST NOT use raw `--p-surface-N` for theme-dependent purposes — that scale is fixed.
 - For derived shades, use `color-mix(in srgb, var(--semantic) X%, transparent)`.
@@ -1201,9 +1217,11 @@ Differences vs page apps:
 
 ### 4.8 Runtime caching / state persistence
 
-For state that must survive WC unmount or iframe destruction, use `@wippy-fe/pinia-persist`:
-- `persist-key` prop values MUST be globally unique across the app.
-- `@wippy-fe/pinia-persist` MUST be **bundled** into the WC (NOT external).
+Persistence is OPTIONAL — use `@wippy-fe/pinia-persist` only when state must survive WC unmount or iframe destruction (e.g. `counter-persist`). If the WC has no such state, omit it entirely.
+When used:
+- The WC MUST declare a `persist-key` prop in `wippy.props` as a JSON-Schema string (kebab-case in HTML/JSON; accessed as `persistKey` camelCase in Vue). See `gold:counter-persist/package.json:48-51`.
+- `persist-key` values MUST be globally unique across the entire app. Enforcement is the WC author's responsibility — there is no central registry. Use namespaced, descriptive keys (e.g. `dashboard-sidebar`, not `key1`).
+- `@wippy-fe/pinia-persist` MUST be **bundled** into the WC (NOT in `rollupOptions.external`).
 
 ---
 
@@ -1244,6 +1262,31 @@ Examples where level 3 IS legitimate:
 - Code editor (Monaco WC).
 - Domain-specific shell components in managed-layout panels.
 
+### 5.0a Capture-before-refactor protocol (MUST before any §5 refactor)
+
+Before refactoring any styling — whether to migrate from `:root` overrides into facade `cssVariables`, to drop a level-3 custom Vue component into a level-2 customCSS rewrite, or to consolidate per-page `config_overrides` into a facade-level theme — you MUST first capture the ACTUAL current state. Refactoring without capture turns into "guess what the original author meant"; the new theme will silently drift from what users see today.
+
+**Required artefacts (commit them to `.local/` of the refactor branch):**
+
+1. **Screenshots** of every screen and state affected — light + dark, default + hover/active/focus, empty + populated. Use Playwright (`mcp__playwright__browser_take_screenshot`) for reproducibility; pin viewport size and DPR.
+2. **Real-color inventory** — enumerate every distinct color value the page actually paints, NOT every value declared in source. Pull from computed styles via Playwright: `evaluate(() => Array.from(document.querySelectorAll('*')).flatMap(el => { const cs = getComputedStyle(el); return [cs.color, cs.backgroundColor, cs.borderColor]; }).filter(v => v && v !== 'rgba(0, 0, 0, 0)').reduce((m, c) => (m.set(c, (m.get(c) || 0) + 1), m), new Map()))`. Output: `{ "rgb(0, 95, 178)": 142, "rgb(255, 255, 255)": 88, ... }`.
+3. **Token inventory** — every `--p-*` token actually read by the page, with its computed value. Use `getComputedStyle(document.documentElement).cssText` filtered to `--p-` prefix, in both `:root` and `[data-theme="dark"]`.
+4. **Selector inventory** — which custom selectors are in use and where. `grep -rEn '^\s*\.[a-z][a-z0-9-]+' src/` for component-scoped; facade `custom_css` and `host_custom_css` for global.
+
+**Then refactor:**
+
+- The new theme MUST reproduce every color from artefact (2) — if a color disappears from the inventory after refactor, surface that as a deliberate decision, not an oversight.
+- Map artefact (2) entries onto existing `--p-*` tokens (artefact 3) wherever possible; only mint new project vars (§5.1.2 row 2) for colors that have no natural host-token match.
+- Use the screenshots from (1) as a visual regression baseline — re-take after the refactor, diff via Playwright or by eye.
+
+**Anti-patterns this prevents:**
+
+- "Themed it from the design mockup but lost the dark-mode shade the team's been using for six months."
+- "Switched a custom Vue widget to PrimeVue but the new component is one shade darker because nobody compared computed styles."
+- "Consolidated three `config_overrides` into the facade but one page now has lower contrast because the original override was carrying an undocumented tweak."
+
+This rule is MUST for refactoring existing styling. Greenfield work (new widget, no prior visual baseline) doesn't need a capture pass. Artefacts live in the branch's `.local/` — gitignored, but preserved on the refactoring author's disk for the duration of PR review.
+
 ### 5.1 Facade-first: the main way to theme a Wippy app
 
 `docs:theming.md`, `kb:theming-workflow`.
@@ -1268,7 +1311,9 @@ A Wippy module composes itself from `ns.dependency` entries. **One of those is `
 
 **Demo of `config_overrides` (isolation override)** — `C:/Projects/app-template/src/app/views/_index.yaml:72-122`. The `iframe-demo-themed` entry retheams a SINGLE page with a custom pastel palette + Quicksand font, demonstrating per-page isolation. Other pages of the same FE bundle inherit the facade theme unchanged.
 
-### 5.1.1 Three levels of override (priority, low → high)
+### 5.1.1 Three CUSTOMIZER levels of override (priority, low → high)
+
+> Not to be confused with §5.0's AUTHOR escalation (var → customCSS → custom Vue). §5.0 is *what kind of code you write*; §5.1.1 is *where the customization lives*. See [theming.md § Theming architecture paradigm](theming.md#theming-architecture-paradigm-read-this-first) for the Waterfall A (AUTHOR) vs Waterfall B (CUSTOMIZER) framing.
 
 > See [theming.md § The CUSTOMIZER waterfall](theming.md#the-customizer-waterfall--three-levels-of-theming) for examples, escalation criteria, and anti-patterns.
 
@@ -1283,16 +1328,16 @@ Mismatched placement is the #1 source of theme drift. The rule:
 | Override target | Where it goes | Where it MUST NOT go |
 |---|---|---|
 | Existing host var (`--p-*`) — change its value | YAML or `package.json` `customization.cssVariables` (facade global, or `config_overrides` for isolation) | NEVER `:root { --p-* }` in `src/styles.css` |
-| New derived var your project owns — needed for project use | Same place as above; compute via `color-mix()` or `var()` referencing host vars | NEVER `:root { --my-* }` in `src/styles.css` |
+| New derived var your project owns — derived FROM host theme vars (e.g. `var(--my-brand-bg) = color-mix(in srgb, var(--p-primary-color) 12%, var(--p-content-background))`); participates in the theme cascade | Same place as above; compute via `color-mix()` or `var()` referencing host vars | NEVER `:root { --my-* }` in `src/styles.css` |
 | HOST-owned selector override (`.p-button`, `.p-dialog`, `.p-inputtext`, etc.) | `customization.customCSS` (YAML or package.json) | NEVER raw `.p-*` rules in `src/styles.css` |
 | Project-internal class override (`.keeper-nav-btn`, `.search-wrap`) | `src/styles.css` (or `customization.customCSS` if it must reach the host shell) | n/a |
 | Project-scoped non-theme constant (chart bar color, fixed spacing tag) | `src/styles.css` with a clear project prefix (e.g., `--keeper-chart-bar-*`) | n/a |
 
 **Rationale**: theme is a host concern; the host's CSS pipeline composes facade global + per-page customization in a defined order. CSS files inside the bundle ship AFTER the host's pipeline and shadow it, breaking the override semantics. Keep host-touching styling in YAML/JSON customization — keep your bundle's `.css` for things you alone own.
 
-**REJECT 42b**: any `:root { --p-* }` (or `:root { --<other-host-var> }`) redefinition in a child app's `.css` file. This sits alongside REJECT 42 (which already covers a few specific tokens); 42b extends to ALL host-owned vars, regardless of which one.
+**REJECT 42b** (MUST — P1 Structural, see §11 #42b): any `:root { --p-* }` (or `:root { --<other-host-var> }`) redefinition in a child app's `.css` file. Immediate blocker, not a P3 fix_list item. This sits alongside REJECT 42 (which already covers a few specific tokens); 42b extends to ALL host-owned vars, regardless of which one.
 
-**REJECT 43a**: any raw `.p-<component>` rule in a child app's `.css` file. Move to `customization.customCSS`.
+**REJECT 43a** (MUST — P1 Structural, see §11 #43a): any raw `.p-<component>` rule in a child app's `.css` file. Immediate blocker. Move to `customization.customCSS`.
 
 ### 5.2 Semantic vs fixed CSS variables
 
@@ -1311,7 +1356,7 @@ Mismatched placement is the #1 source of theme drift. The rule:
 Anti-pattern (REJECT):
 ```css
 .card { background: var(--p-surface-100); }   /* fixed; doesn't flip */
-.card { background: var(--p-primary); }       /* invalid token; --p-primary-color is the right one */
+.card { background: var(--p-primary); }       /* wrong layer: --p-primary is the brand BASE (anchor for the 50–950 scale). For a primary-tinted surface that flips with dark mode, use the semantic alias --p-primary-color (primary-500 in light, primary-400 in dark). */
 ```
 
 Canonical:
@@ -1351,6 +1396,8 @@ Canonical:
 
 The host SUPPORTS `@light` and `@dark` keys in `cssVariables` maps — `host:src/shared/app-config/migration.ts` compiles them to `@media (prefers-color-scheme: light/dark)` rules and `[data-theme]` overrides at injection time. (Verified live in keeper-v5: the `@light` block in keeper:main `config_overrides.customization.cssVariables` produces working light-mode tokens.)
 
+> **Interaction with §5.3 REPLACE.** `@light` / `@dark` are sub-keys of the `cssVariables` map; the REPLACE rule applies to the WHOLE `cssVariables` field, not to `@light`/`@dark` individually. A child that supplies only `@light` REPLACES the parent's entire `cssVariables` (losing the parent's `@dark` and any top-level keys). Always re-state every mode you want — including the unconditional top-level defaults — when overriding.
+
 Note on KB drift: `kb:theming-workflow` says "no separate @light/@dark author syntax" — that entry is **stale**. Trust the host code path.
 
 Example:
@@ -1368,8 +1415,9 @@ cssVariables:
 
 ### 5.5 `customCSS` scoping
 
-- For host-wide `customCSS`, rules MUST be scoped to `.wippy-host-app` (or your specific page selector) so they don't leak into child iframes.
-- For per-page overrides, the host already scopes them; you can write top-level selectors.
+- **PrimeVue selectors (`.p-button`, `.p-dialog`, `.p-badge.p-badge-tinted`, etc.) — leave unscoped.** Host and children both render PrimeVue; bare `.p-*` rules must reach both for consistent appearance. This is the §5.1.2 row-3 case.
+- **Host-chrome BEM selectors (`.chat-message`, `.session-selector`, `.layout__*`, `.chat-input*`, `.chat-container*`) MUST be scoped to `.wippy-host-app`** — these are host-only classes whose names would collide with child-app classes. Verification: grep facade `custom_css` for these BEM prefixes; every match must have `.wippy-host-app ` ancestry, OR live in `host_custom_css` (server-side-scoped).
+- **For per-page `customCSS` overrides** (§5.1.1 level 2), the host already scopes them to the page's iframe; top-level selectors are fine.
 
 ### 5.6 Iconify discipline
 
@@ -1391,7 +1439,9 @@ Icons in Wippy apps follow a single workflow:
    - Mint custom icons sparingly. If you find yourself adding more than a dozen, consider whether a permissive pack (mdi/phosphor) already has the symbol.
 5. **At call sites**, prefer `<Icon icon="tabler:home" />` over hardcoded SVG. Use Iconify's pack:name format consistently.
 
-REJECT (5.6.r): any `.vue` file that registers icons via `addCollection()` outside `app.ts`'s canonical bootstrap. REJECT raw `<svg>` for reusable iconography (one-off illustrations are OK).
+**REJECT 46c** (§11): raw `<svg>` for reusable iconography — i.e. any icon-like SVG used in more than one component or styled like an icon (square aspect, currentColor fill, sized via font-size). One-off decorative/illustration SVGs (a single-use hero graphic, an empty-state drawing) are OK.
+**REJECT 46d** (§11): any `.vue` file (or any module other than `app.ts`'s canonical bootstrap) that registers icons via `addCollection()`.
+**REJECT 46e** (§11): icon-font CSS (Tabler-icons-font, Material Icons font, FontAwesome CSS, etc.) shipped alongside Iconify.
 
 ---
 
@@ -1456,6 +1506,8 @@ grep -r "window.confirm" src/  # should = 0
 
 Custom topics use colon-separated parts; `*` is wildcard.
 
+Cleanup: every `instance.on(pattern, cb)` returns an unsubscribe function. Store it and call it from `onUnmounted` — full pattern and anti-patterns in §3.9.
+
 ### 6.4 Layout API
 
 `host.layout` returns `null` outside managed-layout host. Always null-check before use. (Full reference: `host:src/proxy/shared/layout.ts:35-130`.)
@@ -1466,17 +1518,17 @@ Custom topics use colon-separated parts; `*` is wildcard.
 
 (Source body in §3.5; this section is verification-focused.)
 
-| # | Rule | REJECT? |
+| # | Rule | Severity (MUST → REJECT on violation; SHOULD → priority-3 fix, never blocks ACCEPT — see D.7 #5) |
 |---|---|---|
-| 7-1 | `createMemoryHistory()` (no arg) | yes |
-| 7-2 | `history.replace(initialPath)` BEFORE `createRouter` | yes |
-| 7-3 | `router.afterEach(to => host.onRouteChanged(to.fullPath, navId?))` | yes |
-| 7-4 | `on('@history', ...)` listener with null guard | yes |
-| 7-5 | catch-all `/:pathMatch(.*)*` route with `name: 'not-found'` | yes |
-| 7-6 | initial path = `config.context?.route ?? config.path ?? '/'`, normalized | yes |
-| 7-7 | leading-slash normalization in `@history` handler | yes |
-| 7-8 | echo-loop suppression via `navId` token | should |
-| 7-9 | `setLocalRouter(...)` registration for link classifier | should |
+| 7-1 | Router uses `createMemoryHistory()` (no arg) — satisfied by `createAppRouterFactory(...)` from `@wippy-fe/router`. The factory is the **canonical single solution**; hand-rolled routers are legacy and migrating to the factory is a SHOULD. | MUST |
+| 7-2 | `history.replace(initialPath)` BEFORE `createRouter` | MUST |
+| 7-3 | `router.afterEach(to => host.onRouteChanged(to.fullPath, navId?))` | MUST |
+| 7-4 | `on('@history', ...)` listener with null guard | MUST |
+| 7-5 | catch-all `/:pathMatch(.*)*` route with `name: 'not-found'` | MUST |
+| 7-6 | initial path = `config.context?.route ?? config.path ?? '/'`, normalized | MUST |
+| 7-7 | leading-slash normalization in `@history` handler | MUST |
+| 7-8 | echo-loop suppression via `navId` token | SHOULD |
+| 7-9 | `setLocalRouter(...)` registration for link classifier | SHOULD |
 
 If you persist last-route to localStorage, EXCLUDE ID-bearing routes (`/session/:id`, `/changes/:id`, etc.) — reload-after-delete lands on stale 404s otherwise (`incident:2H`).
 
@@ -1507,7 +1559,7 @@ Every module that ships a `Makefile` MUST also ship `make.bat` + `make.ps1` next
 
 - `make.bat` is a thin shim that invokes `make.ps1` via `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass`.
 - `make.ps1` mirrors every Makefile target one-for-one — `build-*`, `lint*`, `publish*`, `dev`, `clean`, etc. — so the same workflow runs on Linux, macOS, and Windows.
-- Keep `make.ps1` pure ASCII (no em-dashes, smart quotes) — Windows PowerShell 5.1 reads BOM-less files as Windows-1252 and corrupts non-ASCII chars on read.
+- Keep `make.ps1` pure ASCII (no em-dashes, smart quotes) — Windows PowerShell 5.1 reads BOM-less files as Windows-1252 and corrupts non-ASCII chars on read. **Verify:** `python -c "import sys; [print(f'L{i+1}: {repr(b)}') for i, line in enumerate(open('make.ps1','rb')) for b in [bytes(c for c in line if c >= 0x80)] if b]"` — any output is a violation. **Fix:** ASCII-ify (em-dash → `--`, smart-quotes → `'` / `"`, ellipsis → `...`) OR re-save as UTF-8 **with BOM** (`Set-Content -Encoding utf8BOM`). Pure-ASCII preferred; BOM is the workaround if non-ASCII is unavoidable.
 
 Reference: `gold:app-template/make.bat`, `gold:app-template/make.ps1`. The Makefile and the PS1 share their app/wc/lint lists as data tables, so adding a new build target is one line in each.
 
@@ -1528,7 +1580,7 @@ Mismatch symptom: `Failed to resolve module specifier 'pinia'` (`incident:8A`).
 ```bash
 grep -A 25 "external:" vite.config.ts | grep -oE "'[^']+'" | tr -d "'" | sort -u > /tmp/ext
 node -e 'const fs=require("fs");const m=fs.readFileSync("app.html","utf8").match(/<script type="importmap">([\\s\\S]+?)<\/script>/);console.log(Object.keys(JSON.parse(m[1]).imports).join("\n"))' | sort -u > /tmp/imp
-diff /tmp/ext /tmp/imp  # may show divergences (host's runtime importmap may add more); investigate each line
+diff /tmp/ext /tmp/imp  # divergences are expected for host-injected packages (`@wippy-fe/proxy` always; `@wippy-fe/markdown-iframe`, `@tanstack/vue-query`, `nanoevents` typically). For each `<` line (external but not in app.html importmap), confirm the host injects it — see host-less-mode.md L138-141. Any `>` line (in importmap but not external) is a real bug: the bundle is shipping that package instead of treating it as external.
 ```
 
 ### 8.4 Pre-publish gates
@@ -1610,6 +1662,8 @@ The plugin's `transformIndexHtml` hook injects the package.json `wippy` block in
 }
 </script>
 ```
+
+Required ordering in `<head>`: (1) plugin-injected `<script data-role="@wippy/package">` (top of `<head>`, before everything else); (2) author-written `<script type="importmap">`; (3) `<script src="…/dev-proxy.js" data-role="@wippy/scripts">`. dev-proxy is a non-module sync UMD script, so it does NOT consume the importmap, but the importmap must precede the `<script type="module" src="./src/app.ts">` later in the document. See host-less-mode.md L178, L185.
 
 Dev-proxy reads the JSON synchronously at boot and seeds:
 - proxy injection defaults from `wippy.proxy.injections`
@@ -1700,7 +1754,9 @@ The `<wippy-loading>` element is auto-registered by dev-proxy (and by the real h
 
 REJECT custom hand-rolled spinners.
 
-### 9.5 base: '' (relative paths) — REJECT if hardcoded
+### 9.5 base: '' (relative paths) — REJECT if hardcoded (universal rule, not host-less specific)
+
+> This rule applies in BOTH host-less and hosted modes — the host's `meta.url` + `meta.base_path` injection requires relative asset paths regardless of how the bundle boots. Opting out of host-less mode (§9 preamble, §12) does not opt you out of `base: ''`. See §0 L109, §3.4 L563.
 
 `base: ''` in vite.config produces relative `./app.js`, `./assets/...` paths in the built HTML/JS. The bundle is portable to any URL prefix and any mount point — host-managed, host-less dev, or moved between projects.
 
@@ -1718,7 +1774,7 @@ A hardcoded absolute base (e.g. `base: '/app/keeper/'`) ties the bundle to a spe
 
 ## 10. Verification recipes
 
-Run these before submitting. Each maps to a section.
+Run these before submitting. Each maps to a section. **Shell:** recipes are written in POSIX / Git Bash form (the assumed dev shell on Windows per project CLAUDE.md). Sub-agents that audit via the Grep MCP tool reproduce the same pattern + `--glob` filter — that counts as 'verbatim' for D.4 purposes; only the surrounding `for f in $(...)` plumbing is allowed to differ. **Coverage note:** §10 covers page-app structural / bootstrap / styling / hygiene checks plus host-less boot. Rules NOT covered by a §10 recipe (WC build matrix #11-14, WC structural #50-55a, child-CSS deep scan #42b/43a, iconify discipline #46c-e, bootstrap #24-26) are audited by direct file inspection; for these, D.7 anti-pattern #1 does NOT apply — sub-agents may grep with ad-hoc patterns provided the pattern is reported in the evidence column.
 
 <details>
 <summary><b>Additional guide for AI</b> — click to expand</summary>
@@ -1871,6 +1927,9 @@ REJECT a page that renders correctly in dark mode but is broken in light mode (o
 ### 10.8 Final gates
 
 ```bash
+# Moderator-only (D.1: sub-agents must not run install/build).
+# Prereq: `node_modules/` populated via `npm install` (idempotent if lockfile is current).
+# `npm test --if-present` returns 0 when no `test` script exists — that is the intended no-op.
 npx vue-tsc --build --force && \
 npm test --if-present -- --run && \
 npm run build && \
@@ -1883,7 +1942,7 @@ echo "ALL GATES PASS"
 
 ## 11. Acceptance criteria (REJECT rules)
 
-REJECT a submission if any of the following are true.
+REJECT a submission if any of the following are true. **Rule-ID conventions:** integer IDs (1, 2, …) are the original rules; suffixed IDs (5a, 42b, 43a, 46a–46e, 55a) were inserted later to keep stable references. Fix-list entries and §14 citations MUST use the full ID including any suffix (e.g. `§11.42b`, not `§11.42`).
 
 ### Manifest (§3.1, §4.1)
 1. `package.json.specification` is not `"wippy-component-1.0"`.
@@ -1986,7 +2045,7 @@ When you knowingly diverge from canonical, document it in your project's CLAUDE.
 | Deviation | Reason | Acceptable? |
 |---|---|---|
 | Triple-source initial path (`config.context.route → parent window URL → localStorage`) | Full-page reload recovery on apps that reload outside the host's normal navigation | YES |
-| `createPinia()` registered but no `defineStore` yet | Reserved for upcoming stores | BORDERLINE — clean up if no stores planned |
+| `createPinia()` registered but no `defineStore` yet | Reserved for upcoming stores | BORDERLINE — clean up if no stores planned; NO §11 rule fires (pinia plumbing is informational, not REJECT-grade) |
 | No PrimeVue plugin in app | App uses raw HTML buttons + custom CSS | YES (intentional UI choice) |
 | Custom `inlineCssPlugin` in vite.config | Single-file deployment | YES |
 | Raw `localStorage.*` for ad-hoc persistence keys (e.g. `@<app>/last-route`, `@<app>/theme`) | Avoid pinia overhead for one or two keys | DISCOURAGED. Prefer the canonical stack: facade module owns theme; `@wippy-fe/router` factory owns route restoration; `@wippy-fe/pinia-persist` owns durable state. Raw `localStorage` should be a measured exception in a leaf component, not the default. Modules that inherit a facade and a real router should not need it at all. |
@@ -2012,7 +2071,7 @@ Fix: override the gateway port via the `-o` flag. Examples:
 
 The `-o <module>:<entry>:<property>=<value>` form patches the registry entry's property at boot — no source edits required. For `wippy.yaml`-mapped properties, the path matches the registry coordinates. To set a *requirement default* (rather than overriding a configured value), use the `:default` suffix on the property name.
 
-For Vite (`5173`), kill the existing process or choose a different port via `vite --port <n>`. On Windows, kill by PID with `powershell -NoProfile -c "Stop-Process -Id <pid> -Force"`.
+For Vite (`5173`), kill the existing process or choose a different port via `vite --port <n>`. If the offending process was started via bg-manager (`bg_run`), kill it with `bg_kill <name>` first — only fall back to raw `Stop-Process -Id <pid>` for processes you did not start. On Windows the raw fallback is `powershell -NoProfile -c "Stop-Process -Id <pid> -Force"`.
 
 ### 13.2 Persistent `app.db`
 
@@ -2036,7 +2095,7 @@ Fix: keep peerDependencies, vite externals, and importmap in sync. Verification 
 
 ## 14. Gold-standard validation report
 
-The checklist's REJECT rules were validated against the two gold standards. Here's the per-rule result:
+The checklist's REJECT rules were validated against the two gold standards. Here's the per-rule result. **Method note:** rows of the form 'N-M (compound) | PASS via <derivation>' record a derived pass — one structural fact (e.g. using the canonical factory) guarantees the underlying rules. This is a deliberate exemption from D.7 anti-pattern #2 (which targets ad-hoc audit reports, not the curated gold-standard report); compound rows MUST cite the derivation source (file:line).
 
 <details>
 <summary><b>Additional guide for AI</b> — click to expand</summary>
@@ -2365,7 +2424,7 @@ resolution; otherwise ACCEPT.
 | P3 boot wippy / dev server | `mcp__bg-manager__bg_run` with `notifyReady: true` and `notifyPort: true` | use triggers, do not poll |
 | P3 browser check | `mcp__playwright` tools | snapshot, click, evaluate; emulate dark mode for §5.4 |
 | P3 HTTP smoke | `curl` via `sync_run` | one-shot status-code checks |
-| P4 gold-standard diff | `git diff --no-index gold/ target/` via `sync_run` | read-only, fast |
+| P4 gold-standard diff | `git diff --no-index <gold-path>/ <target>/` via `sync_run`, where `<gold-path>` resolves to `app-template-raw/frontend/applications/main/` (page apps) or `app-template-raw/frontend/web-components/mermaid/` (WCs) on disk | the `gold:` prefix in citations is purely notational — it does NOT name a directory |
 
 **Moderator-only tools** (sub-agents must not call these): `sync_run` and `bg_run` for builds/boots, `playwright` browser tools, any file-write tools.
 
