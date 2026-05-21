@@ -2030,6 +2030,11 @@ REJECT a submission if any of the following are true. **Rule-ID conventions:** i
 ### Build pipeline (§8)
 55a. *(downgraded to SHOULD — see §8.2)* — was: module ships `Makefile` without matching `make.bat` + `make.ps1` wrappers. Now: missing wrappers go into the fix_list at priority ≥ 3, never block ACCEPT (per D.7 #5). Keep here for reference; do NOT cite as a REJECT reason.
 
+### Wheels invention (§15)
+
+56. Code synthesizes or sniffs the proxy's underlying postMessage wire (e.g. `window.parent.postMessage({ action: 'cmd-...' })`, `addEventListener('message', e => e.data.action === 'cmd-...')`) instead of using `host.*` / `instance.on(...)` / `@wippy-fe/proxy`. See §15.5.
+57. Code reaches into undocumented host internals (`__wippy_*` globals, `window.parent.document.*` reads of host chrome, monkey-patching `host.*`, reverse-engineered message shapes). See §15.5. **NEVER hack into internal API.**
+
 ### Accessibility (§3.8)
 56. Icon-only `<button>` lacks `aria-label`.
 57. Clickable `<div @click>` lacks `role="button"` + `aria-label` + keyboard handler (should be `<button>`).
@@ -2167,6 +2172,168 @@ The checklist's REJECT rules were validated against the two gold standards. Here
 If this checklist's rules ever flag a gold standard as REJECT, the rule is wrong — not the gold standard. Update this doc; do NOT change the gold standard.
 
 The two gold standards are intentionally minimal (small surface, deliberately written, regularly maintained). Use them as paste-ready templates.
+
+---
+
+## 15. Wheels invention — what NOT to reinvent
+
+Wippy ships a deliberately broad set of npm packages, host primitives, PrimeVue components, and DOM markers. A module that hand-rolls equivalents of any of these is technically functional but creates **silent drift**: the shipped solutions get host-coordinated updates (security patches, protocol bumps, new features); hand-rolled equivalents don't. This section enumerates the reuse surface and the corresponding anti-patterns so an auditor can flag re-invention.
+
+Severity scope: most rules here are **SHOULD** — prefer the shipped solution; hand-roll only with a documented reason. The exception is §15.5 (postMessage-lookalike wires and host-internal hacks), which is **MUST/REJECT**.
+
+<details>
+<summary><b>Additional guide for AI</b> — click to expand</summary>
+
+- **Phase:** P1 Structural (grep imports + symbols) + P4 Cross-cutting (compare patterns against catalog). See Appendix D.
+- **Audit method:** for each anti-pattern below, run the listed grep; for each hit, check whether the shipped solution would cover it. Cite the gold equivalent (`@wippy-fe/<pkg>` or `host.<method>`) in the fix_list.
+- **Swarm split:** solo for small modules; for repos with ≥3 apps/WCs, one sub-agent per `frontend/applications/*` and per heavy `frontend/web-components/*`.
+- **Cite findings as:** `path:line` against §15.x; moderator routes MUST violations (§15.5) to §11 #55b and SHOULD violations to fix_list priority 2.
+
+</details>
+
+### 15.1 `@wippy-fe/*` npm package catalog
+
+These are the official packages — installed under `frontend/**/node_modules/@wippy-fe/`. All currently pinned at `0.0.32`. **Prefer the shipped exports over hand-rolled equivalents.**
+
+| Package | Purpose | Hand-roll target it replaces |
+|---|---|---|
+| `@wippy-fe/proxy` | Runtime bridge: auth'd HTTP (`api`), WebSocket (`ws`), host commands (`host`), events (`on`), state, logger, `sanitize`, link classifier, `loadWebComponent`/`loadByTagName`, `define`, `loadCss`, `addIcons` | hand-rolled axios + JWT injector; custom WS client; ad-hoc `window.parent.postMessage`; raw `sanitize-html` setup; naive `<a>` host-vs-child link guessing |
+| `@wippy-fe/router` | Memory-history factory `createAppRouter(routes, opts)`; host-aware `RouterLink` (= `AutoRouterLink`); link classifier re-export; `MOUNT_ROUTE_V1_REGEX` validators | hand-rolled `createMemoryHistory()` + `history.replace(initialPath)` + `router.afterEach(t => host.onRouteChanged(...))` + `on('@history', ...)` wiring + echo-loop suppression + `setLocalRouter` registration; bare `<a>` click handlers guessing host-nav vs child-nav |
+| `@wippy-fe/pinia-persist` | `createWippyPersist(opts)`, `preloadWippyState()`, `defineStore({ wippyPersist: true \| {pick, omit, debounce, scope} })` | custom `$subscribe` + `state.set/get` glue per store; ad-hoc localStorage fallback inside sandboxed iframe (does NOT survive remount); manual `@visibility`/`unload` flush handlers; bespoke per-instance scope prefixing |
+| `@wippy-fe/theme` | Shared Tailwind preset (`./tailwind.config`), CSS variables (`./theme-config.css`), PrimeVue plugin/stylesheets (`./primevue-plugin`, `./primevue/*`) | duplicating Wippy color palette / radii / `:root` vars; hand-rolling `app.use(PrimeVue, { theme: 'none' })`; re-listing `tailwindcss-primeui` + `tailwind-scrollbar` plugins; copy-pasting PrimeVue per-component `@apply` CSS |
+| `@wippy-fe/webcomponent-core` | `WippyElement` base class (shadow DOM + host CSS loading + schema-driven prop parsing + lifecycle); `define`, `parseProps`, `loadHostCss`, `injectInlineCss`; types `WippyElementConfig`, `WippyPropsSchema`, `HostCssKey` | ~170 lines of "manual shadow DOM + fetch CSS URLs + parse attributes + flip ElementInternals state" boilerplate per WC |
+| `@wippy-fe/webcomponent-vue` | `WippyVueElement` (Vue 3 on top of core: mounts app, installs Pinia, exposes `EVENT_PROVIDER` / `PROPS_PROVIDER` / `PROPS_ERROR_PROVIDER` for `inject()`); `vueConfig: { rootComponent, plugins, providers }` | hand-creating `createApp` + `createPinia` inside `connectedCallback`; manually bridging attribute changes to `ref()`s; hand-rolled `provide()` of props/errors/emit |
+| `@wippy-fe/vite-plugin` | `wippyPagePlugin()` (for `view.page`) + `wippyComponentPlugin()` (for `view.component`); emits `dist/wippy-meta.json`, injects `<script data-role="@wippy/package">`, validates `package.json` shape | hand-written Vite plugin reading `package.json`, inlining `file://` references, and `transformIndexHtml`-injecting the inline JSON tag; locally synthesized YAML metadata. (`wippyPackagePlugin()` is a deprecated alias — REJECT new code using the old name.) |
+| `@wippy-fe/shared` | Pure types + string-name constants shared with the host (no runtime, no proxy dep): `BroadcastEnvelope`, `LayoutBusBound`, `DropPosition`, `SizeValue`, `PixelSize`, `PanelTarget`, `GLOBAL_CONFIG_VAR`, `GLOBAL_PROXY_CONFIG_VAR`, `GLOBAL_API_PROVIDER`, `GLOBAL_WEB_COMPONENT_CACHE`, `WIPPY_SCRIPTS_DATA_ROLE`, `WIPPY_PACKAGE_DATA_ROLE` | hardcoded `'__WIPPY_APP_CONFIG__'` / `'@wippy/package'` literals scattered across the app; locally-redefined `BroadcastEnvelope` / `SizeValue` types |
+| `@wippy-fe/types-global-proxy` | Ambient TS declarations for `window.getWippyApi`, `$W`, `__WIPPY_APP_*` globals (srcdoc iframe variant). DevDep only. | hand-written `declare global { interface Window { ... } }` in every subapp |
+
+**Verify (sub-agent grep recipe per anti-pattern):**
+
+```bash
+# Hand-rolled axios setup instead of $W.api()
+grep -rEn "axios\.create" src/                      # SHOULD be 0
+# Hand-rolled createMemoryHistory wiring instead of @wippy-fe/router factory
+grep -rEn "createMemoryHistory" src/router/         # check: only via @wippy-fe/router
+# RouterLink imported from vue-router directly (instead of @wippy-fe/router's host-aware one)
+grep -rEn "from ['\"]vue-router['\"]" src/ | grep -i RouterLink   # SHOULD be 0 in subapps
+# Hardcoded shared constants
+grep -rEn "__WIPPY_APP_CONFIG__|'@wippy/(package|scripts)'" src/  # SHOULD use @wippy-fe/shared
+# Deprecated plugin name
+grep -rEn "wippyPackagePlugin" .                    # use wippyPagePlugin / wippyComponentPlugin
+# Manual customElements.define instead of @wippy-fe/proxy define(import.meta.url, ...)
+grep -rEn "customElements\.define" src/             # SHOULD use define(import.meta.url, X) only
+```
+
+### 15.2 PrimeVue 4.5.5 catalog — flag hand-rolled equivalents
+
+Source: `frontend/applications/main/node_modules/primevue/` (v4.5.5). When PrimeVue offers a component, hand-rolling a Vue equivalent is REJECT-level for level-3 escalation per §5.0 (custom Vue components are the LAST resort).
+
+**Form inputs:** `InputText`, `Textarea`, `Password`, `InputNumber`, `InputMask`, `InputOtp`, `Checkbox`, `RadioButton`, `ToggleSwitch`, `Slider`, `Rating`, `Knob`, `ColorPicker`, `FloatLabel`, `IconField`/`InputIcon`, `InputGroup`, `KeyFilter`.
+
+**Selection:** `Select` (the canonical name, alias `Dropdown`), `MultiSelect`, `CascadeSelect`, `Listbox`, `TreeSelect`, `AutoComplete`. **Common mistake:** wrapping native `<select>` — use `<Select>`.
+
+**Date/time:** `DatePicker` (alias `Calendar`). **Common mistake:** hand-rolling date inputs with `<input type="date">`.
+
+**Buttons:** `Button`, `ButtonGroup`, `SplitButton`, `SpeedDial`.
+
+**Data:** `DataTable` + `Column`/`ColumnGroup`/`Row`, `DataView`, `Tree`, `TreeTable`, `OrderList`, `PickList`, `VirtualScroller`, `Paginator`, `Timeline`, `OrganizationChart`. **Common mistake:** hand-rolling `<table>` with custom paging/sorting — use `<DataTable>`.
+
+**Panels:** `Accordion` (+ `AccordionPanel`/`AccordionHeader`/`AccordionContent`), `Tabs` (+ `TabList`/`Tab`/`TabPanels`/`TabPanel`), `Stepper`, `Card`, `Panel`, `Fieldset`, `Divider`, `ScrollPanel`, `Splitter`/`SplitterPanel`, `Toolbar`, `DeferredContent`, `Inplace`.
+
+**Overlay:** `Dialog`, `DynamicDialog` (+ `useDialog`), `ConfirmPopup`, `Drawer` (alias `Sidebar`), `Popover` (alias `OverlayPanel`), `Tooltip` (directive).
+**Wippy carve-out:** prefer `host.toast` / `host.confirm` over PrimeVue `<Toast>` + `useToast()` / `<ConfirmDialog>` + `useConfirm()` — see §6.2. Per-iframe `<Toast>` instances stack visually and miss the host-coordinated z-index policy.
+
+**Menu:** `Menu`, `Menubar`, `MegaMenu`, `TieredMenu`, `ContextMenu`, `PanelMenu`, `Breadcrumb`, `Steps`, `TabMenu`, `Dock`.
+
+**Feedback:** `Message`, `InlineMessage`, `Toast`, `ProgressBar`, `ProgressSpinner`, `Skeleton`, `Badge`, `OverlayBadge`, `Tag`, `Chip`, `MeterGroup`. **Common mistake:** hand-rolling a spinner — use `<wippy-loading>` (boot) or `<ProgressSpinner>` (in-content).
+
+**Media:** `Image`, `ImageCompare`, `Galleria`, `Carousel`, `Avatar`, `AvatarGroup`.
+
+**Misc:** `FileUpload` (don't hand-roll dropzones), `Editor` (Quill rich text), `Terminal`, `BlockUI`, `ScrollTop`, `Chart` (Chart.js wrapper).
+
+**Directives/services:** `Ripple`, `StyleClass`, `FocusTrap`, `AnimateOnScroll`, `BadgeDirective`; `ToastService`, `ConfirmationService`, `DialogService` (in Wippy, prefer the `host.*` equivalents).
+
+### 15.3 Ready-made WCs + `wc-content-kit` status
+
+**`wc-content-kit` is NOT vendored in this template.** Verified: no `**/wc-content-kit*` or `**/content-kit*` paths exist in `.wippy/vendor/` or anywhere in the repo; Wippy KB has no entry for the package's shipped tags. If `wc-content-kit` exists upstream, do not assume `<wippy-markdown>` / `<wippy-mermaid>` / `<wippy-chartjs>` tags are available here — the in-repo gold examples below are the canonical reusable WCs.
+
+**In-repo WCs (gold standards under `frontend/web-components/`)** — every Wippy template starts with these; before authoring a new WC, check whether one of them already does what you need:
+
+| Tag | Props (key ones) | What it renders |
+|---|---|---|
+| `<example-mermaid>` | `definition: string`, `transparent: boolean` | Mermaid diagrams (all types — flowchart, sequence, class, ER, state, xychart fast path; pie/gantt/mindmap fallback). Pass source via `props.definition`, never inline text. |
+| `<example-markdown>` | `content: string`, `allowedTags: string[]`, `allowedAttributes: string` (JSON) | Markdown → HTML via markdown-it + sanitize-html. Don't hand-roll markdown rendering. |
+| `<example-chart-circle>` | `labels: string[]`, `values: number[]`, `title: string` | Chart.js doughnut. Don't hand-roll donut SVG; extend chart-circle for new chart shapes. |
+| `<example-model-gallery>` | `showDetails: boolean`; emits `model-click {name, provider}` | Card grid pulling models via proxy `api.get`. |
+| `<example-reaction-bar>` | `reactions: string[]`, `allowMultiple: boolean`; emits `reaction-toggle` | Emoji reactions via `useEvents()`. |
+| `<example-websocket-log>` | `topics: string[]`, `maxEntries: number` | Terminal-style log over WebSocket subscriptions — don't hand-roll `new WebSocket()`. |
+| `<example-counter-persist>` | `keyPrefix: string`; emits `count-change {value}` | Pinia state persisted across iframe destruction. Reference implementation for persistence. |
+
+**Children-content pattern** (multi-line input that must survive Vue template compilation): use an inert `<template data-type="text/vnd.<mime>">…</template>` child element rather than inlining as text content. See `kb:web-component-development-guide`.
+
+### 15.4 Host primitives — use before any hand-roll
+
+Before reaching for a Vue component or npm package, check whether the host already provides a primitive.
+
+**DOM markers** (Appendix A):
+- `<wippy-loading title="...">` — boot spinner, auto-registered by dev-proxy and real host. **MUST** use instead of a custom spinner during app boot.
+- `<wippy-error>` — error placeholder.
+
+**HostApi methods** (Appendix B; injected via `HOST_API` key or `import { host } from '@wippy-fe/proxy'`):
+- `host.toast(opts)` — replaces PrimeVue `ToastService` (per-iframe Toast instances don't share z-index policy with the host).
+- `host.confirm(opts)` — replaces `window.confirm` AND PrimeVue `useConfirm()`.
+- `host.startChat`, `host.openSession`, `host.openArtifact`, `host.setContext`, `host.navigate`, `host.onRouteChanged`, `host.handleError`, `host.formatUrl`, `host.classifyLink`, `host.logout`.
+- `host.layout` — `LayoutApi` for `resizePanel` / `openDrawer` / `openModal` / `addFloating` / `broadcast`; null outside managed-layout host. Use this instead of hand-rolling resizable-panel logic.
+- **Deprecated:** `host.iframe.*` (use `host.*` instead). REJECT new code referencing `host.iframe.*`.
+
+**Dynamic WC loading:** `loadWebComponent(componentId, tagName?)` for artifact-delivered peers; `customElements.whenDefined('wc-x')` for registry-declared `auto_register + announced` peers. Never hardcode `/components/<peer>/dist/index.js`.
+
+**Importmap-provided externals** (gold `app.html`) — already resolvable, don't bundle or polyfill:
+- `vue`, `pinia`, `vue-router`, `axios`
+- `luxon` — dates (use instead of moment.js or hand-rolled date math)
+- `@iconify/vue` — icons (don't ship icon-font CSS; see §5.6 REJECT 46e)
+- `@wippy-fe/markdown-iframe` — host-injected markdown iframe
+- Host runtime importmap additionally provides `nanoevents`, `@wippy-fe/proxy`, `@tanstack/vue-query`
+
+### 15.5 Lookalike postMessage wires & host-internal hacks (MUST — REJECT)
+
+> **The wire is the host's internal contract. The proxy abstracts it for a reason — when the host changes the protocol (renames action types, adds origin checks, adds replay protection), code on the proxy path adapts automatically; code that hand-rolled the wire breaks silently.**
+
+**REJECT 56** (MUST): code that synthesizes or sniffs the proxy's underlying postMessage wire instead of going through `host.*` / `instance.on(...)` / `@wippy-fe/proxy`. Specifically:
+
+- `window.parent.postMessage({ action: 'cmd-navigate', ... }, '*')` — use `host.navigate(...)` / `host.onRouteChanged(...)`.
+- `window.addEventListener('message', e => { if (e.data.action === '...') ... })` — use `instance.on('@history', ...)` (or whatever event channel the proxy exposes for that signal).
+- Synthesizing message frames that look like proxy commands (`action: 'cmd-*'`, `type: 'wippy-host-*'`, etc.) to drive the host.
+- Reading or writing `event.data` shapes from postMessage frames to extract proxy-relayed data.
+
+**REJECT 57** (MUST — **NEVER** hack into internal API): code that reaches into undocumented host internals. Specifically:
+
+- `window.parent.__wippy_internal__*` / `window.top.__wippy_*` private globals.
+- Reverse-engineered message shapes copied from host source (e.g. matching on a host commit SHA's internal type strings).
+- Patches/monkey-patches to host-provided objects (`Object.assign(host, { ... })`, replacing `host.toast` with your own, etc.).
+- Direct DOM reads against host chrome (`window.parent.document.querySelector('.layout__sidebar')`) to bypass `host.layout.*`.
+
+Anything in this category is REJECT regardless of how well it works today — the host can change tomorrow, and these modules will silently break before anyone notices.
+
+**Verify:**
+
+```bash
+# postMessage lookalikes
+grep -rEn "postMessage\s*\(" src/                   # any hit → audit; legit ones are on instance.on
+grep -rEn "addEventListener\(['\"]message['\"]" src/ # legit ones MUST go through proxy
+grep -rEn "data\.action\s*===\s*['\"]cmd-" src/     # protocol-sniffing → REJECT 56
+# Host-internal hacks
+grep -rEn "__wippy" src/                            # any private global → REJECT 57
+grep -rEn "window\.(parent|top)\.document" src/     # reaching into host DOM → REJECT 57
+grep -rEn "Object\.assign\(host," src/              # monkey-patching host → REJECT 57
+```
+
+### 15.6 Adoption / preview-status callouts
+
+- **`@wippy-fe/router`** is installed in `applications/main` only. `applications/iframe-demo` and the 7 WCs don't have it; if any of them adds navigation, that's a re-invention.
+- **`@wippy-fe/pinia-persist`** is installed in `applications/main` and `web-components/counter-persist` only. Other WCs either don't persist OR are rolling their own — audit before any new WC lands.
+- **`@wippy-fe/shared`** is installed in every WC but NOT in either subapp. If a subapp ever touches `window.__WIPPY_APP_CONFIG__` or the layout-bus envelope shape, it should add the dep instead of hardcoding strings.
+- **Preview status:** `HostLayoutDeclaration`, `LayoutApi`, layout-bus, `wippyPagePlugin`/`wippyComponentPlugin`, and `@wippy-fe/shared` itself are labeled "Status: Draft 1 (preview). API may change between minor releases." Pin CDN version + flag for follow-up review when in use.
 
 ---
 
