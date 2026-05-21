@@ -2193,7 +2193,7 @@ Severity scope: most rules here are **SHOULD** — prefer the shipped solution; 
 
 ### 15.1 `@wippy-fe/*` npm package catalog
 
-These are the official packages — installed under `frontend/**/node_modules/@wippy-fe/`. All currently pinned at `0.0.32`. **Prefer the shipped exports over hand-rolled equivalents.**
+The official Wippy frontend packages on npm. **Prefer the shipped exports over hand-rolled equivalents** — these are the canonical wiring; the host coordinates version compatibility with them.
 
 | Package | Purpose | Hand-roll target it replaces |
 |---|---|---|
@@ -2224,9 +2224,9 @@ grep -rEn "wippyPackagePlugin" .                    # use wippyPagePlugin / wipp
 grep -rEn "customElements\.define" src/             # SHOULD use define(import.meta.url, X) only
 ```
 
-### 15.2 PrimeVue 4.5.5 catalog — flag hand-rolled equivalents
+### 15.2 PrimeVue catalog — flag hand-rolled equivalents
 
-Source: `frontend/applications/main/node_modules/primevue/` (v4.5.5). When PrimeVue offers a component, hand-rolling a Vue equivalent is REJECT-level for level-3 escalation per §5.0 (custom Vue components are the LAST resort).
+When PrimeVue offers a component, hand-rolling a Vue equivalent is REJECT-level for level-3 escalation per §5.0 (custom Vue components are the LAST resort). The catalog below covers PrimeVue 4.x — re-check the version in use (`npm ls primevue`) and consult the PrimeVue docs for additions in newer minors.
 
 **Form inputs:** `InputText`, `Textarea`, `Password`, `InputNumber`, `InputMask`, `InputOtp`, `Checkbox`, `RadioButton`, `ToggleSwitch`, `Slider`, `Rating`, `Knob`, `ColorPicker`, `FloatLabel`, `IconField`/`InputIcon`, `InputGroup`, `KeyFilter`.
 
@@ -2253,23 +2253,34 @@ Source: `frontend/applications/main/node_modules/primevue/` (v4.5.5). When Prime
 
 **Directives/services:** `Ripple`, `StyleClass`, `FocusTrap`, `AnimateOnScroll`, `BadgeDirective`; `ToastService`, `ConfirmationService`, `DialogService` (in Wippy, prefer the `host.*` equivalents).
 
-### 15.3 Ready-made WCs + `wc-content-kit` status
+### 15.3 Hub-first: check existing Wippy modules before authoring a new WC
 
-**`wc-content-kit` is NOT vendored in this template.** Verified: no `**/wc-content-kit*` or `**/content-kit*` paths exist in `.wippy/vendor/` or anywhere in the repo; Wippy KB has no entry for the package's shipped tags. If `wc-content-kit` exists upstream, do not assume `<wippy-markdown>` / `<wippy-mermaid>` / `<wippy-chartjs>` tags are available here — the in-repo gold examples below are the canonical reusable WCs.
+Before scaffolding a new web component, query the Wippy hub for an existing module that already ships what you need. The hub is the canonical distribution channel for reusable WCs — modules expose custom tags ready for `auto_register + announced` autoload, often with the polish a single-purpose hand-roll takes several iterations to match.
 
-**In-repo WCs (gold standards under `frontend/web-components/`)** — every Wippy template starts with these; before authoring a new WC, check whether one of them already does what you need:
+**Search the hub:**
 
-| Tag | Props (key ones) | What it renders |
-|---|---|---|
-| `<example-mermaid>` | `definition: string`, `transparent: boolean` | Mermaid diagrams (all types — flowchart, sequence, class, ER, state, xychart fast path; pie/gantt/mindmap fallback). Pass source via `props.definition`, never inline text. |
-| `<example-markdown>` | `content: string`, `allowedTags: string[]`, `allowedAttributes: string` (JSON) | Markdown → HTML via markdown-it + sanitize-html. Don't hand-roll markdown rendering. |
-| `<example-chart-circle>` | `labels: string[]`, `values: number[]`, `title: string` | Chart.js doughnut. Don't hand-roll donut SVG; extend chart-circle for new chart shapes. |
-| `<example-model-gallery>` | `showDetails: boolean`; emits `model-click {name, provider}` | Card grid pulling models via proxy `api.get`. |
-| `<example-reaction-bar>` | `reactions: string[]`, `allowMultiple: boolean`; emits `reaction-toggle` | Emoji reactions via `useEvents()`. |
-| `<example-websocket-log>` | `topics: string[]`, `maxEntries: number` | Terminal-style log over WebSocket subscriptions — don't hand-roll `new WebSocket()`. |
-| `<example-counter-persist>` | `keyPrefix: string`; emits `count-change {value}` | Pinia state persisted across iframe destruction. Reference implementation for persistence. |
+```bash
+./wippy.exe search <keyword>           # text search across hub modules
+./wippy.exe search wc-content          # find content/widget kits
+./wippy.exe search markdown            # find modules shipping markdown rendering
+./wippy.exe search chart               # find chart kits
+```
 
-**Children-content pattern** (multi-line input that must survive Vue template compilation): use an inert `<template data-type="text/vnd.<mime>">…</template>` child element rather than inlining as text content. See `kb:web-component-development-guide`.
+**Common reuse target — `wc-content-kit`-style content kits.** Wippy hub publishes module bundles that pack commonly-needed content tags as a single dependency (e.g. `wc-content-kit` ships markdown rendering, mermaid diagrams, chart kits, code highlighting, and similar widgets). Adding one such module gives every page in your app access to those tags without authoring or vendoring them individually. Other `wc-*` kits in the hub bundle related families (forms, dashboards, telemetry, etc.) — always check the hub before reaching for a hand-roll.
+
+**Adopt a hub module:**
+
+1. `./wippy.exe add <namespace>/<module>` — adds it to `wippy.lock`.
+2. `./wippy.exe install` — fetches into `.wippy/vendor/`.
+3. Reference the WC tags directly in your templates — the host's autoload pipeline (`view.component` entries with `announced: true` + `auto_register: true`) makes them available app-wide. Use `await customElements.whenDefined('<tag>')` if you need to gate code on registration.
+
+**SHOULD criterion:** authoring a new WC for a common need (markdown rendering, mermaid diagrams, doughnut/line/bar charts, terminal-style logs, reaction bars, persistent counters, model galleries, file pickers, etc.) without first checking whether a hub module already provides it. Hand-rolling is acceptable only when:
+
+- the hub doesn't ship it, AND
+- existing options would require more customization than reimplementing, AND
+- the deviation is documented (per §12 known intentional deviations).
+
+**Children-content pattern** (when authoring a WC where multi-line input must survive Vue template compilation): use an inert `<template data-type="text/vnd.<mime>">…</template>` child element rather than inlining as text content. See `kb:web-component-development-guide`.
 
 ### 15.4 Host primitives — use before any hand-roll
 
@@ -2330,10 +2341,9 @@ grep -rEn "Object\.assign\(host," src/              # monkey-patching host → R
 
 ### 15.6 Adoption / preview-status callouts
 
-- **`@wippy-fe/router`** is installed in `applications/main` only. `applications/iframe-demo` and the 7 WCs don't have it; if any of them adds navigation, that's a re-invention.
-- **`@wippy-fe/pinia-persist`** is installed in `applications/main` and `web-components/counter-persist` only. Other WCs either don't persist OR are rolling their own — audit before any new WC lands.
-- **`@wippy-fe/shared`** is installed in every WC but NOT in either subapp. If a subapp ever touches `window.__WIPPY_APP_CONFIG__` or the layout-bus envelope shape, it should add the dep instead of hardcoding strings.
-- **Preview status:** `HostLayoutDeclaration`, `LayoutApi`, layout-bus, `wippyPagePlugin`/`wippyComponentPlugin`, and `@wippy-fe/shared` itself are labeled "Status: Draft 1 (preview). API may change between minor releases." Pin CDN version + flag for follow-up review when in use.
+- **Per-package adoption is opt-in.** Just because `@wippy-fe/router` (or any other package in §15.1) exists in the hub doesn't mean every module in the workspace pulled it in. Before assuming a module "uses the canonical router", check its `package.json` — if `@wippy-fe/router` is absent and the module has navigation logic, that navigation is hand-rolled and is a §15.1 re-invention finding.
+- **Cross-module consistency check:** if multiple modules sit in the same repo, audit them as a set — one module pulling `@wippy-fe/<pkg>` and another rolling its own equivalent of the same thing is a fix-list item even if both individually work.
+- **Preview status:** several APIs are explicitly labeled "Status: Draft 1 (preview). API may change between minor releases." — including `HostLayoutDeclaration`, `LayoutApi`, the layout bus, `wippyPagePlugin` / `wippyComponentPlugin`, and `@wippy-fe/shared`. Code depending on these MUST pin the CDN version (no floating `^`/`~` ranges) and SHOULD be flagged for follow-up review on every minor release.
 
 ---
 
