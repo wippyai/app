@@ -1553,17 +1553,15 @@ Rules:
 
 Each module that publishes a frontend MUST have its own `build-<app>-frontend` target. Add to `publish-*` chains.
 
-### 8.2 `make.bat` + `make.ps1` are required (every module, every time)
+### 8.2 `make.bat` + `make.ps1` (SHOULD ship alongside `Makefile`)
 
-Every module that ships a `Makefile` MUST also ship `make.bat` + `make.ps1` next to it. **No "if your team runs on Windows" carve-out** — Wippy modules are written by mixed teams and audited on mixed machines, and the wrapper is small enough that there is no reason not to have it.
+Every module that ships a `Makefile` SHOULD also ship `make.bat` + `make.ps1` next to it so the same workflow runs on Linux, macOS, and Windows without requiring a `make` install on Windows. This is a SHOULD because the wrapper is value-add for mixed-OS teams, not a runtime correctness requirement — a module is functionally complete with the `Makefile` alone.
 
 - `make.bat` is a thin shim that invokes `make.ps1` via `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass`.
-- `make.ps1` mirrors every Makefile target one-for-one — `build-*`, `lint*`, `publish*`, `dev`, `clean`, etc. — so the same workflow runs on Linux, macOS, and Windows.
-- Keep `make.ps1` pure ASCII (no em-dashes, smart quotes) — Windows PowerShell 5.1 reads BOM-less files as Windows-1252 and corrupts non-ASCII chars on read. **Verify:** `python -c "import sys; [print(f'L{i+1}: {repr(b)}') for i, line in enumerate(open('make.ps1','rb')) for b in [bytes(c for c in line if c >= 0x80)] if b]"` — any output is a violation. **Fix:** ASCII-ify (em-dash → `--`, smart-quotes → `'` / `"`, ellipsis → `...`) OR re-save as UTF-8 **with BOM** (`Set-Content -Encoding utf8BOM`). Pure-ASCII preferred; BOM is the workaround if non-ASCII is unavoidable.
+- `make.ps1` mirrors every Makefile target one-for-one — `build-*`, `lint`, `clean-build`, `dev`, `run`, etc. — driven by data tables (apps, wcs, lintDirs) that match the Makefile's recipe set.
+- Keep `make.ps1` pure ASCII (no em-dashes, smart quotes). Windows PowerShell 5.1 reads BOM-less files as Windows-1252 and corrupts non-ASCII chars on read. **Verify:** `python -c "import sys; [print(f'L{i+1}: {repr(b)}') for i, line in enumerate(open('make.ps1','rb')) for b in [bytes(c for c in line if c >= 0x80)] if b]"` — any output is a violation. **Fix:** ASCII-ify (em-dash → `--`, smart-quotes → `'` / `"`, ellipsis → `...`) OR re-save as UTF-8 **with BOM** (`Set-Content -Encoding utf8BOM`). Pure-ASCII preferred; BOM is the workaround if non-ASCII is unavoidable.
 
-Reference: `gold:app-template/make.bat`, `gold:app-template/make.ps1`. The Makefile and the PS1 share their app/wc/lint lists as data tables, so adding a new build target is one line in each.
-
-REJECT a module that ships `Makefile` without matching `make.bat` + `make.ps1`.
+Reference: this repo's own `make.bat` + `make.ps1` at the repo root.
 
 ### 8.3 Externals + importmap + peerDeps three-way sync
 
@@ -2030,7 +2028,7 @@ REJECT a submission if any of the following are true. **Rule-ID conventions:** i
 55. WC has `wippy.path` (page-only field) or `wippy.proxy` (page-only block).
 
 ### Build pipeline (§8)
-55a. Module ships `Makefile` without matching `make.bat` + `make.ps1` wrappers (§8.2).
+55a. *(downgraded to SHOULD — see §8.2)* — was: module ships `Makefile` without matching `make.bat` + `make.ps1` wrappers. Now: missing wrappers go into the fix_list at priority ≥ 3, never block ACCEPT (per D.7 #5). Keep here for reference; do NOT cite as a REJECT reason.
 
 ### Accessibility (§3.8)
 56. Icon-only `<button>` lacks `aria-label`.
