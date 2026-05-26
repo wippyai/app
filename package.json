@@ -1,0 +1,17 @@
+{
+  "name": "app-template-raw",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wippy app-template-raw — top-level package.json scoped to the e2e suite. Per-app builds live under frontend/applications/*/package.json.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:bridge": "playwright test e2e/bridge.spec.ts",
+    "test:e2e:warn-suppressor": "playwright test e2e/warn-suppressor.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.0",
+    "dotenv": "^16.4.5"
+  }
+}
