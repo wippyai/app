@@ -2034,6 +2034,7 @@ REJECT a submission if any of the following are true. **Rule-ID conventions:** i
 
 56. Code synthesizes or sniffs the proxy's underlying postMessage wire (e.g. `window.parent.postMessage({ action: 'cmd-...' })`, `addEventListener('message', e => e.data.action === 'cmd-...')`) instead of using `host.*` / `instance.on(...)` / `@wippy-fe/proxy`. See §15.5.
 57. Code reaches into undocumented host internals (`__wippy_*` globals, `window.parent.document.*` reads of host chrome, monkey-patching `host.*`, reverse-engineered message shapes). See §15.5. **NEVER hack into internal API.**
+57a. Code embeds a Wippy `view.page` inside another `view.page` by writing a raw `<iframe src="/c/<page-id>">` (or any other handler that points at a `/c/<id>` host-facade route). Hitting `/c/<id>` returns the FULL Wippy host wrapper HTML — host shell + chat sidebar + auth + WebSocket + AppConfig + nested iframe to the actual FE bundle — so the inner iframe ends up being a second, fully-rehydrated Wippy host runtime nested inside the first. Use `<w-artifact type="page" id="<page-id>">` instead (see §15.7 + `proxy-api.md` § "`<w-artifact>` Web Component"). **SUPER ANTI-PATTERN** — see §15.7 for the nesting diagram, the resource cost, and the canonical fix.
 
 ### Accessibility (§3.8)
 56. Icon-only `<button>` lacks `aria-label`.
@@ -2338,6 +2339,61 @@ grep -rEn "__wippy" src/                            # any private global → REJ
 grep -rEn "window\.(parent|top)\.document" src/     # reaching into host DOM → REJECT 57
 grep -rEn "Object\.assign\(host," src/              # monkey-patching host → REJECT 57
 ```
+
+### 15.7 🚫 SUPER ANTI-PATTERN — nested `<iframe src="/c/<id>">` host shells (MUST — REJECT 57a)
+
+> **The `/c/<id>` route is the Wippy host's PUBLIC entry — it serves the ENTIRE host runtime page (host shell + chat + auth + WS + AppConfig + nested iframe to the FE bundle). Never embed it inside another Wippy iframe.**
+
+When a `view.page` (call it P1) renders a raw `<iframe src="/c/<some-other-page-id>">`, the browser fetches that URL from the gateway. The gateway responds with the same `wippy/facade`-rendered HTML it serves for ANY top-level navigation to that page — meaning the response IS the complete Wippy host wrapper, NOT just the FE bundle. So the inner iframe contains:
+
+```
+Browser tab
+ └─ Wippy host shell (gen-2-chat, level 0)
+     └─ iframe srcdoc → P1 bundle (level 1)
+         └─ <iframe src="/c/P2:main">                    ← THE ANTI-PATTERN
+             └─ ANOTHER complete Wippy host shell (level 2)
+                 └─ iframe srcdoc → P2 bundle (level 3)
+```
+
+Each level-2 host shell instance:
+
+- Spawns its own WebSocket connection to `/api/ws`.
+- Runs its own auth bootstrap.
+- Holds its own `AppConfig` (duplicates `theming.global.cssVariables` + `customCSS` injection from scratch).
+- Instantiates its own chat sidebar + nav chrome (often hidden but still constructed).
+- Doubles ALL host proxy injections — `iframe.css`, `theme-config.css`, `primevue.css`, `@wippy/scripts`, etc. — into the new iframe.
+- Adds an extra `postMessage` proxy hop between the level-3 child and the outermost browser frame.
+
+There is **zero functional gain** from this nesting — the inner page already gets every host-managed capability it needs through the canonical `<w-artifact>` primitive (below). It just doubles the resource cost + halves debuggability (every action now has a "which host?" question).
+
+**Canonical fix:** `<w-artifact type="page" id="<page-id>">` (introduced in gen-2-chat 1.0.33, fully documented in `proxy-api.md` § "`<w-artifact>` Web Component"). It:
+
+- Fetches just the FE bundle via the proxy's authenticated `api` instance against `/api/public/pages/content/<id>`, NOT the host wrapper.
+- Mounts the bundle inside a SINGLE sandboxed iframe under the EXISTING host's bridge.
+- Auto-bridges all iframe → host commands and proxy injections — the inner iframe inherits the parent host's `@wippy/scripts`, `customCSS`, and `cssVariables` without re-instantiating the host shell.
+- Exposes lifecycle events (`loading` / `load` / `error` / `size`) + Shadow Parts (`loader` / `error` / `frame`) for styling.
+- Supports `auto-height` for CmdBodySize-driven auto-resize.
+
+```vue
+<!-- ❌ DO NOT DO THIS -->
+<iframe :src="`/c/${pluginId}`" sandbox="allow-scripts allow-same-origin" />
+
+<!-- ✅ DO THIS INSTEAD -->
+<w-artifact type="page" :id="pluginId" auto-height />
+```
+
+The same anti-pattern applies to any handler that builds an `/c/<id>` URL and stuffs it into an iframe — `host.openWindow({ url: '/c/...' })`, dynamic `iframe.src = '/c/...'`, etc. The URL is for top-level navigation only.
+
+**Verify:**
+
+```bash
+# Raw iframe pointing at /c/<id>
+grep -rEn "iframe[^>]*src=[\"']/c/" src/                # template literal form
+grep -rEn ":src=[\"']/c/\\\$\\{" src/                    # Vue :src binding form
+grep -rEn "/c/\\\$\\{[^}]+\\}" src/                       # any URL synthesis pointing at /c/<id>
+```
+
+If a hit isn't a top-level `<a href>` / `router.push` / `host.navigate` target, it is REJECT 57a.
 
 ### 15.6 Adoption / preview-status callouts
 
