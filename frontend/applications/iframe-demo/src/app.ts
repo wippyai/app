@@ -1,3 +1,4 @@
+import * as wippyProxy from '@wippy-fe/proxy'
 import { createApp } from 'vue'
 import App from './app/app.vue'
 import { HOST_API, AXIOS_INSTANCE, WIPPY_INSTANCE } from './constants'
@@ -17,6 +18,12 @@ export async function createMainApp() {
     : '/'
 
   const app = createApp(App)
+
+  // Namespace-import probe — older @wippy-fe/proxy bundles (< 0.0.33) lack
+  // this export. Named imports throw at module-load when missing; namespace
+  // doesn't. Drop the cast once the published d.mts catches up.
+  ;(wippyProxy as unknown as { installVueWarnSuppressor?: (a: typeof app) => void })
+    .installVueWarnSuppressor?.(app)
 
   app.provide(HOST_API, hostApi)
   app.provide(AXIOS_INSTANCE, axios)

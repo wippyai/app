@@ -1,11 +1,11 @@
-import type { HostApi } from '../types'
-import { createMemoryHistory, createRouter } from 'vue-router'
 import type { Router } from 'vue-router'
+import type { HostApi, ProxyApiInstance } from '../types'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
-type OnSubscription = (
-  pattern: string,
-  callback: (event: { path?: string; message?: unknown }) => void,
-) => void
+// Reuse the proxy's exact `on()` typing instead of redeclaring a looser
+// alias — gives correct `@history` callback inference and tracks upstream
+// signature changes automatically.
+type ProxyOn = ProxyApiInstance['on']
 
 const routes = [
   {
@@ -29,13 +29,18 @@ const routes = [
     component: () => import('../pages/mermaid.vue'),
   },
   {
+    path: '/bridge',
+    name: 'bridge',
+    component: () => import('../pages/bridge.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     redirect: '/',
   },
 ]
 
-export function createAppRouter(host: HostApi, on: OnSubscription | null, initialPath: string): Router {
+export function createAppRouter(host: HostApi, on: ProxyOn | null, initialPath: string): Router {
   const history = createMemoryHistory()
   history.replace(initialPath)
   const router = createRouter({ history, routes })
@@ -46,11 +51,11 @@ export function createAppRouter(host: HostApi, on: OnSubscription | null, initia
 
   if (on) {
     on('@history', ({ path }) => {
-      if (!path) return
-      const normalized = path.startsWith('/') ? path : '/' + path
-      if (router.currentRoute.value.fullPath !== normalized) {
+      if (!path)
+        return
+      const normalized = path.startsWith('/') ? path : `/${path}`
+      if (router.currentRoute.value.fullPath !== normalized)
         router.push(normalized)
-      }
     })
   }
 
