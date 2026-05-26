@@ -2,13 +2,14 @@ import 'dotenv/config'
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * Playwright config for the app-template-raw e2e suite.
+ * Playwright config for the app-template e2e suite.
  *
  * Expects:
- *  - wippy server running on :8086 (or whatever `WIPPY_URL` is set to)
- *    See `make.ps1` / Makefile in this repo to build the FE bundles.
- *  - gen-2-chat dev server on :5173 (for the iframe-host UI). Run from
- *    `Projects/gen-2-chat` with `pnpm dev`.
+ *  - wippy server running on :8086 (or whatever `WIPPY_URL` is set to).
+ *    See `make.bat` / `make.ps1` in this repo to build the FE bundles.
+ *  - Wippy FE Host dev server on :5173 (for the iframe-host UI). Repo:
+ *    git@git.spiralscout.com:estimation-engine/gen-2-chat.git
+ *    Run with `pnpm dev:site`.
  *
  * Auth: the suite uses the seeded admin credentials from `.env`
  * (`USERSPACE_USER_DEFAULT_ADMIN_EMAIL` / `_PASSWORD`). The `dotenv/config`

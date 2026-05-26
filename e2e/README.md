@@ -1,18 +1,18 @@
-# app-template-raw e2e tests
+# app-template e2e tests
 
 End-to-end tests for the proxy bridge API + `<w-iframe>` / `<w-artifact>`
-custom elements introduced in gen-2-chat 1.0.33.
+custom elements introduced in Wippy FE Host 1.0.33.
 
 ## Prerequisites
 
 Order matters. `make.bat clean-build` produces the static bundles wippy
-serves; it does NOT depend on the gen-2-chat dev server. Wippy then needs
-the dev server reachable at `:5173` so it can resolve the facade URL.
+serves; it does NOT depend on the Wippy FE Host dev server. Wippy then
+needs the dev server reachable at `:5173` so it can resolve the facade
+URL.
 
 1. **Install the e2e suite's deps** (root `package.json` covers Playwright +
    dotenv + @types/node):
-   ```powershell
-   cd C:/Projects/app-template-raw
+   ```sh
    pnpm install
    npx playwright install chromium
    ```
@@ -20,40 +20,42 @@ the dev server reachable at `:5173` so it can resolve the facade URL.
    `USERSPACE_USER_DEFAULT_ADMIN_PASSWORD` — copy `.env.example` if you
    have not already. `playwright.config.ts` loads it via `dotenv/config`.
 
-2. **Build FE bundles** into wippy's serving path:
-   ```powershell
-   cd C:/Projects/app-template-raw
+2. **Build FE bundles** into wippy's serving path (from the repo root):
+   ```sh
    ./make.bat clean-build
    ```
 
-3. **Start gen-2-chat dev server** on `:5173` so the facade URL resolves:
-   ```powershell
-   cd C:/Projects/gen-2-chat
+3. **Start Wippy FE Host dev server** on `:5173` so the facade URL
+   resolves. Clone + run from a sibling checkout:
+   ```sh
+   git clone git@git.spiralscout.com:estimation-engine/gen-2-chat.git wippy-fe-host
+   cd wippy-fe-host
+   pnpm install
    pnpm dev:site --host
    ```
 
-4. **Start wippy** on `:8086`:
-   ```powershell
-   cd C:/Projects/app-template-raw
+4. **Start wippy** on `:8086` (from this repo's root):
+   ```sh
    ./wippy.exe run -c -o app:gateway:addr=:8086 -o wippy.facade:fe_facade_url:default=http://localhost:5173
    ```
 
 ## Run
 
-```powershell
-cd C:/Projects/app-template-raw
+From the repo root:
+
+```sh
 pnpm test:e2e
 ```
 
 Or for the bridge spec only:
 
-```powershell
+```sh
 pnpm test:e2e:bridge
 ```
 
 To see the browser:
 
-```powershell
+```sh
 pnpm test:e2e:headed
 ```
 

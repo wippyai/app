@@ -2,7 +2,7 @@
 // Self-contained bridge demo (1.0.33).
 //
 // Demonstrates the channel-based `host.bridge.post / request / on` API
-// without depending on the gen-2-chat host attaching any listener. The
+// without depending on the Wippy FE Host attaching any listener. The
 // page spawns its OWN child via a nested `<w-iframe srcdoc="...">` —
 // `bridge.vue` plays the PARENT role; the inline srcdoc plays the CHILD.
 //

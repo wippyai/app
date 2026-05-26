@@ -1,6 +1,6 @@
 /**
  * End-to-end test for the proxy bridge API + <w-iframe> custom element
- * introduced in gen-2-chat 1.0.33.
+ * introduced in Wippy FE Host 1.0.33.
  *
  * The test exercises the bridge demo page (iframe-demo /bridge route).
  * The demo is a self-contained fixture: bridge.vue plays the PARENT
