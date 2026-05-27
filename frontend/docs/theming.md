@@ -146,6 +146,42 @@ Mismatched placement is the #1 source of theme drift. The bundle's `.css` ships 
 
 The compliance checklist enforces this at REJECT severity (REJECT 42b for `:root { --p-* }` in child `.css`, REJECT 43a for raw `.p-*` selectors in child `.css`).
 
+### The theming rule — non-optional. Read first, follow vigorously.
+
+**Apply this rule before writing the first selector in any Wippy frontend module.** It governs every FE component you ship.
+
+Wippy supports two micro-frontend embedding technologies:
+
+- **Page apps in iframes** (e.g. `chat`, `automations`, an admin module loaded via `<iframe>`)
+- **Web components in shadow DOM** (custom-element widgets the host loads dynamically)
+
+Both consume the proxy API. Both receive the facade's `cssVariables` and `customCSS` injected into their layer. Both MUST follow this rule, or visual consistency across the app breaks. No exceptions, no per-module carve-outs.
+
+#### Why the rule exists — the vocabulary law
+
+A consumer module is written without knowing what specific classes or custom vars any particular host will define. So even though facade CSS reaches the layer (page-app iframe `<head>` or WC shadow root), consumers can only USE what they already know. **Exactly four vocabularies are universally known across every Wippy consumer:**
+
+1. **`--p-*` CSS variables.** Every Wippy host ships `theme-config.css`. Reference `var(--p-text-color)`, `var(--p-danger-500)`, etc. — host-overridden values apply automatically. Light/dark flips for free because `--p-*` tokens are theme-aware.
+2. **PrimeVue class names.** Every Wippy host ships PrimeVue. Render `<button class="p-button">`, `<div class="p-dialog">`, etc. — the host's `.p-button { … }` override applies inside your layer.
+3. **Tailwind utility classes** — only when the host injects preflight + utilities. Verify before relying. When present, use `class="bg-danger-500"` etc.
+4. **Generic element / global selectors.** `body`, `html`, `*`, `@font-face`, `*::-webkit-scrollbar`, `:focus-visible`. These reach any DOM tree by targeting elements/properties, not class names. Facade `body { font-family: Inter }`, `* { scrollbar-width: thin }`, `@font-face` registrations all propagate across shadow boundaries automatically.
+
+**Everything outside those four is layer-local.** Custom class names, custom var names — the facade injects them into every consumer's layer, but no host or peer module knows to use them, so the rules never match anything. Project-private styles stay sealed inside the layer that defines them, no matter how aggressively you try to push them out.
+
+#### The two-question test — answer both before writing any CSS
+
+**1. Semantic or decorative?**
+- **Semantic** (error / warn / success / info / help): use the `--p-{danger,warn,success,info,help}-*` ladder. NEVER project-mint a parallel — there is nothing it can do that the canonical ladder doesn't, and minting it breaks inheritance for any consumer that doesn't know your private name.
+- **Decorative** (brand red, signature gold, plugin marker): raw value or project token (`--brand-*` / `--lt-*` / etc.). Write a one-line comment naming WHY this is decorative, not semantic. The comment is the audit trail; without it, the next contributor can't tell the difference and gets the rule wrong.
+
+**2. Layer-local or shared?**
+- **Layer-local** (only this module renders elements that use it): keep in the module's own CSS. Ideal: derive via `color-mix(var(--p-*), ...)` so it auto-flips light/dark.
+- **Shared** (must affect WCs, sibling iframes, or nested consumers): the value or rule MUST (a) live in facade `cssVariables` / `customCSS` AND (b) speak one of the four vocabularies above. There is no other path to cross-layer inheritance.
+
+#### Want inheritance? Customize the PrimeVue theme.
+
+`--p-*` tokens and `.p-*` selectors are the only stable shared vocabulary across host + iframes + web components + third-party deps. Mint a custom class name or custom var name and you have opted yourself out of inheritance — full stop. If "use PrimeVue + Tailwind" feels rigid, that's the point: rigidity is what makes inheritance work.
+
 ---
 
 ## What the Wippy host provides (the substrate)
