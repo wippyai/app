@@ -21,6 +21,18 @@ wippy run -c          # 4. start the runtime
 
 The whole loop is `wippy install` → `make build` → `wippy run`, then edit through Keeper.
 
+## Editing the app live (self-modification)
+
+This template ships with **Keeper** (`keeper/keeper`), a development console mounted at `/app/keeper`. Keeper makes the running app **self-modifying** — the application and the tool that edits it are the same process, so you change the app from the browser without restarting:
+
+- **Registry editing** — edit entries on a branch and publish them through governance.
+- **`src/**` sync** — `sync_from_fs` reconciles your on-disk source with the running registry (and `sync_to_fs` writes back).
+- **Component builder** — write, build, and preview frontend web components in place.
+- **Inspect** — browse dataflows, sessions, logs, and SQL against the live instance.
+- **MCP** — the same operations are exposed at `/keeper-mcp/` so AI agents can drive them.
+
+Because the app can rewrite its own registry, treat Keeper access as admin-level and gate it in production.
+
 ## Development
 
 ```bash
