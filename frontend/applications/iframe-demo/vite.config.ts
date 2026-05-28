@@ -3,15 +3,11 @@ import vue from '@vitejs/plugin-vue'
 import { wippyPagePlugin } from '@wippy-fe/vite-plugin'
 import { defineConfig } from 'vite'
 
+// Runtime suppression via `installVueWarnSuppressor` (src/app.ts) instead
+// of build-time `isCustomElement` — only runtime sees dynamic autoload tags.
 export default defineConfig({
   plugins: [
-    vue({
-      template: {
-        compilerOptions: {
-          isCustomElement: (tag) => tag.startsWith('example-') || tag.startsWith('wippy-'),
-        },
-      },
-    }),
+    vue(),
     wippyPagePlugin(),
   ],
   base: '',

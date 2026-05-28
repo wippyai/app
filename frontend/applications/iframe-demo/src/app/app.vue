@@ -9,6 +9,7 @@ const tabs = [
   { path: '/chart', name: 'chart', label: 'Chart', icon: 'tabler:chart-pie' },
   { path: '/counter', name: 'counter', label: 'Counter', icon: 'tabler:plus-minus' },
   { path: '/mermaid', name: 'mermaid', label: 'Mermaid', icon: 'tabler:git-merge' },
+  { path: '/bridge', name: 'bridge', label: 'Bridge', icon: 'tabler:arrows-exchange' },
 ]
 
 const currentName = computed(() => route.name)
@@ -51,7 +52,7 @@ onMounted(() => {
     </header>
 
     <main class="flex-1 overflow-y-auto p-3 bg-surface-0 dark:bg-surface-900">
-      <router-view />
+      <RouterView />
     </main>
   </div>
 </template>
