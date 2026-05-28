@@ -142,6 +142,28 @@ entries:
       - name: target_db
         value: app:db
 
+  - name: keeper
+    kind: ns.dependency
+    component: keeper/keeper
+    version: '>=v0.5.18'
+    parameters:
+      - name: api_router
+        value: app:api
+      - name: app_db
+        value: app:db
+      - name: admin_scope
+        value: app.security:admin
+      - name: env_storage
+        value: app.env:store
+      - name: public_gateway
+        value: app:gateway
+      - name: mcp_route
+        value: /keeper-mcp/
+      - name: ui_server
+        value: app:gateway
+      - name: process_host
+        value: app:processes
+
   - name: facade
     kind: ns.dependency
     component: wippy/facade
