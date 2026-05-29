@@ -1,21 +1,37 @@
 # Wippy Application Template
 
-A starter Wippy application with user management, AI assistant, and admin frontend.
+A starter Wippy application: user management, an AI assistant, an admin frontend, and the **Keeper** console for editing the app live.
 
 ## Prerequisites
 
-- [Wippy CLI](https://wippy.ai)
+- [Wippy CLI](https://wippy.ai) — the `wippy` binary on your `PATH`
 - Node.js 18+
 
-## Quick Start
+## Quick start
 
 ```bash
-cp .env.example .env
-make build
-wippy run -c
+wippy install         # 1. download backend modules from the hub into .wippy/
+cp .env.example .env  # 2. configure environment
+make build            # 3. build the frontend bundles (main app + web components)
+wippy run -c          # 4. start the runtime
 ```
 
-Open `http://localhost:8080`. Default admin: `admin@wippy.local` / `admin123`.
+- **App** — <http://localhost:8085> · default admin `admin@wippy.local` / `admin123`
+- **Keeper console** — <http://localhost:8085/app/keeper> · edit registry entries, sync `src/**`, build components, and inspect the running app
+
+The whole loop is `wippy install` → `make build` → `wippy run`, then edit through Keeper.
+
+## Editing the app live (self-modification)
+
+This template ships with **Keeper** (`keeper/keeper`), a development console mounted at `/app/keeper`. Keeper makes the running app **self-modifying** — the application and the tool that edits it are the same process, so you change the app from the browser without restarting:
+
+- **Registry editing** — edit entries on a branch and publish them through governance.
+- **`src/**` sync** — `sync_from_fs` reconciles your on-disk source with the running registry (and `sync_to_fs` writes back).
+- **Component builder** — write, build, and preview frontend web components in place.
+- **Inspect** — browse dataflows, sessions, logs, and SQL against the live instance.
+- **MCP** — the same operations are exposed at `/keeper-mcp/` so AI agents can drive them.
+
+Because the app can rewrite its own registry, treat Keeper access as admin-level and gate it in production.
 
 ## Development
 
@@ -133,7 +149,7 @@ All runtime configuration is driven by environment variables and the facade depe
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PUBLIC_API_URL` | Public-facing API URL | `http://localhost:8080` |
+| `PUBLIC_API_URL` | Public-facing API URL | `http://localhost:8085` |
 | `ENCRYPTION_KEY` | Data encryption key (hex) | Auto-generated on first boot |
 | `ANTHROPIC_API_KEY` | Claude API key for AI assistant | - |
 
@@ -379,7 +395,7 @@ The host chat UI exposes `--wippy-host-*` CSS variables that can be overridden v
 - **Layout:** `--wippy-host-chat-bg`, `chat-padding-x`, `meta-bar-border-color`, `sidebar-width-open/closed`, `splitter-width/color`
 - **Other:** `--wippy-host-avatar-size`, `tool-bg`, `tool-border`
 
-See the full variable reference in the [gen-2-chat README](https://web-host.wippy.ai/) Host UI CSS Variables section.
+See the Host UI CSS Variables reference at <https://web-host.wippy.ai/>.
 
 ### Per-Page Config Overrides
 
