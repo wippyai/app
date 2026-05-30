@@ -2,14 +2,14 @@
 
 A starter Wippy application: a Vue admin frontend, user management, an AI assistant, example web components, a live **Web Research** demo, and the **Keeper** console for editing the running app from the browser.
 
-![Web Research demo](docs/images/web-research.png)
-
-## Prerequisites
-
-- [Wippy CLI](https://wippy.ai) — the `wippy` binary on your `PATH`
-- Node.js 18+
+<p align="center">
+  <img src="docs/images/research-light.png#gh-light-mode-only" alt="Web Research demo" width="860">
+  <img src="docs/images/research-dark.png#gh-dark-mode-only" alt="Web Research demo" width="860">
+</p>
 
 ## Quick start
+
+Requires the [Wippy CLI](https://wippy.ai) on your `PATH` and Node.js 18+.
 
 ```bash
 wippy install         # download backend modules from the hub into .wippy/
@@ -27,13 +27,36 @@ wippy run -c          # start the runtime
 - **AI assistant** — chat with an agent ("Ask Wippy") from any page
 - **Components** — example web components (charts, mermaid, markdown, and more)
 - **Web Research** — an async dataflow where a researcher agent fetches pages with an HTTP GET tool and streams each fetch and the final answer to the browser live (`src/app/research/`)
-- **Keeper** — a development console to edit the registry, sync `src/**`, build components, and inspect dataflows, sessions, and logs against the running app
+- **Keeper** — a console to edit the registry, sync `src/**`, build components, and inspect dataflows, sessions, and logs against the running app
 
-## Editing the app live
+<table>
+  <tr>
+    <td width="33%" valign="top"><b>Components</b><br>
+      <img src="docs/images/components-light.png#gh-light-mode-only" alt="Components page" width="100%">
+      <img src="docs/images/components-dark.png#gh-dark-mode-only" alt="Components page" width="100%">
+    </td>
+    <td width="33%" valign="top"><b>Keeper console</b><br>
+      <img src="docs/images/keeper-light.png#gh-light-mode-only" alt="Keeper dashboard" width="100%">
+      <img src="docs/images/keeper-dark.png#gh-dark-mode-only" alt="Keeper dashboard" width="100%">
+    </td>
+    <td width="33%" valign="top"><b>Dataflow inspector</b><br>
+      <img src="docs/images/dataflow-light.png#gh-light-mode-only" alt="Dataflow timeline" width="100%">
+      <img src="docs/images/dataflow-dark.png#gh-dark-mode-only" alt="Dataflow timeline" width="100%">
+    </td>
+  </tr>
+</table>
 
-Keeper makes the running app self-modifying — the app and the tool that edits it are the same process, so you change the registry from the browser without restarting. It also observes every dataflow (the Web Research demo shows up here), and exposes the same operations over MCP at `/keeper-mcp/` for AI agents. Because it can rewrite the registry, treat Keeper access as admin-level in production.
+## Runtime features
 
-![Keeper console](docs/images/keeper.png)
+What the Wippy runtime gives you, exercised by this template:
+
+- **Self-modifying registry** — the app and the tool that edits it are the same process. Keeper (`/app/keeper`) edits entries, syncs `src/**`, builds components, and ships changes through governance without a restart. Treat its access as admin-level in production.
+- **MCP server** — the same Keeper operations are exposed over the Model Context Protocol at `/keeper-mcp/`, so external AI agents can drive the registry and inspect the app.
+- **Dataflows & multi-agent workflows** — async, durable, and observable. The Web Research demo and Keeper's own pipeline are dataflows you can replay node-by-node in the inspector above.
+- **Agents, tools & model classes** — LLM agents calling Lua tools. Models resolve by class (`class:fast`, `smart`, `coder`, `nano`, `embed`), so swapping providers is configuration, not code.
+- **Realtime relay** — `process.send` to a user's hub streams events to the browser over WebSocket; the Web Research fetch feed is built on it.
+- **HTTP, users & security** — HTTP endpoints, user CRUD, policy-based access control, and a token store.
+- **Batteries-included Lua modules** — `http_client`, `html` (sanitize), `llm`, `json`, `time`, `security`, and more, available to any `function.lua`.
 
 ## Project structure
 

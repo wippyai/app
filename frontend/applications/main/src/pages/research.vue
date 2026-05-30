@@ -42,7 +42,7 @@ let timer: ReturnType<typeof setTimeout> | null = null
 
 const suggestions = [
   'https://example.com',
-  'What is the Lua programming language?',
+  'What is the Rust programming language?',
   'https://en.wikipedia.org/wiki/WebAssembly',
 ]
 

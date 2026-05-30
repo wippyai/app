@@ -1,4 +1,5 @@
 local http = require("http_client")
+local html = require("html")
 local security = require("security")
 local time = require("time")
 
@@ -30,6 +31,18 @@ type Result = {
     content: string,
 }
 
+-- The strict policy drops every tag and the contents of script/style, decodes
+-- entities, and returns plain text -- no hand-rolled HTML parsing.
+local strip = html.sanitize.strict_policy()
+
+local function to_text(markup: string): string
+    local text, err = strip:sanitize(markup)
+    if err ~= nil or text == nil then
+        return ""
+    end
+    return (text:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
 local function notify(event: FetchEvent)
     local actor = security.actor()
     if actor == nil then return end
@@ -37,15 +50,6 @@ local function notify(event: FetchEvent)
     if hub_pid ~= nil then
         process.send(hub_pid, TOPIC, event)
     end
-end
-
-local function strip_tags(s: string): string
-    s = s:gsub("<script.-</script>", " ")
-    s = s:gsub("<style.-</style>", " ")
-    s = s:gsub("<!%-%-.-%-%->", " ")
-    s = s:gsub("<[^>]+>", " ")
-    s = s:gsub("%s+", " ")
-    return (s:gsub("^%s+", ""))
 end
 
 local function handler(params: Params): (Result?, string?)
@@ -65,8 +69,8 @@ local function handler(params: Params): (Result?, string?)
 
     local body: string = resp.body or ""
     local raw_title: string? = body:match("<title[^>]*>(.-)</title>")
-    local title: string? = raw_title ~= nil and strip_tags(raw_title) or nil
-    local text: string = strip_tags(body)
+    local title: string? = raw_title ~= nil and to_text(raw_title) or nil
+    local text: string = to_text(body)
 
     notify({
         url = target,
