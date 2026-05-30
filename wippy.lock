@@ -3,8 +3,8 @@ directories:
     src: ./src
 modules:
     - name: keeper/keeper
-      version: 0.5.18
-      hash: c5c43592ade0bf17df12b8a4757363c3b0ccfa24051b10c8727a414a6926a754
+      version: 0.5.21
+      hash: b46149cc445bb78128d7d071953eeca03ba6583f8436918272f6f781da5e3207
     - name: userspace/contract
       version: 0.4.1
       hash: c154e2cc11ca94ddd368307aced96cfbbd411a58e74e46339d50b4a9befc1d65

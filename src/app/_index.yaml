@@ -4,7 +4,7 @@ namespace: app
 entries:
   - name: gateway
     kind: http.service
-    addr: :8085
+    addr: :8080
     lifecycle:
       auto_start: true
 
