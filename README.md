@@ -16,8 +16,8 @@ make build            # 3. build the frontend bundles (main app + web components
 wippy run -c          # 4. start the runtime
 ```
 
-- **App** — <http://localhost:8085> · default admin `admin@wippy.local` / `admin123`
-- **Keeper console** — <http://localhost:8085/app/keeper> · edit registry entries, sync `src/**`, build components, and inspect the running app
+- **App** — <http://localhost:8080> · default admin `admin@wippy.local` / `admin123`
+- **Keeper console** — <http://localhost:8080/app/keeper> · edit registry entries, sync `src/**`, build components, and inspect the running app
 
 The whole loop is `wippy install` → `make build` → `wippy run`, then edit through Keeper.
 
@@ -149,7 +149,7 @@ All runtime configuration is driven by environment variables and the facade depe
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PUBLIC_API_URL` | Public-facing API URL | `http://localhost:8085` |
+| `PUBLIC_API_URL` | Public-facing API URL | `http://localhost:8080` |
 | `ENCRYPTION_KEY` | Data encryption key (hex) | Auto-generated on first boot |
 | `ANTHROPIC_API_KEY` | Claude API key for AI assistant | - |
 
