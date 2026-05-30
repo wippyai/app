@@ -1,14 +1,80 @@
 version: "1.0"
 namespace: app.models
 
+# Models are referenced two ways:
+#   - by name:  model: claude-sonnet-4-6
+#   - by class: model: class:fast   (highest-priority model in that class wins)
+# Keeper's bundled agents resolve class:smart / orchestrator / fast / nano /
+# coder / embed, so those classes must always have a member here.
+
 entries:
-  - name: claude-4-5-haiku
+  # ── Claude ──
+  - name: claude-opus-4-6
     kind: registry.entry
     meta:
-      name: claude-4-5-haiku
+      name: claude-opus-4-6
       type: llm.model
-      title: Claude 4.5 Haiku
-      comment: Fast model for general tasks
+      title: Claude Opus 4.6
+      comment: Most capable model for complex reasoning and coding
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+        - coding
+        - extended_thinking
+      class:
+        - premium
+        - smart
+      priority: 100
+    max_tokens: 200000
+    output_tokens: 32768
+    pricing:
+      input: 15
+      output: 75
+      cached_input: 1.5
+      cache_write: 18.75
+    providers:
+      - id: wippy.llm.claude:provider
+        provider_model: claude-opus-4-6
+
+  - name: claude-sonnet-4-6
+    kind: registry.entry
+    meta:
+      name: claude-sonnet-4-6
+      type: llm.model
+      title: Claude Sonnet 4.6
+      comment: Balanced default for complex tasks and orchestration
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+        - coding
+        - extended_thinking
+      class:
+        - default
+        - balanced
+        - orchestrator
+      priority: 90
+    max_tokens: 200000
+    output_tokens: 16384
+    pricing:
+      input: 3
+      output: 15
+      cached_input: 0.3
+      cache_write: 3.75
+    providers:
+      - id: wippy.llm.claude:provider
+        provider_model: claude-sonnet-4-6
+
+  - name: claude-haiku-4-5
+    kind: registry.entry
+    meta:
+      name: claude-haiku-4-5
+      type: llm.model
+      title: Claude Haiku 4.5
+      comment: Fast, low-latency model for general tasks
       capabilities:
         - tool_use
         - vision
@@ -16,60 +82,128 @@ entries:
         - structured_output
         - coding
       class:
-        - default
         - fast
-      priority: 75
+        - nano
+      priority: 80
     max_tokens: 200000
     output_tokens: 8192
+    pricing:
+      input: 0.8
+      output: 4
+      cached_input: 0.08
+      cache_write: 1
     providers:
       - id: wippy.llm.claude:provider
         provider_model: claude-haiku-4-5-20251001
 
-  - name: claude-4-5-sonnet
+  # ── OpenAI ──
+  - name: gpt-5.5
     kind: registry.entry
     meta:
-      name: claude-4-5-sonnet
+      name: gpt-5.5
       type: llm.model
-      title: Claude 4.5 Sonnet
-      comment: Balanced model for complex tasks
+      title: GPT-5.5
+      comment: Frontier model for complex coding, research, and real-world work
       capabilities:
         - tool_use
-        - vision
+        - generate
+        - structured_output
+        - coding
+        - reasoning
+      class:
+        - premium
+      priority: 95
+    max_tokens: 400000
+    output_tokens: 32768
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: gpt-5.5
+
+  - name: gpt-5.4
+    kind: registry.entry
+    meta:
+      name: gpt-5.4
+      type: llm.model
+      title: GPT-5.4
+      comment: Strong model for everyday coding
+      capabilities:
+        - tool_use
+        - generate
+        - structured_output
+        - coding
+        - reasoning
+      class:
+        - balanced
+      priority: 70
+    max_tokens: 400000
+    output_tokens: 32768
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: gpt-5.4
+
+  - name: gpt-5.4-nano
+    kind: registry.entry
+    meta:
+      name: gpt-5.4-nano
+      type: llm.model
+      title: GPT-5.4 Nano
+      comment: Lowest-latency model for classification, extraction, and compact synthesis
+      capabilities:
+        - tool_use
         - generate
         - structured_output
         - coding
       class:
-        - default
-        - balanced
-      priority: 90
-    max_tokens: 200000
-    output_tokens: 8192
-    providers:
-      - id: wippy.llm.claude:provider
-        provider_model: claude-sonnet-4-5-20250929
-
-  - name: gpt-4.1-mini
-    kind: registry.entry
-    meta:
-      name: gpt-4.1-mini
-      type: llm.model
-      title: GPT-4.1 Mini
-      comment: Fast and cost-effective
-      capabilities:
-        - tool_use
-        - vision
-        - generate
-        - structured_output
-      class:
-        - default
         - fast
-      priority: 10
-    max_tokens: 1047576
+        - nano
+      priority: 60
+    max_tokens: 400000
     output_tokens: 32768
-    pricing:
-      cached_input: 0.5
-      input: 2
-      output: 8
     providers:
       - id: wippy.llm.openai:provider
-        provider_model: gpt-4.1-mini
+        provider_model: gpt-5.4-nano
+
+  - name: gpt-5.3-codex
+    kind: registry.entry
+    meta:
+      name: gpt-5.3-codex
+      type: llm.model
+      title: GPT-5.3 Codex
+      comment: Coding-optimized model
+      capabilities:
+        - tool_use
+        - generate
+        - structured_output
+        - coding
+        - reasoning
+      class:
+        - coder
+        - coding
+      priority: 92
+    max_tokens: 400000
+    output_tokens: 32768
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: gpt-5.3-codex
+
+  # ── Embedding ──
+  - name: text-embedding-3-small
+    kind: registry.entry
+    meta:
+      name: text-embedding-3-small
+      type: llm.model
+      title: Text Embedding 3 Small
+      comment: Efficient embedding model for semantic search
+      capabilities:
+        - embed
+      class:
+        - embed
+        - embedding
+      priority: 90
+    max_tokens: 8191
+    dimensions: 1536
+    pricing:
+      input: 0.02
+    providers:
+      - id: wippy.llm.openai:provider
+        provider_model: text-embedding-3-small

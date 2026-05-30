@@ -40,7 +40,7 @@ local function handler()
         return
     end
 
-    local compiled, compile_err = compiler.compile(raw_spec, {})
+    local compiled, compile_err = compiler.compile(raw_spec :: table, {})
     if compile_err or not compiled then
         res:set_status(http.STATUS.INTERNAL_ERROR)
         res:write_json({

@@ -28,8 +28,7 @@ const navItems = [
   { path: '/', name: 'home', label: 'Home', icon: 'tabler:home' },
   { path: '/users', name: 'users', label: 'Users', icon: 'tabler:users' },
   { path: '/components', name: 'components', label: 'Components', icon: 'tabler:components' },
-  { path: '/iframe-demo', name: 'iframe-demo', label: 'Iframe Demo', icon: 'tabler:frame' },
-  { path: '/nested-nav', name: 'nested-nav', label: 'Nested Nav', icon: 'tabler:route-2' },
+  { path: '/research', name: 'research', label: 'Web Research', icon: 'tabler:world-search' },
   { path: '/c/keeper:main', name: 'keeper', label: 'Keeper', icon: 'tabler:shield-code', hostNav: true },
 ]
 

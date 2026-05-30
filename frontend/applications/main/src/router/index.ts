@@ -24,14 +24,18 @@ const routes = [
     component: () => import('../pages/components.vue'),
   },
   {
+    path: '/research',
+    name: 'research',
+    component: () => import('../pages/research.vue'),
+  },
+  // Former standalone demo pages now live as tabs on /components.
+  {
     path: '/iframe-demo',
-    name: 'iframe-demo',
-    component: () => import('../pages/iframe-demo.vue'),
+    redirect: { name: 'components', query: { tab: 'iframe' } },
   },
   {
     path: '/nested-nav/:part(.*)*',
-    name: 'nested-nav',
-    component: () => import('../pages/nested-nav.vue'),
+    redirect: { name: 'components', query: { tab: 'nested' } },
   },
   {
     path: '/:pathMatch(.*)*',
