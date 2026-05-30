@@ -44,7 +44,7 @@ entries:
       name: claude-sonnet-4-6
       type: llm.model
       title: Claude Sonnet 4.6
-      comment: Balanced default for complex tasks and orchestration
+      comment: Balanced default for complex tasks, orchestration, and coding
       capabilities:
         - tool_use
         - vision
@@ -56,7 +56,9 @@ entries:
         - default
         - balanced
         - orchestrator
-      priority: 90
+        - coder
+        - coding
+      priority: 93
     max_tokens: 200000
     output_tokens: 16384
     pricing:

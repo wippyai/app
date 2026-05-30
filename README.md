@@ -1,6 +1,6 @@
 # Wippy Application Template
 
-A starter Wippy application: a Vue admin frontend, user management, an AI assistant, example web components, a live **Web Research** demo, and the **Keeper** console for editing the running app from the browser.
+A starter Wippy application — a Vue admin frontend, user management, an AI assistant, example web components, a live **Web Research** demo, and the **Keeper** console for editing the running app from the browser.
 
 <p align="center">
   <img src="docs/images/research-light.png#gh-light-mode-only" alt="Web Research demo" width="860">
@@ -45,6 +45,8 @@ wippy run -c          # start the runtime
     </td>
   </tr>
 </table>
+
+<p align="center"><sub>Screenshots follow your GitHub light/dark theme automatically.</sub></p>
 
 ## Runtime features
 
