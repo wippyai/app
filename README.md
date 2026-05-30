@@ -25,7 +25,7 @@ wippy run -c          # start the runtime
 
 - **Users** — CRUD over accounts and security groups
 - **AI assistant** — chat with an agent ("Ask Wippy") from any page
-- **Components** — six example web components (charts, mermaid, markdown, and more)
+- **Components** — example web components (charts, mermaid, markdown, and more)
 - **Web Research** — an async dataflow where a researcher agent fetches pages with an HTTP GET tool and streams each fetch and the final answer to the browser live (`src/app/research/`)
 - **Keeper** — a development console to edit the registry, sync `src/**`, build components, and inspect dataflows, sessions, and logs against the running app
 
@@ -37,14 +37,26 @@ Keeper makes the running app self-modifying — the app and the tool that edits 
 
 ## Project structure
 
+Backend folders mirror Wippy namespaces — each `src/app/<name>/_index.yaml` declares namespace `app.<name>`:
+
 ```
-src/app/                 Backend (Wippy Lua) — endpoints, agents, users, models, views, deps
-  research/              Web Research demo: agent + HTTP GET tool + dataflow
+src/app/               Backend (Wippy Lua), namespace `app`
+  agents/              app.agents     AI agents and assistant tools
+  api/                 app.api        HTTP endpoints (+ app.api.entries, app.api.websocket)
+  users/               app.users      user CRUD endpoints and logic
+  security/            app.security   access policies and token store
+  models/              app.models     LLM model registry
+  research/            app.research   Web Research demo: agent + HTTP GET tool + dataflow
+  views/               app.views      frontend page registration (view.page)
+  deps/                app.deps       module dependencies (facade, keeper, llm, ...)
+  env/                 app.env        environment storage
+
 frontend/
-  applications/main/     Vue 3 admin app (the page you see)
-  web-components/        Example standalone web components
-  docs/                  Frontend & theming guides (start here for FE work)
-static/                  Static assets + generated bundles (static/app, static/wc)
+  applications/main/   Vue 3 admin app (the page you see)
+  web-components/       standalone example components (mermaid, markdown, charts, ...)
+  docs/                frontend and theming guides
+
+static/                static assets + generated bundles (static/app, static/wc)
 ```
 
 ## Development
