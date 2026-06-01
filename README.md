@@ -52,7 +52,7 @@ wippy run -c          # start the runtime
 
 What the Wippy runtime gives you, exercised by this template:
 
-- **Self-modifying registry** — the app and the tool that edits it are the same process. Keeper (`/app/keeper`) edits entries, syncs `src/**`, builds components, and ships changes through governance without a restart. Treat its access as admin-level in production.
+- **Self-modifying registry** — the app and the tool that edits it are the same process. Keeper edits entries, syncs `src/**`, builds components, and ships changes through governance without a restart. Treat its access as admin-level in production.
 - **MCP server** — the same Keeper operations are exposed over the Model Context Protocol at `/keeper-mcp/`, so external AI agents can drive the registry and inspect the app.
 - **Dataflows & multi-agent workflows** — async, durable, and observable. The Web Research demo and Keeper's own pipeline are dataflows you can replay node-by-node in the inspector above.
 - **Agents, tools & model classes** — LLM agents calling Lua tools. Models resolve by class (`class:fast`, `smart`, `coder`, `nano`, `embed`), so swapping providers is configuration, not code.
