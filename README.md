@@ -19,7 +19,7 @@ wippy run -c          # start the runtime
 ```
 
 - **App** — <http://localhost:8080> · default admin `admin@wippy.local` / `admin123`
-- **Keeper** — <http://localhost:8080/app/keeper>
+- **Keeper** — <http://localhost:8080/c/keeper:main>
 
 ## What's inside
 
