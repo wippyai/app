@@ -172,7 +172,10 @@ function host(url: string): string {
     </div>
 
     <!-- Input -->
-    <form class="flex gap-2" @submit.prevent="research">
+    <form
+      class="flex gap-2"
+      @submit.prevent="research"
+    >
       <InputText
         v-model="query"
         placeholder="A URL to read, or a question to research…"
@@ -209,7 +212,11 @@ function host(url: string): string {
       role="alert"
       class="mt-5 p-3 rounded-lg bg-danger/10 text-danger text-sm flex items-start gap-2"
     >
-      <Icon icon="tabler:alert-triangle" class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+      <Icon
+        icon="tabler:alert-triangle"
+        class="w-4 h-4 mt-0.5 shrink-0"
+        aria-hidden="true"
+      />
       <span>{{ error }}</span>
     </div>
 
@@ -219,13 +226,20 @@ function host(url: string): string {
       class="mt-5 p-4 rounded-lg bg-primary/5 border border-primary/20"
     >
       <div class="flex items-center gap-1.5 text-[11px] font-medium text-primary uppercase tracking-wider mb-2">
-        <Icon icon="tabler:sparkles" class="w-3.5 h-3.5" aria-hidden="true" />
+        <Icon
+          icon="tabler:sparkles"
+          class="w-3.5 h-3.5"
+          aria-hidden="true"
+        />
         Answer
       </div>
       <p class="text-sm text-surface-800 dark:text-surface-100 whitespace-pre-line">
         {{ answer }}
       </p>
-      <div v-if="sources.length" class="mt-3 flex flex-wrap gap-1.5">
+      <div
+        v-if="sources.length"
+        class="mt-3 flex flex-wrap gap-1.5"
+      >
         <a
           v-for="(src, i) in sources"
           :key="i"
@@ -238,11 +252,20 @@ function host(url: string): string {
     </div>
 
     <!-- Live fetch feed -->
-    <div v-if="fetches.length" class="mt-5 flex flex-col gap-2 overflow-auto">
+    <div
+      v-if="fetches.length"
+      class="mt-5 flex flex-col gap-2 overflow-auto"
+    >
       <div class="flex items-center gap-1.5 text-[11px] font-medium text-surface-400 uppercase tracking-wider">
         <span class="relative flex h-2 w-2">
-          <span v-if="loading" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-          <span class="relative inline-flex rounded-full h-2 w-2" :class="loading ? 'bg-success' : 'bg-surface-300'" />
+          <span
+            v-if="loading"
+            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"
+          />
+          <span
+            class="relative inline-flex rounded-full h-2 w-2"
+            :class="loading ? 'bg-success' : 'bg-surface-300'"
+          />
         </span>
         Agent fetches
       </div>
@@ -252,9 +275,24 @@ function host(url: string): string {
         class="p-card p-component rounded-lg p-3 flex items-start gap-3"
       >
         <div class="shrink-0 mt-0.5">
-          <Icon v-if="ev.status === 'fetching'" icon="tabler:loader-2" class="w-4 h-4 text-primary animate-spin" aria-hidden="true" />
-          <Icon v-else-if="ev.status === 'error'" icon="tabler:alert-triangle" class="w-4 h-4 text-danger" aria-hidden="true" />
-          <Icon v-else icon="tabler:check" class="w-4 h-4 text-success" aria-hidden="true" />
+          <Icon
+            v-if="ev.status === 'fetching'"
+            icon="tabler:loader-2"
+            class="w-4 h-4 text-primary animate-spin"
+            aria-hidden="true"
+          />
+          <Icon
+            v-else-if="ev.status === 'error'"
+            icon="tabler:alert-triangle"
+            class="w-4 h-4 text-danger"
+            aria-hidden="true"
+          />
+          <Icon
+            v-else
+            icon="tabler:check"
+            class="w-4 h-4 text-success"
+            aria-hidden="true"
+          />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
@@ -268,11 +306,22 @@ function host(url: string): string {
               :class="ev.status < 400 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'"
             >{{ ev.status }}</span>
           </div>
-          <a :href="ev.url" target="_blank" rel="noopener noreferrer" class="text-xs text-primary hover:underline break-all">{{ ev.url }}</a>
-          <p v-if="ev.error" class="text-xs text-danger mt-1">
+          <a
+            :href="ev.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs text-primary hover:underline break-all"
+          >{{ ev.url }}</a>
+          <p
+            v-if="ev.error"
+            class="text-xs text-danger mt-1"
+          >
             {{ ev.error }}
           </p>
-          <p v-else-if="ev.snippet" class="text-xs text-surface-500 dark:text-surface-400 mt-1 line-clamp-2">
+          <p
+            v-else-if="ev.snippet"
+            class="text-xs text-surface-500 dark:text-surface-400 mt-1 line-clamp-2"
+          >
             {{ ev.snippet }}
           </p>
         </div>
@@ -284,7 +333,11 @@ function host(url: string): string {
       v-else-if="!answer && !error && !loading"
       class="mt-10 flex flex-col items-center justify-center text-center text-surface-400 gap-2"
     >
-      <Icon icon="tabler:world-search" class="w-10 h-10" aria-hidden="true" />
+      <Icon
+        icon="tabler:world-search"
+        class="w-10 h-10"
+        aria-hidden="true"
+      />
       <p class="text-sm">
         Enter a URL or question — watch the agent fetch pages, then get the answer.
       </p>

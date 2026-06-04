@@ -1,11 +1,6 @@
-import type { HostApi } from '../types'
+import type { HostApi, ProxyApiInstance } from '../types'
 import type { Router } from 'vue-router'
 import { createAppRouter as createAppRouterFactory } from '@wippy-fe/router'
-
-type OnSubscription = (
-  pattern: string,
-  callback: (event: { path?: string, message?: unknown }) => void,
-) => void
 
 const routes = [
   {
@@ -52,7 +47,7 @@ const routes = [
  *   - afterEach → host.onRouteChanged
  *   - @history subscription → parent → child URL mirroring
  */
-export function createAppRouter(host: HostApi, on: OnSubscription | null, initialPath: string): Router {
+export function createAppRouter(host: HostApi, on: ProxyApiInstance['on'] | null, initialPath: string): Router {
   return createAppRouterFactory(routes, {
     host: host as never,
     on: on as never,
