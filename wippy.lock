@@ -11,6 +11,15 @@ modules:
     - name: userspace/users
       version: 0.1.6
       hash: 9908cf46eaca7e6d452f0f56b7a20994b09b801b5d4e61461e292da533c67e9e
+    - name: wippy-swiss/chartjs
+      version: 0.1.1
+      hash: 4082c02dbfe92206333a4e70c805bd468fea675aab7c6553b08e946db110610f
+    - name: wippy-swiss/markdown
+      version: 0.1.1
+      hash: 23faaf51513169a0e4b90a8d05572e666cf3c45eb27ba5ada688cf311a4852aa
+    - name: wippy-swiss/mermaid
+      version: 0.1.2
+      hash: 43bf8a4d29276aabece9cae4fe3a28d0ce512c5cb4544698adbfa1fbef9576b4
     - name: wippy/agent
       version: 0.4.7
       hash: 04a73ea8a0d292011f439d9ad18bfca2223b467ceee059451cb6d49596b5a753
@@ -21,8 +30,8 @@ modules:
       version: 0.4.11
       hash: ff41aef6b4b1c5b29c0c64dd4b4cc2eed1daa052f65f46ca55427d77a6c1d0a7
     - name: wippy/facade
-      version: 0.6.6
-      hash: b98e04be1a8822030fa34eb5363536fd7964cb743347fdf173d42c85990b2bcb
+      version: 0.6.8
+      hash: 860fe231d5dde13c3fa50fcf2ad5cf758e2b101fbfdaa7bcf7b1fe4a497afc84
     - name: wippy/llm
       version: 0.4.28
       hash: 4e99f9034d84b22d3c40e213843e5e3a1efc9b5ad837a3e84c3a53abc72ae562
@@ -36,8 +45,8 @@ modules:
       version: 0.4.0
       hash: 8dcf047cbf88a56fbbfa843aab09a37e8e809400ec887e1ff09471aa699fe7af
     - name: wippy/session
-      version: 0.1.15
-      hash: 1189df7318600441c6b04dab611e011c11275ed99786988b343672af35975eeb
+      version: 0.1.17
+      hash: 6f941326c168b89d9d30746cc10717d1a4f754a55f8320473cafca17bc996c60
     - name: wippy/terminal
       version: 0.4.3
       hash: 56141fae39a0e7a996dee6a9e8d7d45beb1a6c62bf7aeb79dd27ce8b72694a49
@@ -50,5 +59,8 @@ modules:
     - name: wippy/views
       version: 0.5.0
       hash: 053634b9d1bba0f6f89f8ac1b539580aa4093e5c4a13b443e4dc860f43571146
+replacements:
+    - from: wippy/facade
+      to: ../wippy-framework/src/facade
 options:
     unpack_modules: true

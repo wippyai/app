@@ -1,0 +1,7 @@
+{
+  "--e2e-primary": "#e2e001",
+  "--e2e-secondary": "#e2e002",
+  "@dark": {
+    "--e2e-primary": "#e2e003"
+  }
+}

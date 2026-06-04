@@ -40,7 +40,10 @@ local function handler()
         return
     end
 
-    local compiled, compile_err = compiler.compile(raw_spec, {})
+    -- get_by_id is typed `(any, string?)`; the guard above proved raw_spec is
+    -- non-nil, and its contract (see note) is the table spec compiler.compile
+    -- wants — assert that across the `any` boundary so it type-checks.
+    local compiled, compile_err = compiler.compile(raw_spec :: table, {})
     if compile_err or not compiled then
         res:set_status(http.STATUS.INTERNAL_ERROR)
         res:write_json({

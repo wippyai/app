@@ -22,8 +22,8 @@ entries:
     max_tokens: 200000
     output_tokens: 8192
     providers:
-      - id: wippy.llm.claude:provider
-        provider_model: claude-haiku-4-5-20251001
+      - id: wippy.llm.openai_compat:provider
+        provider_model: anthropic/claude-haiku-4.5
 
   - name: claude-4-5-sonnet
     kind: registry.entry
@@ -45,8 +45,8 @@ entries:
     max_tokens: 200000
     output_tokens: 8192
     providers:
-      - id: wippy.llm.claude:provider
-        provider_model: claude-sonnet-4-5-20250929
+      - id: wippy.llm.openai_compat:provider
+        provider_model: anthropic/claude-sonnet-4.5
 
   - name: gpt-4.1-mini
     kind: registry.entry
@@ -71,5 +71,5 @@ entries:
       input: 2
       output: 8
     providers:
-      - id: wippy.llm.openai:provider
-        provider_model: gpt-4.1-mini
+      - id: wippy.llm.openai_compat:provider
+        provider_model: openai/gpt-4.1-mini

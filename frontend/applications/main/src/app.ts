@@ -18,17 +18,19 @@ export async function createMainApp() {
   const axios = await window.$W.api()
   const instance = await window.$W.instance()
 
-  // config.path is deprecated (v1 AppConfig only). Host v18+ uses config.context.route.
-  const routePath = config.context?.route || config.path
+  const routePath = config.context?.route
   const initialPath = routePath
     ? (routePath.startsWith('/') ? routePath : '/' + routePath)
     : '/'
 
-  if (config.customization?.icons) {
+  if (config.theming.global?.icons) {
     addCollection({
       prefix: 'custom',
-      icons: config.customization?.icons,
+      icons: config.theming.global.icons,
     })
+  }
+  for (const [prefix, icons] of Object.entries(config.theming.global?.iconSets ?? {})) {
+    addCollection({ prefix, icons })
   }
 
   const app = createApp(App)

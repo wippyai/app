@@ -142,6 +142,34 @@ entries:
       - name: target_db
         value: app:db
 
+  - name: wc-mermaid
+    kind: ns.dependency
+    component: wippy-swiss/mermaid
+    version: '>=v0.1.0'
+    parameters:
+      - name: server
+        value: app:gateway
+
+  - name: wc-markdown
+    kind: ns.dependency
+    component: wippy-swiss/markdown
+    version: '>=v0.1.0'
+    parameters:
+      - name: server
+        value: app:gateway
+
+  - name: wc-chartjs
+    kind: ns.dependency
+    component: wippy-swiss/chartjs
+    version: '>=v0.1.0'
+    parameters:
+      - name: server
+        value: app:gateway
+
+  # wc-voice (wippy-swiss/voice 0.1.2) removed: its tts_token.endpoint entry
+  # ships without router metadata and aborts boot ("router metadata is
+  # required"). Not needed for the theming e2e harness.
+
   - name: facade
     kind: ns.dependency
     component: wippy/facade
@@ -167,9 +195,16 @@ entries:
         value: non-persistent
       - name: history_mode
         value: browser
+      # Theming files live in ./static alongside login.html (served at /app), so
+      # content_fs resolves them from the same folder a static page could <link>.
+      # `fs://` (not `file://`) keeps the value literal: the wippy loader reserves
+      # `file://` for its own load-time interpolation, so `file://` here would be
+      # read+inlined relative to THIS yaml's dir instead of reaching content_fs.
       - name: custom_css
-        value: "@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap'); body { font-family: 'Poppins', sans-serif; }"
+        value: "fs://custom-css.facade.css"
       - name: css_variables
-        value: '{"--p-primary":"#6366f1"}'
+        value: "fs://css-variables.facade.json"
+      - name: content_fs
+        value: app:app_fs
       - name: host_custom_css
         value: ".wippy-host-app .chat-container { background-color: var(--p-surface-100); } @media (prefers-color-scheme: dark) { .wippy-host-app .chat-container { background-color: var(--p-surface-800); } }"

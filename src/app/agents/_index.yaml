@@ -52,29 +52,79 @@ entries:
         - artifacts
     build_func_id: app.agents:build_artifacts_catalog
     prompt: |
-      You have the CreateArtifact tool to create rich content artifacts.
+      You have the CreateArtifact tool to create rich content artifacts that
+      persist in chat history and render in the UI.
 
-      Two content modes:
-       - Content mode — pass title + content (HTML or Markdown). Use for formatted text,
-         code, tables, documentation.
-       - Component mode — pass title + tag_name + props. Use for diagrams, charts,
-         interactive widgets. Pick tag_name from the available components list in the
-         session context. Each component lists its own props and usage notes there;
-         consult those before invoking. Never invent tag names.
+      ## Three content modes
 
-      Two display modes (set the `instructions` parameter on the call):
-       - instructions: false (default) — the artifact appears as its own standalone
-         message in the chat thread. Your reply is plain prose; do NOT embed any tag.
-         Use this when the artifact is the headline answer.
-       - instructions: true — the framework returns an embed tag in the tool result
-         that you MUST place verbatim in your reply where the artifact should appear
-         inline. Use this when the artifact flows with surrounding prose ("As shown
-         here: <artifact …/> the trend is …").
+      ### 1. Text mode — LLM-generated content
+      Pass `title` + `content` + `content_type` (`text/markdown` or `text/html`).
+      Use for formatted text, tables, code samples, documentation, or generated
+      HTML/JS apps.
 
-      In both modes the artifact persists in chat history and re-renders on reload.
+      ### 2. Component tag mode — auto-registered components
+      Pass `title` + `tag_name` + `props`.
+      Only use tag names listed in the **Auto-registered components** catalog below.
+      The framework builds the wippy-component-tag-1.0 package automatically.
+      Do not set `content_type` in this mode.
 
-      Never write <w-artifact>, <artifact>, or any component tag yourself unless the
-      framework gave you that exact tag string in the tool result.
+      ### 3. Package mode — non-auto-registered components or SPA pages
+      Pass `title` + `content_type="application/json"` + `content` = full package JSON.
+      Use for entries listed in the **ESM web components** or **Pages** catalog sections
+      below.
+
+      **For ESM web components**: copy the package JSON verbatim.
+
+      **For SPA pages**: check the `Sizing` label in the catalog entry before using.
+      - `sizing: auto` — the page has `wippy.proxy.injections.resizeObserver: true`.
+        It sends its intrinsic height to the host, so it renders correctly in any
+        context. Copy the JSON verbatim.
+      - `sizing: fixed` — the page does NOT report height. It renders correctly only
+        when opened in a full-panel (standalone) context. If you need it to auto-size
+        inline, you MUST patch the JSON before passing it as content: add or set
+        `wippy.proxy.injections.resizeObserver` to `true` inside the `wippy.proxy`
+        block. Example patch:
+          Original:  `"proxy": {"enabled": true}`
+          Patched:   `"proxy": {"enabled": true, "injections": {"resizeObserver": true}}`
+        Use this patch only when the user explicitly needs the page embedded inline.
+        For standalone display, copy the JSON verbatim.
+
+      ## Display modes (instructions parameter)
+
+      `instructions: false` (default) — artifact appears as a standalone card in the
+      chat thread. Your reply is plain prose; do NOT embed any tag in your text.
+      Use when the artifact IS the main answer.
+
+      `instructions: true` — the tool result provides an opaque embed token that you
+      MUST paste verbatim into your reply at the exact position where the artifact
+      should appear inline. Do NOT construct or guess this token — only use the exact
+      string returned by the tool.
+      Use when the artifact is a supporting detail within flowing prose.
+
+      ## Inline component shortcut (no CreateArtifact needed)
+
+      For auto-registered components you may write the component's tag name directly
+      in your reply text as raw HTML — for example:
+
+        Here is a reaction bar: <example-reaction-bar/>
+
+      This shortcut only works for tags listed in the **Auto-registered components**
+      catalog below. Prefer it when persistence is not needed.
+
+      ## preview parameter (optional)
+
+      Short one-sentence description shown before the artifact loads.
+      Example: `"Bar chart comparing Q1–Q4 revenue by region."`
+
+      ## Rules
+      - Component tag mode: only use tag names from the auto-registered catalog.
+      - Package mode: copy the package JSON verbatim from the catalog.
+      - **Artifact embed tokens:** the only valid way to write an artifact embed in
+        your reply is to paste the exact string the CreateArtifact tool returned
+        when `instructions=true`. Never construct, guess, or type an artifact tag
+        yourself — not as a placeholder, not as an example, not in any other context.
+        If you have not just called CreateArtifact with `instructions=true`, there
+        is no embed token to paste.
     tools:
       - app.agents:create_artifact
 
@@ -114,6 +164,7 @@ entries:
     imports:
       component_registry: wippy.views:component_registry
       bundled_meta: wippy.views:bundled_meta
+      page_registry: wippy.views:page_registry
     method: execute
 
   - name: create_artifact
@@ -131,25 +182,29 @@ entries:
             },
             "content": {
               "type": "string",
-              "description": "The content body. For content mode: HTML or Markdown string. For component mode: optional, usually use props instead."
+              "description": "Content body. Text mode: HTML or Markdown string. Package mode: full package JSON string copied verbatim from the catalog. Component tag mode: leave empty."
             },
             "content_type": {
               "type": "string",
-              "description": "MIME type for content mode",
-              "enum": ["text/html", "text/markdown"],
+              "description": "MIME type. text/markdown or text/html for text mode. application/json for package mode (non-auto-registered components or SPA pages). Not used in component tag mode.",
+              "enum": ["text/html", "text/markdown", "application/json"],
               "default": "text/markdown"
             },
             "tag_name": {
               "type": "string",
-              "description": "Web component tag name for component mode (e.g. 'example-mermaid'). When set, the artifact renders using this component instead of raw content."
+              "description": "Component tag mode only: web component tag name (e.g. 'example-mermaid'). Must be from the auto-registered catalog. When set, the artifact renders using this component."
             },
             "props": {
               "type": "object",
               "description": "Props object passed to the web component. Only used with tag_name."
             },
+            "preview": {
+              "type": "string",
+              "description": "Optional short one-sentence description shown before the artifact loads. Example: 'Bar chart comparing Q1–Q4 revenue by region.'"
+            },
             "instructions": {
               "type": "boolean",
-              "description": "Display mode. false (default) — artifact appears as its own standalone message in the chat; your reply is plain prose with no embed tag. true — the framework returns an embed tag in the tool result that you place verbatim in your reply where the artifact should appear inline.",
+              "description": "Display mode. false (default) — artifact appears as a standalone card in the chat; reply with plain prose, no embed tag. true — the tool result provides an embed tag that you paste verbatim into your reply where the artifact should appear inline.",
               "default": false
             }
           },
@@ -158,11 +213,11 @@ entries:
         }
       llm_alias: CreateArtifact
       llm_description: |
-        Create a rich content artifact rendered in the chat.
-        Two content modes: (1) Content mode — provide title + content (HTML or Markdown).
-        (2) Component mode — provide title + tag_name + props to render a registered web component.
-        Use component mode when a matching component is available (check session context for available components).
-        Two display modes via the `instructions` flag: false (default) shows the artifact as a standalone message; true returns an embed tag for inline placement in your reply.
+        Create a rich content artifact rendered in the chat (persists in history).
+        Three content modes: (1) Text mode — title + content (HTML or Markdown).
+        (2) Component tag mode — title + tag_name + props for auto-registered components.
+        (3) Package mode — title + content_type="application/json" + content=full package JSON for non-auto-registered components or SPA pages (copy JSON from catalog).
+        Display mode via instructions: false (default) = standalone card; true = inline embed tag returned in tool result for you to paste into your reply.
     source: file://create_artifact.lua
     modules:
       - json

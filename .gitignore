@@ -11,5 +11,6 @@ CLAUDE.md
 .claude
 
 .playwright-mcp/
+test-results/
 
 .local/

@@ -2,7 +2,7 @@ local json = require("json")
 
 local function handler(params)
     local title = params.title or "Untitled Artifact"
-    local display_type = params.display_type or "inline"
+    local display_type = params.instructions == true and "inline" or "standalone"
 
     local artifact = {
         title = title,
