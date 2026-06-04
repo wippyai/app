@@ -1,0 +1,106 @@
+version: "1.0"
+namespace: app.research
+
+# Single end-to-end example: an LLM agent with an HTTP GET tool. The tool also
+# streams each fetch to the user's browser in realtime (process.send -> relay).
+# Layout: agent first, then the trait + tool it uses, then the run endpoint.
+
+entries:
+  # The research agent. Fetches pages with WebGet and synthesizes an answer.
+  - name: researcher
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Researcher
+      comment: Fetches web pages and answers from what it reads
+      icon: tabler:world-search
+    prompt: |
+      You are a web researcher. Investigate the request by fetching pages with
+      the WebGet tool — take your time and fetch 2-3 relevant pages before you
+      conclude (do not stop after a single fetch).
+        - If the request contains a URL, start by fetching it.
+        - Otherwise fetch the most relevant page — the official site, or
+          https://en.wikipedia.org/wiki/<Topic_With_Underscores> — and follow up
+          with another page if it helps.
+      When you have enough, write concise findings as plain notes, including the
+      URLs you read. A separate step turns your notes into the final answer.
+    model: class:fast
+    temperature: 0.4
+    max_tokens: 4000
+    traits:
+      - id: app.research:web_research_trait
+
+  - name: web_research_trait
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      title: Web Research
+      tags:
+        - web
+    prompt: |
+      Use WebGet to fetch pages over HTTP. Each fetch streams live to the user.
+    tools:
+      - app.research:web_get
+
+  # The web tool the agent calls: HTTP GET, plus a realtime event to the user.
+  - name: web_get
+    kind: function.lua
+    meta:
+      type: tool
+      title: Web Fetch
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "url": { "type": "string", "description": "Absolute http(s) URL to fetch" }
+          },
+          "required": ["url"],
+          "additionalProperties": false
+        }
+      llm_alias: WebGet
+      llm_description: Fetch a web page over HTTP GET; returns its title and text. Also streams a live event to the user's Web Research panel.
+    source: file://web_get.lua
+    modules:
+      - http_client
+      - html
+      - security
+      - time
+    method: handler
+    pool:
+      size: 2
+
+  # Final workflow node: llm.generate turns the agent's notes into the answer
+  # and pushes it to the user live.
+  - name: format
+    kind: function.lua
+    meta:
+      comment: Format research notes into the final answer and stream it to the user
+    source: file://format.lua
+    modules:
+      - security
+    imports:
+      llm: wippy.llm:llm
+      prompt: wippy.llm:prompt
+    method: handler
+
+  # Starts the async research workflow for a query (non-blocking).
+  - name: run
+    kind: function.lua
+    meta:
+      comment: Run the research agent for a query via a dataflow, return its answer
+    source: file://run.lua
+    modules:
+      - http
+      - json
+    imports:
+      flow: userspace.dataflow.flow:flow
+    method: handler
+
+  - name: run.endpoint
+    kind: http.endpoint
+    meta:
+      comment: POST a research query, get back an LLM answer; fetches stream live
+      router: app:api
+    method: POST
+    func: run
+    path: /research

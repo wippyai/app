@@ -2,6 +2,9 @@ directories:
     modules: .wippy
     src: ./src
 modules:
+    - name: keeper/keeper
+      version: 0.5.21
+      hash: b46149cc445bb78128d7d071953eeca03ba6583f8436918272f6f781da5e3207
     - name: userspace/contract
       version: 0.4.1
       hash: c154e2cc11ca94ddd368307aced96cfbbd411a58e74e46339d50b4a9befc1d65

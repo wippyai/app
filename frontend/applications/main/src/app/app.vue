@@ -30,14 +30,20 @@ const navItems = [
   { path: '/components', name: 'components', label: 'Components', icon: 'tabler:components' },
   { path: '/iframe-demo', name: 'iframe-demo', label: 'Iframe Demo', icon: 'tabler:frame' },
   { path: '/nested-nav', name: 'nested-nav', label: 'Nested Nav', icon: 'tabler:route-2' },
+  { path: '/research', name: 'research', label: 'Web Research', icon: 'tabler:world-search' },
+  { path: '/c/keeper:main', name: 'keeper', label: 'Keeper', icon: 'tabler:shield-code', hostNav: true },
 ]
 
 const currentName = computed(() => route.name)
 const currentUser = ref<{ email: string; full_name: string } | null>(null)
 const wippyToken = ref<string | null>(null)
 
-function navigate(path: string) {
-  router.push(path)
+function navigate(item: NavItem) {
+  if (item.hostNav) {
+    host.navigate(item.path)
+    return
+  }
+  router.push(item.path)
 }
 
 function userInitials(user: { email: string; full_name: string }): string {
@@ -128,7 +134,7 @@ onMounted(() => {
           ]"
           :aria-current="currentName === item.name ? 'page' : undefined"
           :title="collapsed ? item.label : undefined"
-          @click="navigate(item.path)"
+          @click="navigate(item)"
         >
           <Icon
             :icon="item.icon"

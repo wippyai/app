@@ -1,91 +1,179 @@
-# Windows PowerShell equivalent of the Makefile in this directory.
-# Use `pwsh ./make.ps1 build` (or another target) to invoke; targets mirror
-# `make build` / `make build-app-main` / etc. Defaults to `build` if no
-# target is supplied.
-
+# Windows wrapper that mirrors the Makefile targets one-for-one.
+# Invoke through make.bat (`make build`, `make build-app-main`, etc.) or
+# directly: `powershell -ExecutionPolicy Bypass -File make.ps1 <target>`.
+#
+# Pure ASCII on purpose: Windows PowerShell 5.1 reads BOM-less files as
+# Windows-1252, so any non-ASCII char (em-dash, smart quote) corrupts on
+# read. Don't introduce non-ASCII chars without also adding a UTF-8 BOM.
 [CmdletBinding()]
 param(
-  [Parameter(Position = 0)]
-  [string]$Target = 'build'
+    [Parameter(Position = 0)]
+    [string]$Target = 'help'
 )
 
 $ErrorActionPreference = 'Stop'
+Set-Location $PSScriptRoot
 
-# Each module's source root + the relative outDir the Wippy server expects.
-# Mirrors the rules in Makefile — single source of truth, edit both when
-# adding a new FE module.
-$modules = @(
-  @{ Name = 'app-main';            Path = 'frontend/applications/main';                  OutDir = 'static/app/main' }
-  @{ Name = 'app-iframe-demo';     Path = 'frontend/applications/iframe-demo';            OutDir = 'static/app/iframe-demo' }
-  @{ Name = 'wc-reaction-bar';     Path = 'frontend/web-components/reaction-bar';         OutDir = 'static/wc/reaction-bar' }
-  @{ Name = 'wc-websocket-log';    Path = 'frontend/web-components/websocket-log';        OutDir = 'static/wc/websocket-log' }
-  @{ Name = 'wc-chart-circle';     Path = 'frontend/web-components/chart-circle';         OutDir = 'static/wc/chart-circle' }
-  @{ Name = 'wc-mermaid';          Path = 'frontend/web-components/mermaid';              OutDir = 'static/wc/mermaid' }
-  @{ Name = 'wc-markdown';         Path = 'frontend/web-components/markdown';             OutDir = 'static/wc/markdown' }
-  @{ Name = 'wc-model-gallery';    Path = 'frontend/web-components/model-gallery';        OutDir = 'static/wc/model-gallery' }
-  @{ Name = 'wc-counter-persist';  Path = 'frontend/web-components/counter-persist';      OutDir = 'static/wc/counter-persist' }
+# (name, dir, out) tuples - single source of truth for every build-app-* /
+# build-wc-* target. Keep in sync with the Makefile when adding apps.
+$apps = @(
+    @{ name = 'main';        dir = 'frontend/applications/main';        out = 'static/app/main' }
+    @{ name = 'iframe-demo'; dir = 'frontend/applications/iframe-demo'; out = 'static/app/iframe-demo' }
 )
 
-function Build-Module {
-  param([hashtable]$M, [switch]$Clean)
-  $repoRoot = $PSScriptRoot
-  $outAbs = Join-Path $repoRoot $M.OutDir
-  Push-Location (Join-Path $repoRoot $M.Path)
-  try {
-    if ($Clean) {
-      if (Test-Path 'node_modules') {
-        Write-Host "[$($M.Name)] cleaning node_modules"
-        Remove-Item -Recurse -Force node_modules
-      }
-      if (Test-Path 'package-lock.json') {
-        # Without removing the lockfile, npm install keeps any old pins
-        # (e.g. @wippy-fe/pinia-persist@0.0.26) that conflict with bumped
-        # package.json ranges. Forcing a fresh resolve is the whole point
-        # of `clean-build`.
-        Write-Host "[$($M.Name)] cleaning package-lock.json"
-        Remove-Item -Force package-lock.json
-      }
+$wcs = @(
+    @{ name = 'reaction-bar';    dir = 'frontend/web-components/reaction-bar';    out = 'static/wc/reaction-bar' }
+    @{ name = 'websocket-log';   dir = 'frontend/web-components/websocket-log';   out = 'static/wc/websocket-log' }
+    @{ name = 'chart-circle';    dir = 'frontend/web-components/chart-circle';    out = 'static/wc/chart-circle' }
+    @{ name = 'mermaid';         dir = 'frontend/web-components/mermaid';         out = 'static/wc/mermaid' }
+    @{ name = 'markdown';        dir = 'frontend/web-components/markdown';        out = 'static/wc/markdown' }
+    @{ name = 'model-gallery';   dir = 'frontend/web-components/model-gallery';   out = 'static/wc/model-gallery' }
+    @{ name = 'counter-persist'; dir = 'frontend/web-components/counter-persist'; out = 'static/wc/counter-persist' }
+)
+
+# Subset that runs `npm run lint` - mirrors Makefile's `lint:` recipe.
+$lintDirs = @(
+    'frontend/applications/main'
+    'frontend/web-components/reaction-bar'
+    'frontend/web-components/websocket-log'
+    'frontend/web-components/chart-circle'
+    'frontend/web-components/mermaid'
+    'frontend/web-components/markdown'
+    'frontend/web-components/model-gallery'
+    'frontend/web-components/counter-persist'
+)
+
+# Subset that participates in `clean-build` - mirrors Makefile's clean-build recipe.
+$cleanBuildItems = @(
+    @{ dir = 'frontend/applications/main';              out = 'static/app/main' }
+    @{ dir = 'frontend/web-components/reaction-bar';    out = 'static/wc/reaction-bar' }
+    @{ dir = 'frontend/web-components/websocket-log';   out = 'static/wc/websocket-log' }
+    @{ dir = 'frontend/web-components/chart-circle';    out = 'static/wc/chart-circle' }
+    @{ dir = 'frontend/web-components/mermaid';         out = 'static/wc/mermaid' }
+    @{ dir = 'frontend/web-components/markdown';        out = 'static/wc/markdown' }
+    @{ dir = 'frontend/web-components/model-gallery';   out = 'static/wc/model-gallery' }
+    @{ dir = 'frontend/web-components/counter-persist'; out = 'static/wc/counter-persist' }
+)
+
+function Invoke-Recipe {
+    param(
+        [Parameter(Mandatory)][string]$Dir,
+        [Parameter(Mandatory)][string]$Out,
+        [switch]$Clean
+    )
+    Push-Location $Dir
+    try {
+        Write-Host "==> $Dir" -ForegroundColor Cyan
+        # Clean = wipe both node_modules AND package-lock.json. Removing the
+        # lockfile is what makes a "clean reinstall" actually clean: a stale
+        # lockfile from before a @wippy-fe/* version bump pins the resolver
+        # to the OLD versions (npm ERESOLVE) even when package.json now asks
+        # for the new range.
+        if ($Clean) {
+            if (Test-Path 'node_modules') { Remove-Item -Recurse -Force 'node_modules' }
+            if (Test-Path 'package-lock.json') { Remove-Item -Force 'package-lock.json' }
+        }
+        npm install
+        if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
+        npm run build -- --outDir "../../../$Out" --emptyOutDir
+        if ($LASTEXITCODE -ne 0) { throw "npm run build failed in $Dir (exit $LASTEXITCODE)" }
     }
-    Write-Host "[$($M.Name)] npm install"
-    npm install
-    if ($LASTEXITCODE -ne 0) { throw "npm install failed for $($M.Name)" }
-    Write-Host "[$($M.Name)] npm run build -> $($M.OutDir)"
-    npm run build -- --outDir $outAbs --emptyOutDir
-    if ($LASTEXITCODE -ne 0) { throw "npm run build failed for $($M.Name)" }
-  }
-  finally { Pop-Location }
+    finally {
+        Pop-Location
+    }
 }
 
-function Lint-Module {
-  param([hashtable]$M)
-  $repoRoot = $PSScriptRoot
-  Push-Location (Join-Path $repoRoot $M.Path)
-  try {
-    Write-Host "[$($M.Name)] npm run lint"
-    npm run lint
-    if ($LASTEXITCODE -ne 0) { throw "npm run lint failed for $($M.Name)" }
-  }
-  finally { Pop-Location }
+function Invoke-Lint {
+    param([Parameter(Mandatory)][string]$Dir)
+    Push-Location $Dir
+    try {
+        Write-Host "==> lint $Dir" -ForegroundColor Cyan
+        npm run lint
+        if ($LASTEXITCODE -ne 0) { throw "npm run lint failed in $Dir (exit $LASTEXITCODE)" }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
-switch ($Target) {
-  'build' {
-    foreach ($m in $modules) { Build-Module -M $m }
-  }
-  'clean-build' {
-    foreach ($m in $modules) { Build-Module -M $m -Clean }
-  }
-  'lint' {
-    foreach ($m in $modules) { Lint-Module -M $m }
-  }
-  default {
-    # Per-module targets: build-app-main, build-wc-mermaid, etc.
-    $name = $Target -replace '^build-', ''
-    $m = $modules | Where-Object { $_.Name -eq $name } | Select-Object -First 1
-    if ($null -eq $m) {
-      Write-Error "Unknown target '$Target'. Available: build, clean-build, lint, or build-<module-name> where <module-name> in $($modules.Name -join ', ')"
-      exit 1
+function Invoke-BuildAll {
+    foreach ($i in $script:apps + $script:wcs) {
+        Invoke-Recipe -Dir $i.dir -Out $i.out
     }
-    Build-Module -M $m
-  }
+}
+
+function Show-Help {
+    Write-Host "make - Windows mirror of the Makefile (via make.bat -> make.ps1)`n"
+    Write-Host "Targets:"
+    Write-Host "  build              Build every app and web component"
+    Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
+    Write-Host "  build-wc-<name>    Build a single web component"
+    Write-Host "  lint               npm run lint across every package"
+    Write-Host "  clean-build        Wipe node_modules + reinstall + rebuild"
+    Write-Host "  dev                npm run dev in frontend/applications/main"
+    Write-Host "  run                build, then ./wippy.exe run -c"
+    Write-Host "  help               Show this message`n"
+    Write-Host "Apps:           $($apps.name -join ', ')"
+    Write-Host "Web components: $($wcs.name -join ', ')"
+}
+
+# Top-level dispatch wrapped in try/catch so a thrown error surfaces as a
+# single clean red line + exit 1, instead of PowerShell's default 5-line
+# stack trace. `finally` blocks inside the recipe helpers still run via
+# normal exception unwinding before control reaches this catch.
+try {
+    switch -Regex ($Target) {
+        '^help$|^-h$|^--help$' {
+            Show-Help
+            break
+        }
+        '^build$' {
+            Invoke-BuildAll
+            break
+        }
+        '^build-app-(.+)$' {
+            $name = $Matches[1]
+            $item = $apps | Where-Object { $_.name -eq $name }
+            if (-not $item) { throw "Unknown app: $name. Run 'make help' for the list." }
+            Invoke-Recipe -Dir $item.dir -Out $item.out
+            break
+        }
+        '^build-wc-(.+)$' {
+            $name = $Matches[1]
+            $item = $wcs | Where-Object { $_.name -eq $name }
+            if (-not $item) { throw "Unknown web component: $name. Run 'make help' for the list." }
+            Invoke-Recipe -Dir $item.dir -Out $item.out
+            break
+        }
+        '^lint$' {
+            foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            break
+        }
+        '^clean-build$' {
+            foreach ($i in $cleanBuildItems) { Invoke-Recipe -Dir $i.dir -Out $i.out -Clean }
+            break
+        }
+        '^dev$' {
+            Push-Location 'frontend/applications/main'
+            try {
+                npm run dev
+            }
+            finally {
+                Pop-Location
+            }
+            break
+        }
+        '^run$' {
+            Invoke-BuildAll
+            & "$PSScriptRoot/wippy.exe" run -c
+            break
+        }
+        default {
+            throw "Unknown target: $Target. Run 'make help' for the list."
+        }
+    }
+}
+catch {
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    exit 1
 }

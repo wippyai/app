@@ -1,47 +1,79 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import Chip from 'primevue/chip'
 
-// Track events from components for display
+/**
+ * Components & Embedding showcase — a single page with three tabs:
+ *   - Web Components: example custom elements, each in its own Shadow DOM.
+ *   - Iframe Theming: the same view.page rendered with default vs overridden colors.
+ *   - Nested Navigation: an embedded nav-owner page whose internal routing
+ *     mirrors into the browser URL.
+ *
+ * Tab and nested sub-path live in the query (?tab, ?np) so the page keeps a
+ * single clean route and browser back/forward still works.
+ */
+const route = useRoute()
+const router = useRouter()
+
+const tabs = [
+  { id: 'components', label: 'Web Components', icon: 'tabler:components' },
+  { id: 'iframe', label: 'Iframe Theming', icon: 'tabler:frame' },
+  { id: 'nested', label: 'Nested Navigation', icon: 'tabler:route-2' },
+] as const
+type TabId = typeof tabs[number]['id']
+
+const activeTab = computed<TabId>(() => {
+  const t = route.query.tab
+  return (typeof t === 'string' && tabs.some(x => x.id === t)) ? t as TabId : 'components'
+})
+
+function selectTab(id: TabId) {
+  router.push({ query: id === 'components' ? {} : { tab: id } })
+}
+
+// Embedded nav-owner sub-path, mirrored to/from the ?np query.
+const navOwnerSubPath = computed(() => {
+  const p = route.query.np
+  return (typeof p === 'string' && p) ? p : '/'
+})
+
+function onNavOwnerRoute(e: Event) {
+  const { path } = (e as CustomEvent).detail
+  if (!path)
+    return
+  const np = path === '/' ? undefined : path
+  if ((typeof route.query.np === 'string' ? route.query.np : '/') !== (np ?? '/'))
+    router.push({ query: { tab: 'nested', ...(np ? { np } : {}) } })
+}
+
+// --- Web component event logs ---
+import { ref } from 'vue'
 const reactionEvents = ref<Array<{ emoji: string; active: boolean; time: string }>>([])
 const modelEvents = ref<Array<{ name: string; provider: string; time: string }>>([])
 const counterEvents = ref<Array<{ count: number; time: string }>>([])
 
 function onReaction(e: Event) {
-  const detail = (e as CustomEvent).detail
-  reactionEvents.value.unshift({
-    emoji: detail.emoji,
-    active: detail.active,
-    time: new Date().toLocaleTimeString(),
-  })
+  const d = (e as CustomEvent).detail
+  reactionEvents.value.unshift({ emoji: d.emoji, active: d.active, time: new Date().toLocaleTimeString() })
   if (reactionEvents.value.length > 5) reactionEvents.value.pop()
 }
-
 function onCountChanged(e: Event) {
-  const detail = (e as CustomEvent).detail
-  counterEvents.value.unshift({
-    count: detail.count,
-    time: new Date().toLocaleTimeString(),
-  })
+  const d = (e as CustomEvent).detail
+  counterEvents.value.unshift({ count: d.count, time: new Date().toLocaleTimeString() })
   if (counterEvents.value.length > 5) counterEvents.value.pop()
 }
-
 function onModelSelected(e: Event) {
-  const detail = (e as CustomEvent).detail
-  modelEvents.value.unshift({
-    name: detail.name,
-    provider: detail.provider,
-    time: new Date().toLocaleTimeString(),
-  })
+  const d = (e as CustomEvent).detail
+  modelEvents.value.unshift({ name: d.name, provider: d.provider, time: new Date().toLocaleTimeString() })
   if (modelEvents.value.length > 5) modelEvents.value.pop()
 }
 
-// Demo data for chart
+// --- Demo data ---
 const chartLabels = '["Vue","React","Svelte","Angular"]'
 const chartValues = '[40,30,20,10]'
 
-// Demo mermaid definition (via prop)
 const mermaidDef = `graph LR
     A[User] --> B[Facade]
     B --> C[View Page]
@@ -49,7 +81,6 @@ const mermaidDef = `graph LR
     D --> E[Shadow DOM]
     E --> F[Vue App]`
 
-// Demo markdown
 const markdownContent = `# Web Components
 
 Build **reusable** UI widgets with the Wippy component system.
@@ -77,19 +108,48 @@ const emit = useComponentEvents()
 </script>
 
 <template>
-  <div class="p-6 max-w-5xl mx-auto">
+  <div class="p-6 max-w-5xl mx-auto h-full flex flex-col min-h-0">
     <!-- Header -->
-    <div class="mb-6">
+    <div class="mb-4">
       <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-0 mb-1">
-        Web Components
+        Components &amp; Embedding
       </h1>
       <p class="text-sm text-surface-500 dark:text-surface-400">
-        Interactive demos of example web components, each running in its own Shadow DOM.
+        Web components in Shadow DOM, themed iframe pages, and nested navigation — each in its own tab.
       </p>
     </div>
 
-    <!-- Component Cards -->
-    <div class="flex flex-col gap-4">
+    <!-- Tab bar -->
+    <div
+      role="tablist"
+      aria-label="Showcase sections"
+      class="flex items-center gap-1 p-1 rounded-lg bg-surface-100 dark:bg-surface-800 w-fit mb-4"
+    >
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        role="tab"
+        :aria-selected="activeTab === t.id"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+        :class="activeTab === t.id
+          ? 'bg-surface-0 dark:bg-surface-900 text-primary shadow-sm'
+          : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-200'"
+        @click="selectTab(t.id)"
+      >
+        <Icon
+          :icon="t.icon"
+          class="w-4 h-4"
+          aria-hidden="true"
+        />
+        {{ t.label }}
+      </button>
+    </div>
+
+    <!-- Web Components -->
+    <div
+      v-show="activeTab === 'components'"
+      class="flex flex-col gap-4 flex-1 min-h-0 overflow-auto"
+    >
       <!-- Reaction Bar -->
       <div class="p-card p-component rounded-lg p-4">
         <div class="flex items-center gap-3 mb-3">
@@ -440,5 +500,82 @@ const emit = useComponentEvents()
         </div>
       </div>
     </div>
+
+    <!-- Iframe Theming -->
+    <div
+      v-show="activeTab === 'iframe'"
+      class="flex-1 min-h-0 flex flex-col gap-3"
+    >
+      <p class="text-sm text-surface-500 dark:text-surface-400">
+        Two instances of the same view.page. Left uses the default theme; right uses
+        <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">configOverrides</code>
+        to replace all five color families. Watch chart segments, buttons, and accents change.
+      </p>
+      <div class="iframe-demo-container flex-1 min-h-0 relative">
+        <div class="iframe-demo-grid absolute inset-0 gap-4">
+          <div class="flex flex-col border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden min-h-[300px]">
+            <div class="px-3 py-1.5 bg-surface-50 dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 text-xs font-medium text-surface-500 shrink-0">
+              Default Theme
+            </div>
+            <w-artifact
+              id="app.views:iframe-demo"
+              type="page"
+              class="flex-1"
+            />
+          </div>
+          <div class="flex flex-col border border-purple-200 dark:border-purple-900 rounded-lg overflow-hidden min-h-[300px]">
+            <div class="px-3 py-1.5 bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-900 text-xs font-medium text-purple-600 dark:text-purple-400 shrink-0">
+              Custom Palette (configOverrides)
+            </div>
+            <w-artifact
+              id="app.views:iframe-demo-themed"
+              type="page"
+              class="flex-1"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nested Navigation -->
+    <div
+      v-show="activeTab === 'nested'"
+      class="flex-1 min-h-0 flex flex-col gap-3"
+    >
+      <p class="text-sm text-surface-500 dark:text-surface-400">
+        The embedded page below is a <strong>nav-owner</strong>. Its internal tabs use
+        <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">RouterLink</code>,
+        and each click mirrors into this browser URL — try the tabs, then browser back/forward.
+      </p>
+      <div class="flex-1 min-h-0 border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden">
+        <w-artifact
+          id="app.views:iframe-demo"
+          type="page"
+          nav-owner
+          :sub-path="navOwnerSubPath"
+          @nav-owner-route="onNavOwnerRoute"
+        />
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.iframe-demo-container {
+  container-type: inline-size;
+}
+
+.iframe-demo-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+  overflow: auto;
+}
+
+@container (min-width: 800px) {
+  .iframe-demo-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr;
+  }
+}
+</style>

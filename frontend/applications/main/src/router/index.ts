@@ -24,6 +24,11 @@ const routes = [
     component: () => import('../pages/components.vue'),
   },
   {
+    path: '/research',
+    name: 'research',
+    component: () => import('../pages/research.vue'),
+  },
+  {
     path: '/iframe-demo',
     name: 'iframe-demo',
     component: () => import('../pages/iframe-demo.vue'),

@@ -22,7 +22,7 @@ entries:
 
       If the user asks to see or open a specific page, use NavigateTo.
       Be concise and helpful.
-    model: claude-4-5-sonnet
+    model: claude-sonnet-4-6
     temperature: 0.5
     max_tokens: 8000
     traits:
