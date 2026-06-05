@@ -59,7 +59,7 @@ local function execute(_base_prompt: string?, _ctx: any?): any
             local base_url = component_registry.resolve_base_url(component)
             local projected = bundled_meta.project_component_response(meta, component, base_url)
 
-            local tag = projected.tag_name
+            local tag = projected.wippy.tagName
             if tag and tag ~= "" then
                 auto_rendered = auto_rendered + 1
                 table.insert(lines, "### " .. tag)
@@ -69,7 +69,7 @@ local function execute(_base_prompt: string?, _ctx: any?): any
                 if projected.description and projected.description ~= "" then
                     table.insert(lines, projected.description)
                 end
-                local props_str = format_schema(projected.props)
+                local props_str = format_schema(projected.wippy.props)
                 if props_str ~= "" then
                     table.insert(lines, "")
                     table.insert(lines, "Props schema:")
@@ -77,7 +77,7 @@ local function execute(_base_prompt: string?, _ctx: any?): any
                     table.insert(lines, props_str)
                     table.insert(lines, "```")
                 end
-                local events_str = format_schema(projected.events)
+                local events_str = format_schema(projected.wippy.events)
                 if events_str ~= "" then
                     table.insert(lines, "")
                     table.insert(lines, "Events schema:")
@@ -113,8 +113,8 @@ local function execute(_base_prompt: string?, _ctx: any?): any
             local base_url = component_registry.resolve_base_url(component)
             local projected = bundled_meta.project_component_response(meta, component, base_url)
 
-            local tag = projected.tag_name
-            local entry = projected.entry_point or "index.js"
+            local tag = projected.wippy.tagName
+            local entry = projected.browser or "index.js"
             -- Trailing slash is guaranteed by resolve_base_url
             local browser_url = base_url .. entry
 
@@ -124,7 +124,7 @@ local function execute(_base_prompt: string?, _ctx: any?): any
                 browser = browser_url,
                 wippy = {
                     tagName = tag,
-                    props = projected.props or { type = "object", properties = {} },
+                    props = projected.wippy.props or { type = "object", properties = {} },
                 },
             }
             local pkg_str, pkg_err = json.encode(pkg)

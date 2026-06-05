@@ -5,14 +5,12 @@ import { Icon } from '@iconify/vue'
 import Chip from 'primevue/chip'
 
 /**
- * Components & Embedding showcase — a single page with three tabs:
+ * Components & Embedding showcase — a single page with two tabs:
  *   - Web Components: example custom elements, each in its own Shadow DOM.
  *   - Iframe Theming: the same view.page rendered with default vs overridden colors.
- *   - Nested Navigation: an embedded nav-owner page whose internal routing
- *     mirrors into the browser URL.
  *
- * Tab and nested sub-path live in the query (?tab, ?np) so the page keeps a
- * single clean route and browser back/forward still works.
+ * The active tab lives in the query (?tab) so the page keeps a single clean
+ * route and browser back/forward still works.
  */
 const route = useRoute()
 const router = useRouter()
@@ -20,7 +18,6 @@ const router = useRouter()
 const tabs = [
   { id: 'components', label: 'Web Components', icon: 'tabler:components' },
   { id: 'iframe', label: 'Iframe Theming', icon: 'tabler:frame' },
-  { id: 'nested', label: 'Nested Navigation', icon: 'tabler:route-2' },
 ] as const
 type TabId = typeof tabs[number]['id']
 
@@ -31,21 +28,6 @@ const activeTab = computed<TabId>(() => {
 
 function selectTab(id: TabId) {
   router.push({ query: id === 'components' ? {} : { tab: id } })
-}
-
-// Embedded nav-owner sub-path, mirrored to/from the ?np query.
-const navOwnerSubPath = computed(() => {
-  const p = route.query.np
-  return (typeof p === 'string' && p) ? p : '/'
-})
-
-function onNavOwnerRoute(e: Event) {
-  const { path } = (e as CustomEvent).detail
-  if (!path)
-    return
-  const np = path === '/' ? undefined : path
-  if ((typeof route.query.np === 'string' ? route.query.np : '/') !== (np ?? '/'))
-    router.push({ query: { tab: 'nested', ...(np ? { np } : {}) } })
 }
 
 // --- Web component event logs ---
@@ -115,7 +97,7 @@ const emit = useComponentEvents()
         Components &amp; Embedding
       </h1>
       <p class="text-sm text-surface-500 dark:text-surface-400">
-        Web components in Shadow DOM, themed iframe pages, and nested navigation — each in its own tab.
+        Web components in Shadow DOM and themed iframe pages — each in its own tab.
       </p>
     </div>
 
@@ -534,27 +516,6 @@ const emit = useComponentEvents()
             />
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Nested Navigation -->
-    <div
-      v-show="activeTab === 'nested'"
-      class="flex-1 min-h-0 flex flex-col gap-3"
-    >
-      <p class="text-sm text-surface-500 dark:text-surface-400">
-        The embedded page below is a <strong>nav-owner</strong>. Its internal tabs use
-        <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">RouterLink</code>,
-        and each click mirrors into this browser URL — try the tabs, then browser back/forward.
-      </p>
-      <div class="flex-1 min-h-0 border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden">
-        <w-artifact
-          id="app.views:iframe-demo"
-          type="page"
-          nav-owner
-          :sub-path="navOwnerSubPath"
-          @nav-owner-route="onNavOwnerRoute"
-        />
       </div>
     </div>
   </div>

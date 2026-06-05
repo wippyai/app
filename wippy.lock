@@ -65,5 +65,7 @@ modules:
 replacements:
     - from: wippy/facade
       to: ../wippy-framework/src/facade
+    - from: wippy/views
+      to: ../wippy-framework/src/views
 options:
     unpack_modules: true
