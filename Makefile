@@ -40,14 +40,15 @@ lint:
 	cd frontend/web-components/counter-persist && npm run lint
 
 clean-build:
-	cd frontend/applications/main && rm -rf node_modules && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir
-	cd frontend/web-components/reaction-bar && rm -rf node_modules && npm install && npm run build -- --outDir ../../../static/wc/reaction-bar --emptyOutDir
-	cd frontend/web-components/websocket-log && rm -rf node_modules && npm install && npm run build -- --outDir ../../../static/wc/websocket-log --emptyOutDir
-	cd frontend/web-components/chart-circle && rm -rf node_modules && npm install && npm run build -- --outDir ../../../static/wc/chart-circle --emptyOutDir
-	cd frontend/web-components/mermaid && rm -rf node_modules && npm install && npm run build -- --outDir ../../../static/wc/mermaid --emptyOutDir
-	cd frontend/web-components/markdown && rm -rf node_modules && npm install && npm run build -- --outDir ../../../static/wc/markdown --emptyOutDir
-	cd frontend/web-components/model-gallery && rm -rf node_modules && npm install && npm run build -- --outDir ../../../static/wc/model-gallery --emptyOutDir
-	cd frontend/web-components/counter-persist && rm -rf node_modules && npm install && npm run build -- --outDir ../../../static/wc/counter-persist --emptyOutDir
+	cd frontend/applications/main && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir
+	cd frontend/applications/iframe-demo && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/iframe-demo --emptyOutDir
+	cd frontend/web-components/reaction-bar && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/reaction-bar --emptyOutDir
+	cd frontend/web-components/websocket-log && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/websocket-log --emptyOutDir
+	cd frontend/web-components/chart-circle && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/chart-circle --emptyOutDir
+	cd frontend/web-components/mermaid && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/mermaid --emptyOutDir
+	cd frontend/web-components/markdown && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/markdown --emptyOutDir
+	cd frontend/web-components/model-gallery && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/model-gallery --emptyOutDir
+	cd frontend/web-components/counter-persist && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/counter-persist --emptyOutDir
 
 dev:
 	cd frontend/applications/main && npm run dev

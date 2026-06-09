@@ -24,10 +24,19 @@ instance.on('action:navigate', (data: any) => {
   if (path) router.push(path)
 })
 
-const navItems = [
+interface NavItem {
+  path: string
+  name: string
+  label: string
+  icon: string
+  hostNav?: boolean
+}
+
+const navItems: NavItem[] = [
   { path: '/', name: 'home', label: 'Home', icon: 'tabler:home' },
   { path: '/users', name: 'users', label: 'Users', icon: 'tabler:users' },
   { path: '/components', name: 'components', label: 'Components', icon: 'tabler:components' },
+  { path: '/nested-nav', name: 'nested-nav', label: 'Nested Nav', icon: 'tabler:route-2' },
   { path: '/research', name: 'research', label: 'Web Research', icon: 'tabler:world-search' },
   { path: '/c/keeper:main', name: 'keeper', label: 'Keeper', icon: 'tabler:shield-code', hostNav: true },
 ]

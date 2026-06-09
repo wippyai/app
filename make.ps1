@@ -43,18 +43,6 @@ $lintDirs = @(
     'frontend/web-components/counter-persist'
 )
 
-# Subset that participates in `clean-build` - mirrors Makefile's clean-build recipe.
-$cleanBuildItems = @(
-    @{ dir = 'frontend/applications/main';              out = 'static/app/main' }
-    @{ dir = 'frontend/web-components/reaction-bar';    out = 'static/wc/reaction-bar' }
-    @{ dir = 'frontend/web-components/websocket-log';   out = 'static/wc/websocket-log' }
-    @{ dir = 'frontend/web-components/chart-circle';    out = 'static/wc/chart-circle' }
-    @{ dir = 'frontend/web-components/mermaid';         out = 'static/wc/mermaid' }
-    @{ dir = 'frontend/web-components/markdown';        out = 'static/wc/markdown' }
-    @{ dir = 'frontend/web-components/model-gallery';   out = 'static/wc/model-gallery' }
-    @{ dir = 'frontend/web-components/counter-persist'; out = 'static/wc/counter-persist' }
-)
-
 function Invoke-Recipe {
     param(
         [Parameter(Mandatory)][string]$Dir,
@@ -150,7 +138,9 @@ try {
             break
         }
         '^clean-build$' {
-            foreach ($i in $cleanBuildItems) { Invoke-Recipe -Dir $i.dir -Out $i.out -Clean }
+            # Same set as `build` (every app + web component), wiped clean first so a
+            # @wippy-fe/* version bump resolves against fresh node_modules + lockfile.
+            foreach ($i in $script:apps + $script:wcs) { Invoke-Recipe -Dir $i.dir -Out $i.out -Clean }
             break
         }
         '^dev$' {

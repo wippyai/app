@@ -95,8 +95,8 @@ entries:
       cached_input: 0.08
       cache_write: 1
     providers:
-      - id: wippy.llm.claude:provider
-        provider_model: claude-haiku-4-5-20251001
+      - id: wippy.llm.openai_compat:provider
+        provider_model: anthropic/claude-haiku-4.5
 
   # ── OpenAI ──
   - name: gpt-5.5

@@ -174,13 +174,7 @@ async function confirmDelete(user: User) {
   const name = user.full_name || user.email
   const confirmed = await host.confirm({
     header: 'Delete User',
-    html: `<div class="flex items-start gap-3">
-      <iconify-icon icon="tabler:alert-triangle" width="24" style="color: var(--p-danger-500); margin-top: 2px; flex-shrink: 0;"></iconify-icon>
-      <div>
-        <p style="font-weight: 500; margin: 0 0 4px 0;">Delete "${name}"?</p>
-        <p style="font-size: 0.75rem; color: var(--p-text-muted-color); margin: 0;">This will permanently delete the user and revoke all access. This action cannot be undone.</p>
-      </div>
-    </div>`,
+    message: `Delete "${name}"? This will permanently delete the user and revoke all access. This action cannot be undone.`,
     acceptLabel: 'Delete',
     rejectLabel: 'Cancel',
     acceptProps: { severity: 'danger' },

@@ -5,19 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wippy - Sign In</title>
     <meta name="color-scheme" content="light dark">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.26/@wippy-fe/assets/theme-config.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.26/@wippy-fe/assets/preflight.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.26/@wippy-fe/assets/iframe.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.26/@wippy-fe/assets/tailwind.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.36/@wippy-fe/assets/theme-config.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.36/@wippy-fe/assets/preflight.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.36/@wippy-fe/assets/iframe.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.36/@wippy-fe/assets/tailwind.css">
+    <!-- App theme for this non-host page: CSS variables via the facade API
+         (/facade/variables.css converts the app's css_variables JSON to :root CSS)
+         + the same global custom CSS the host applies (served from content_fs).
+         Keeps login.html in sync with the app theme without the Wippy host. -->
+    <link rel="stylesheet" href="/api/public/facade/variables.css">
+    <link rel="stylesheet" href="/app/custom-css.facade.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
-
-        :root {
-            --p-primary: #6366f1;
-        }
-
         body {
-            font-family: 'Poppins', sans-serif;
             background: color-mix(in srgb, var(--p-content-background) 92%, var(--p-text-color) 8%);
             color: var(--p-text-color);
             display: flex;

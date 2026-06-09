@@ -1,11 +1,6 @@
-import type { HostApi } from '../types'
+import type { HostApi, ProxyApiInstance } from '../types'
 import type { Router } from 'vue-router'
 import { createAppRouter as createAppRouterFactory } from '@wippy-fe/router'
-
-type OnSubscription = (
-  pattern: string,
-  callback: (event: { path?: string, message?: unknown }) => void,
-) => void
 
 const routes = [
   {
@@ -28,14 +23,15 @@ const routes = [
     name: 'research',
     component: () => import('../pages/research.vue'),
   },
-  // Former standalone demo pages now live as tabs on /components.
   {
     path: '/iframe-demo',
-    redirect: { name: 'components', query: { tab: 'iframe' } },
+    name: 'iframe-demo',
+    component: () => import('../pages/iframe-demo.vue'),
   },
   {
     path: '/nested-nav/:part(.*)*',
-    redirect: { name: 'components', query: { tab: 'nested' } },
+    name: 'nested-nav',
+    component: () => import('../pages/nested-nav.vue'),
   },
   {
     path: '/:pathMatch(.*)*',
@@ -51,7 +47,7 @@ const routes = [
  *   - afterEach → host.onRouteChanged
  *   - @history subscription → parent → child URL mirroring
  */
-export function createAppRouter(host: HostApi, on: OnSubscription | null, initialPath: string): Router {
+export function createAppRouter(host: HostApi, on: ProxyApiInstance['on'] | null, initialPath: string): Router {
   return createAppRouterFactory(routes, {
     host: host as never,
     on: on as never,
