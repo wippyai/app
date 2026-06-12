@@ -18,6 +18,7 @@ const router = useRouter()
 const tabs = [
   { id: 'components', label: 'Web Components', icon: 'tabler:components' },
   { id: 'iframe', label: 'Iframe Theming', icon: 'tabler:frame' },
+  { id: 'chat', label: 'Chat', icon: 'tabler:message-chatbot' },
 ] as const
 type TabId = typeof tabs[number]['id']
 
@@ -516,6 +517,30 @@ const emit = useComponentEvents()
             />
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div
+      v-show="activeTab === 'chat'"
+      class="flex-1 min-h-0 flex flex-col gap-3"
+    >
+      <p class="text-sm text-surface-500 dark:text-surface-400">
+        A live Wippy chat embedded as web components. The
+        <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">&lt;wippy-session-selector&gt;</code>
+        drives a
+        <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">&lt;wippy-chat&gt;</code>
+        (no <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">session-id</code> →
+        it follows the picked session). The thin
+        <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">chat.js</code>
+        shell is auto-injected by the host; the chat internals lazy-load on first mount.
+      </p>
+      <div class="flex-1 min-h-0 flex flex-col border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden">
+        <wippy-session-selector
+          class="shrink-0 border-b border-surface-200 dark:border-surface-700"
+          style="display: block"
+        />
+        <wippy-chat style="display: block; flex: 1 1 0%; min-height: 0" />
       </div>
     </div>
   </div>

@@ -6,6 +6,16 @@ namespace: app.models
 #   - by class: model: class:fast   (highest-priority model in that class wins)
 # Keeper's bundled agents resolve class:smart / orchestrator / fast / nano /
 # coder / embed, so those classes must always have a member here.
+#
+# ⚠️ PROVIDER ROUTING — DO NOT REVERT unless you know exactly what you are doing. ⚠️
+# All chat/LLM models route through `wippy.llm.openai_compat:provider` (OpenRouter,
+# configured via OPENAI_COMPAT_API_KEY / OPENAI_COMPAT_BASE_URL in .env). This repo
+# is OpenRouter-only: ANTHROPIC_API_KEY / OPENAI_API_KEY are NOT set. A previous
+# merge ("took master's refreshed model set") reverted these to the native
+# `wippy.llm.claude` / `wippy.llm.openai` providers, which broke chat with
+# "Claude API key is required". If you switch any model back to a native provider,
+# you MUST also provide that provider's API key. (text-embedding-3-small stays on
+# native OpenAI — OpenRouter has no embedding models.)
 
 entries:
   # ── Claude ──
@@ -35,8 +45,8 @@ entries:
       cached_input: 1.5
       cache_write: 18.75
     providers:
-      - id: wippy.llm.claude:provider
-        provider_model: claude-opus-4-6
+      - id: wippy.llm.openai_compat:provider
+        provider_model: anthropic/claude-opus-4.6
 
   - name: claude-sonnet-4-6
     kind: registry.entry
@@ -67,8 +77,8 @@ entries:
       cached_input: 0.3
       cache_write: 3.75
     providers:
-      - id: wippy.llm.claude:provider
-        provider_model: claude-sonnet-4-6
+      - id: wippy.llm.openai_compat:provider
+        provider_model: anthropic/claude-sonnet-4.6
 
   - name: claude-haiku-4-5
     kind: registry.entry
@@ -118,8 +128,8 @@ entries:
     max_tokens: 400000
     output_tokens: 32768
     providers:
-      - id: wippy.llm.openai:provider
-        provider_model: gpt-5.5
+      - id: wippy.llm.openai_compat:provider
+        provider_model: openai/gpt-5.5
 
   - name: gpt-5.4
     kind: registry.entry
@@ -140,8 +150,8 @@ entries:
     max_tokens: 400000
     output_tokens: 32768
     providers:
-      - id: wippy.llm.openai:provider
-        provider_model: gpt-5.4
+      - id: wippy.llm.openai_compat:provider
+        provider_model: openai/gpt-5.4
 
   - name: gpt-5.4-nano
     kind: registry.entry
@@ -162,8 +172,8 @@ entries:
     max_tokens: 400000
     output_tokens: 32768
     providers:
-      - id: wippy.llm.openai:provider
-        provider_model: gpt-5.4-nano
+      - id: wippy.llm.openai_compat:provider
+        provider_model: openai/gpt-5.4-nano
 
   - name: gpt-5.3-codex
     kind: registry.entry
@@ -185,8 +195,8 @@ entries:
     max_tokens: 400000
     output_tokens: 32768
     providers:
-      - id: wippy.llm.openai:provider
-        provider_model: gpt-5.3-codex
+      - id: wippy.llm.openai_compat:provider
+        provider_model: openai/gpt-5.3-codex
 
   # ── Embedding ──
   - name: text-embedding-3-small
