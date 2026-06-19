@@ -19,6 +19,33 @@ function toggleSidebar() {
   collapsed.value = !collapsed.value
 }
 
+// ── Color theme switch (auto / light / dark) ──
+// Drives the proxy theme API: `host.setThemeMode` propagates to the host shell,
+// every live child iframe, and the embedding parent; `on('@theme')` keeps this
+// control in sync when the theme is changed elsewhere.
+const themeOptions = [
+  { mode: 'auto', label: 'Auto', icon: 'tabler:device-desktop' },
+  { mode: 'light', label: 'Light', icon: 'tabler:sun' },
+  { mode: 'dark', label: 'Dark', icon: 'tabler:moon' },
+] as const
+
+type ThemeMode = (typeof themeOptions)[number]['mode']
+
+const themeMode = ref<ThemeMode>('auto')
+const currentThemeOption = computed(
+  () => themeOptions.find(o => o.mode === themeMode.value) ?? themeOptions[0],
+)
+
+function setTheme(mode: ThemeMode) {
+  themeMode.value = mode
+  host.setThemeMode(mode)
+}
+
+function cycleTheme() {
+  const idx = themeOptions.findIndex(o => o.mode === themeMode.value)
+  setTheme(themeOptions[(idx + 1) % themeOptions.length].mode)
+}
+
 instance.on('action:navigate', (data: any) => {
   const path = data?.data?.path || data?.path
   if (path) router.push(path)
@@ -100,6 +127,10 @@ function logout() {
 onMounted(() => {
   fetchMe()
   fetchWippyAgent()
+  themeMode.value = host.getThemeMode()
+  instance.on('@theme', (mode: any) => {
+    themeMode.value = mode
+  })
 })
 </script>
 
@@ -151,6 +182,50 @@ onMounted(() => {
           <span v-if="!collapsed">{{ item.label }}</span>
         </button>
       </nav>
+
+      <!-- Color theme switch: segmented (expanded) / single cycling icon (collapsed) -->
+      <div class="px-2 pt-2 pb-1">
+        <div
+          v-if="!collapsed"
+          class="flex items-center gap-0.5 rounded-lg bg-surface-200 dark:bg-surface-900 p-0.5"
+          role="group"
+          aria-label="Color theme"
+        >
+          <button
+            v-for="opt in themeOptions"
+            :key="opt.mode"
+            type="button"
+            class="flex-1 flex items-center justify-center rounded-md py-1.5 transition-colors"
+            :class="themeMode === opt.mode
+              ? 'bg-surface-0 dark:bg-surface-700 text-primary shadow-sm'
+              : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'"
+            :aria-pressed="themeMode === opt.mode"
+            :aria-label="opt.label"
+            :title="opt.label"
+            @click="setTheme(opt.mode)"
+          >
+            <Icon
+              :icon="opt.icon"
+              class="w-4 h-4"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+        <button
+          v-else
+          type="button"
+          class="w-full flex items-center justify-center rounded-lg py-2 text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+          :aria-label="`Theme: ${currentThemeOption.label}, click to cycle`"
+          :title="`Theme: ${currentThemeOption.label} (click to cycle)`"
+          @click="cycleTheme"
+        >
+          <Icon
+            :icon="currentThemeOption.icon"
+            class="w-[18px] h-[18px] shrink-0"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
 
       <div
         v-if="wippyToken"

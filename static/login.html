@@ -5,16 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wippy - Sign In</title>
     <meta name="color-scheme" content="light dark">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.37/@wippy-fe/assets/theme-config.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.37/@wippy-fe/assets/preflight.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.37/@wippy-fe/assets/iframe.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.37/@wippy-fe/assets/tailwind.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.39/@wippy-fe/assets/theme-config.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.39/@wippy-fe/assets/preflight.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.39/@wippy-fe/assets/iframe.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.39/@wippy-fe/assets/tailwind.css">
     <!-- App theme for this non-host page: CSS variables via the facade API
          (/facade/variables.css converts the app's css_variables JSON to :root CSS)
          + the same global custom CSS the host applies (served from content_fs).
          Keeps login.html in sync with the app theme without the Wippy host. -->
     <link rel="stylesheet" href="/api/public/facade/variables.css">
     <link rel="stylesheet" href="/app/custom-css.facade.css">
+    <!-- Honor the app's forced theme (facade `theme_mode`) on this standalone
+         pre-auth page. The 4 static CDN links above are version-pinned and flip
+         with the OS only — keep their version in lockstep with `fe_facade_url` on
+         release (they live in app static/, outside the facade's version bump).
+         Below we (1) stamp the w-theme-* class from the facade config and (2)
+         re-load theme-config.css + tailwind.css from facade_url so the host's
+         forcing-aware copies win the cascade (in prod the same URL = cache hit;
+         locally = the dev build). Caveats: themeMode is only known after the async
+         config fetch, so a forced theme causes a brief OS->forced flip on first
+         paint; if facade_url is empty the class is still stamped but forcing only
+         applies once the static theme-config itself carries the .w-theme-* rules;
+         if the config endpoint is unreachable we fall back to the OS theme. -->
+    <script>
+        (async function () {
+            try {
+                var cfg = await (await fetch('/api/public/facade/config')).json();
+                var mode = cfg.themeMode;
+                if (mode === 'dark' || mode === 'light') {
+                    document.documentElement.classList.add('w-theme-' + mode);
+                    document.documentElement.style.colorScheme = mode;
+                }
+                if (cfg.facade_url) {
+                    // Appended last → win the cascade over the static CDN links.
+                    // theme-config.css carries the .w-theme-* token rules; tailwind.css
+                    // carries the forcing-aware PrimeVue component styles (e.g. .p-card).
+                    // In prod facade_url === the static CDN base, so these resolve to the
+                    // same URLs (cache hit, no double-download); locally they load the
+                    // forcing-aware host build from the dev server.
+                    ['theme-config.css', 'tailwind.css'].forEach(function (file) {
+                        var link = document.createElement('link');
+                        link.rel = 'stylesheet';
+                        link.href = cfg.facade_url + '/@wippy-fe/assets/' + file;
+                        document.head.appendChild(link);
+                    });
+                }
+            } catch (e) { /* pre-auth config unavailable — fall back to OS theme */ }
+        })();
+    </script>
     <style>
         body {
             background: color-mix(in srgb, var(--p-content-background) 92%, var(--p-text-color) 8%);
