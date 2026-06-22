@@ -1,6 +1,7 @@
 local http = require("http")
 local json = require("json")
 local user_repo = require("user_repo")
+local api_error = require("api_error")
 
 local function handler()
     local req = http.request()
@@ -24,8 +25,7 @@ local function handler()
 
     local data, err = json.decode(body)
     if err then
-        res:set_status(http.STATUS.BAD_REQUEST)
-        res:write_json({ success = false, error = "Invalid JSON: " .. err })
+        api_error.fail(res, http.STATUS.BAD_REQUEST, "Invalid JSON", err)
         return
     end
 
@@ -51,8 +51,7 @@ local function handler()
 
     local result, err = user_repo.update(user_id, update_data)
     if err then
-        res:set_status(http.STATUS.INTERNAL_ERROR)
-        res:write_json({ success = false, error = err })
+        api_error.fail(res, http.STATUS.INTERNAL_ERROR, "Failed to update user", err)
         return
     end
 

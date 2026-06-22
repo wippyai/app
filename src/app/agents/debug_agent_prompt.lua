@@ -10,6 +10,7 @@
 local http = require("http")
 local compiler = require("compiler")
 local agent_registry = require("agent_registry")
+local api_error = require("api_error")
 
 local function handler()
     local res = http.response()
@@ -31,12 +32,7 @@ local function handler()
     -- prompt with no traits picked up.
     local raw_spec, err = agent_registry.get_by_id(agent_id)
     if err or not raw_spec then
-        res:set_status(http.STATUS.NOT_FOUND)
-        res:write_json({
-            success = false,
-            error = "Agent not found: " .. tostring(err or "unknown error"),
-            agent_id = agent_id,
-        })
+        api_error.fail(res, http.STATUS.NOT_FOUND, "Agent not found", err or "unknown error")
         return
     end
 
@@ -45,12 +41,7 @@ local function handler()
     -- wants — assert that across the `any` boundary so it type-checks.
     local compiled, compile_err = compiler.compile(raw_spec :: table, {})
     if compile_err or not compiled then
-        res:set_status(http.STATUS.INTERNAL_ERROR)
-        res:write_json({
-            success = false,
-            error = "Compile failed: " .. tostring(compile_err or "no spec"),
-            agent_id = agent_id,
-        })
+        api_error.fail(res, http.STATUS.INTERNAL_ERROR, "Compile failed", compile_err or "no spec")
         return
     end
 

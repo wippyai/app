@@ -2,6 +2,14 @@ version: "1.0"
 namespace: app.api.entries
 
 entries:
+  - name: api_error
+    kind: library.lua
+    meta:
+      comment: API error helper
+    source: file://api_error.lua
+    modules:
+      - logger
+
   - name: list_agents
     kind: function.lua
     source: file://list_agents.lua
@@ -10,6 +18,7 @@ entries:
       - registry
     imports:
       start_tokens: wippy.session:start_tokens
+      api_error: app.api.entries:api_error
     method: handler
     pool:
       size: 2

@@ -1,6 +1,7 @@
 local http = require("http")
 local start_tokens = require("start_tokens")
 local registry = require("registry")
+local api_error = require("api_error")
 
 local AGENT_TYPE = "agent.gen1"
 local REQUIRED_CLASS = "public"
@@ -21,8 +22,7 @@ local function handler()
     })
 
     if err then
-        res:set_status(http.STATUS.INTERNAL_ERROR)
-        res:write_json({ success = false, error = err })
+        api_error.fail(res, http.STATUS.INTERNAL_ERROR, "Failed to list agents", err)
         return
     end
 
@@ -74,11 +74,7 @@ local function handler()
         })
 
         if not token then
-            res:set_status(http.STATUS.INTERNAL_ERROR)
-            res:write_json({
-                success = false,
-                error = "Failed to generate start token for " .. (agent.name or "unknown") .. ": " .. (token_err or "unknown error")
-            })
+            api_error.fail(res, http.STATUS.INTERNAL_ERROR, "Failed to generate start token for " .. (agent.name or "unknown"), token_err or "unknown error")
             return
         end
 

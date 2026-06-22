@@ -1,14 +1,14 @@
 local http = require("http")
 local user_repo = require("user_repo")
 local user_groups_repo = require("user_groups_repo")
+local api_error = require("api_error")
 
 local function handler()
     local res = http.response()
 
     local users, err = user_repo.list()
     if err then
-        res:set_status(http.STATUS.INTERNAL_ERROR)
-        res:write_json({ success = false, error = err })
+        api_error.fail(res, http.STATUS.INTERNAL_ERROR, "Failed to list users", err)
         return
     end
 

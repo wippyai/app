@@ -1,6 +1,7 @@
 local http = require("http")
 local json = require("json")
 local flow = require("flow")
+local api_error = require("api_error")
 
 -- POST /api/v1/research { query }
 -- Starts an async research dataflow and returns immediately. The flow runs under
@@ -62,8 +63,7 @@ local function handler()
 
     local dataflow_id, start_err = f:start()
     if start_err ~= nil then
-        res:set_status(http.STATUS.INTERNAL_ERROR)
-        res:write_json({ success = false, error = tostring(start_err) })
+        api_error.fail(res, http.STATUS.INTERNAL_ERROR, "Failed to start research", start_err)
         return
     end
 

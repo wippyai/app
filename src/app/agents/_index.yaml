@@ -2,6 +2,14 @@ version: "1.0"
 namespace: app.agents
 
 entries:
+  - name: api_error
+    kind: library.lua
+    meta:
+      comment: API error helper
+    source: file://api_error.lua
+    modules:
+      - logger
+
   - name: wippy
     kind: registry.entry
     meta:
@@ -140,6 +148,7 @@ entries:
     imports:
       compiler: wippy.agent.compiler:compiler
       agent_registry: wippy.agent.discovery:registry
+      api_error: app.agents:api_error
     method: handler
 
   - name: debug_agent_prompt.endpoint

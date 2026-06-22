@@ -2,6 +2,14 @@ version: "1.0"
 namespace: app.users
 
 entries:
+  - name: api_error
+    kind: library.lua
+    meta:
+      comment: API error helper
+    source: file://api_error.lua
+    modules:
+      - logger
+
   - name: list_users
     kind: function.lua
     source: file://list_users.lua
@@ -10,6 +18,7 @@ entries:
     imports:
       user_repo: userspace.user.persist:user_repo
       user_groups_repo: userspace.user.persist:user_groups_repo
+      api_error: app.users:api_error
     method: handler
     pool:
       size: 2
@@ -30,6 +39,7 @@ entries:
       - json
     imports:
       user_repo: userspace.user.persist:user_repo
+      api_error: app.users:api_error
     method: handler
     pool:
       size: 2
@@ -49,6 +59,7 @@ entries:
       - http
     imports:
       user_repo: userspace.user.persist:user_repo
+      api_error: app.users:api_error
     method: handler
     pool:
       size: 2
@@ -69,6 +80,7 @@ entries:
       - json
     imports:
       user_repo: userspace.user.persist:user_repo
+      api_error: app.users:api_error
     method: handler
     pool:
       size: 2
@@ -88,6 +100,7 @@ entries:
       - http
     imports:
       user_groups_repo: userspace.user.persist:user_groups_repo
+      api_error: app.users:api_error
     method: handler
     pool:
       size: 2
@@ -108,6 +121,7 @@ entries:
       - json
     imports:
       user_groups_repo: userspace.user.persist:user_groups_repo
+      api_error: app.users:api_error
     method: handler
     pool:
       size: 2
