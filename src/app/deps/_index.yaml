@@ -217,6 +217,10 @@ entries:
         value: non-persistent
       - name: history_mode
         value: browser
+      # Follow the OS theme by default. Set 'dark'/'light' to force a theme
+      # regardless of OS; the sidebar switch can still override at runtime.
+      - name: theme_mode
+        value: auto
       # Theming files live in ./static alongside login.html (served at /app), so
       # content_fs resolves them from the same folder a static page could <link>.
       # `fs://` (not `file://`) keeps the value literal: the wippy loader reserves
@@ -228,5 +232,7 @@ entries:
         value: "fs://css-variables.facade.json"
       - name: content_fs
         value: app:app_fs
+      # Three-state so it follows a forced themeMode too (not just OS):
+      # base light + auto-dark (gated against forced-light) + forced-dark class.
       - name: host_custom_css
-        value: ".wippy-host-app .chat-container { background-color: var(--p-surface-100); } @media (prefers-color-scheme: dark) { .wippy-host-app .chat-container { background-color: var(--p-surface-800); } }"
+        value: ".wippy-host-app .chat-container { background-color: var(--p-surface-100); } @media (prefers-color-scheme: dark) { :root:not(.w-theme-light) .wippy-host-app .chat-container { background-color: var(--p-surface-800); } } :root.w-theme-dark .wippy-host-app .chat-container { background-color: var(--p-surface-800); }"
