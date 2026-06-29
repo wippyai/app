@@ -35,3 +35,53 @@ entries:
     method: GET
     func: login_page
     path: /auth/login
+
+  # Jet login (default login page) — server-side cookie theme rendering (zero
+  # flash). Served at the site root /login via the public `web` router. The
+  # static static/login.html (at /app/login.html) is the alternative example.
+  - name: login_templates
+    kind: template.set
+    meta:
+      comment: Login page Jet template set
+
+  - name: login
+    kind: template.jet
+    meta:
+      content_type: text/html
+      comment: Jet login page — bakes the theme class onto <html> from the cookie
+    source: file://login.jet
+    set: app.api:login_templates
+
+  - name: theme_read
+    kind: security.policy
+    meta:
+      comment: Lets the Jet login read the facade theme key/mode and its own template set
+    policy:
+      resources:
+        - wippy.facade:*
+        - app.api:*
+      actions:
+        - registry.get
+      effect: allow
+
+  - name: login_jet
+    kind: function.lua
+    source: file://login_jet.lua
+    method: handler
+    modules:
+      - http
+      - registry
+      - templates
+    security:
+      actor:
+        id: app.api:login_jet
+      policies:
+        - app.api:theme_read
+
+  - name: login_jet.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:web
+    method: GET
+    func: login_jet
+    path: /{$}
