@@ -49,6 +49,13 @@ entries:
       - endpoint_firewall
     prefix: /api/v1/
 
+  # Public, unauthenticated login page. Own prefix (the facade owns prefix "/").
+  - name: web
+    kind: http.router
+    meta:
+      server: gateway
+    prefix: /login
+
   - name: db
     kind: db.sql.sqlite
     file: ./.wippy/app.db

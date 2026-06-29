@@ -5,10 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wippy - Sign In</title>
     <meta name="color-scheme" content="light dark">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.40/@wippy-fe/assets/theme-config.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.40/@wippy-fe/assets/preflight.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.40/@wippy-fe/assets/iframe.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.40/@wippy-fe/assets/tailwind.css">
+    <!-- Theme persistence (facade-generated): applies the stored theme before
+         paint and exposes window.wippyThemePersist (read/write/apply). The theme
+         switcher below calls write() so a choice made here carries into the host.
+         No-op when the facade's theme_persist is "none". Loaded first so the
+         w-theme-* class is set before the CDN stylesheets below apply tokens. -->
+    <script src="/api/public/facade/theme-persist.js"></script>
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/theme-config.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/preflight.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/iframe.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/tailwind.css">
     <!-- App theme for this non-host page: CSS variables via the facade API
          (/facade/variables.css converts the app's css_variables JSON to :root CSS)
          + the same global custom CSS the host applies (served from content_fs).
@@ -31,7 +37,10 @@
         (async function () {
             try {
                 var cfg = await (await fetch('/api/public/facade/config')).json();
-                var mode = cfg.themeMode;
+                // A persisted choice (set via the switcher / shared with the host)
+                // wins over the facade default; theme-persist.js already applied it.
+                var persisted = window.wippyThemePersist && window.wippyThemePersist.read();
+                var mode = persisted || cfg.themeMode;
                 if (mode === 'dark' || mode === 'light') {
                     document.documentElement.classList.add('w-theme-' + mode);
                     document.documentElement.style.colorScheme = mode;
@@ -129,6 +138,36 @@
         .submit-btn {
             width: 100%;
         }
+
+        /* Segmented theme control: 3 icon options, active one highlighted. */
+        #theme-switch.theme-switch {
+            display: inline-flex;
+            margin-top: 14px;
+            border: 1px solid var(--p-surface-300);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--p-content-background);
+        }
+        .theme-switch .theme-opt {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 32px;
+            padding: 0;
+            border: none;
+            border-right: 1px solid var(--p-surface-300);
+            background: transparent;
+            color: var(--p-text-muted-color);
+            cursor: pointer;
+        }
+        .theme-switch .theme-opt:last-child { border-right: none; }
+        .theme-switch .theme-opt:hover { background: var(--p-surface-100); color: var(--p-text-color); }
+        .theme-switch .theme-opt.active {
+            background: var(--p-primary);
+            color: var(--p-primary-contrast-color, #fff);
+        }
+        .theme-switch .theme-opt svg { width: 16px; height: 16px; }
     </style>
 </head>
 <body>
@@ -141,6 +180,21 @@
                     </div>
                     <h1>Wippy App</h1>
                     <p>Sign in to continue</p>
+                    <!-- Theme switcher (static-login example): a single segmented
+                         control; the active segment shows the current mode. Persists
+                         via window.wippyThemePersist so the choice survives reload
+                         and carries into the host. -->
+                    <div id="theme-switch" class="theme-switch" role="group" aria-label="Theme">
+                        <button type="button" class="theme-opt" data-mode="auto" title="Auto (system)" aria-label="Auto">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>
+                        </button>
+                        <button type="button" class="theme-opt" data-mode="light" title="Light" aria-label="Light">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        </button>
+                        <button type="button" class="theme-opt" data-mode="dark" title="Dark" aria-label="Dark">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                        </button>
+                    </div>
                 </div>
                 <div id="error" class="error-msg" role="alert" aria-live="assertive"></div>
                 <form id="login-form" aria-label="Sign in">
@@ -158,6 +212,44 @@
         </div>
     </div>
     <script>
+        // Theme switcher: apply immediately + persist (cookie/localStorage per
+        // the facade's theme_persist). The host reads the same key on next load.
+        (function () {
+            var sw = document.getElementById('theme-switch');
+            if (!sw) return;
+            // Current selected mode: the persisted choice if any, else whatever
+            // class is currently applied (auto when none).
+            function currentMode() {
+                var tp = window.wippyThemePersist;
+                var v = tp && tp.read();
+                if (v === 'light' || v === 'dark' || v === 'auto') return v;
+                var c = document.documentElement.classList;
+                return c.contains('w-theme-dark') ? 'dark' : c.contains('w-theme-light') ? 'light' : 'auto';
+            }
+            function setActive(mode) {
+                sw.querySelectorAll('[data-mode]').forEach(function (b) {
+                    var on = b.getAttribute('data-mode') === mode;
+                    b.classList.toggle('active', on);
+                    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                });
+            }
+            setActive(currentMode());
+            sw.querySelectorAll('[data-mode]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var mode = btn.getAttribute('data-mode');
+                    // Look up at click time (not captured once) so a slow/late
+                    // theme-persist.js still persists rather than silently no-op.
+                    var tp = window.wippyThemePersist;
+                    if (tp) { tp.apply(mode); tp.write(mode); }
+                    else {
+                        document.documentElement.classList.toggle('w-theme-dark', mode === 'dark');
+                        document.documentElement.classList.toggle('w-theme-light', mode === 'light');
+                    }
+                    setActive(mode);
+                });
+            });
+        })();
+
         const form = document.getElementById('login-form');
         const errorEl = document.getElementById('error');
         const submitBtn = document.getElementById('submit-btn');

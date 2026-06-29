@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<!-- Jet login example. The conditional on the html element below is filled
+     server-side from the theme cookie (see login_jet.lua) so the page paints in
+     the right theme with no flash — the server-cookie-render counterpart to the
+     static static/login.html. -->
+<html lang="en"{{ if hasTheme }} class="{{ themeClass }}" style="color-scheme: {{ colorScheme }};"{{ end }}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wippy - Sign In</title>
+    <meta name="color-scheme" content="light dark">
+    <!-- Persist script: reconciles localStorage mode + exposes window.wippyThemePersist
+         (in cookie mode the class above is already correct). -->
+    <script src="/api/public/facade/theme-persist.js"></script>
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/theme-config.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/preflight.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/tailwind.css">
+    <link rel="stylesheet" href="/api/public/facade/variables.css">
+    <link rel="stylesheet" href="/app/custom-css.facade.css">
+    <style>
+        body { background: color-mix(in srgb, var(--p-content-background) 92%, var(--p-text-color) 8%); color: var(--p-text-color); display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { width: 100%; max-width: 380px; }
+        .login-card .p-card-body { padding: 32px; }
+        .brand { text-align: center; margin-bottom: 24px; }
+        .brand h1 { font-size: 16px; font-weight: 600; color: var(--p-text-color); }
+        .brand p { font-size: 13px; color: var(--p-text-muted-color); margin-top: 4px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 12px; font-weight: 500; color: var(--p-text-muted-color); margin-bottom: 6px; }
+        .form-group .p-inputtext { width: 100%; }
+        .error-msg { display: none; margin-bottom: 16px; padding: 10px 12px; background: color-mix(in srgb, var(--p-red-500) 10%, transparent); border: 1px solid color-mix(in srgb, var(--p-red-500) 30%, transparent); border-radius: 8px; color: var(--p-red-500); font-size: 13px; }
+        .submit-btn { width: 100%; }
+        #theme-switch.theme-switch { display: inline-flex; margin-top: 14px; border: 1px solid var(--p-surface-300); border-radius: 8px; overflow: hidden; background: var(--p-content-background); }
+        .theme-switch .theme-opt { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 32px; padding: 0; border: none; border-right: 1px solid var(--p-surface-300); background: transparent; color: var(--p-text-muted-color); cursor: pointer; }
+        .theme-switch .theme-opt:last-child { border-right: none; }
+        .theme-switch .theme-opt:hover { background: var(--p-surface-100); color: var(--p-text-color); }
+        .theme-switch .theme-opt.active { background: var(--p-primary); color: var(--p-primary-contrast-color, #fff); }
+        .theme-switch .theme-opt svg { width: 16px; height: 16px; }
+    </style>
+</head>
+<body>
+    <div class="login-card p-card p-component">
+        <div class="p-card-body">
+            <div class="p-card-content">
+                <div class="brand">
+                    <h1>Wippy App</h1>
+                    <p>Sign in to continue</p>
+                    <div id="theme-switch" class="theme-switch" role="group" aria-label="Theme">
+                        <button type="button" class="theme-opt" data-mode="auto" title="Auto (system)" aria-label="Auto">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>
+                        </button>
+                        <button type="button" class="theme-opt" data-mode="light" title="Light" aria-label="Light">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        </button>
+                        <button type="button" class="theme-opt" data-mode="dark" title="Dark" aria-label="Dark">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="error" class="error-msg" role="alert" aria-live="assertive"></div>
+                <form id="login-form" aria-label="Sign in">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input id="email" type="email" required autocomplete="email" autofocus placeholder="you@example.com" class="p-inputtext p-component">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input id="password" type="password" required autocomplete="current-password" placeholder="Enter password" class="p-inputtext p-component">
+                    </div>
+                    <button type="submit" class="p-button p-component submit-btn" id="submit-btn">Sign In</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var sw = document.getElementById('theme-switch');
+            if (!sw) return;
+            function currentMode() {
+                var tp = window.wippyThemePersist;
+                var v = tp && tp.read();
+                if (v === 'light' || v === 'dark' || v === 'auto') return v;
+                var c = document.documentElement.classList;
+                return c.contains('w-theme-dark') ? 'dark' : c.contains('w-theme-light') ? 'light' : 'auto';
+            }
+            function setActive(mode) {
+                sw.querySelectorAll('[data-mode]').forEach(function (b) {
+                    var on = b.getAttribute('data-mode') === mode;
+                    b.classList.toggle('active', on);
+                    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                });
+            }
+            setActive(currentMode());
+            sw.querySelectorAll('[data-mode]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var mode = btn.getAttribute('data-mode');
+                    // Look up at click time so a slow/late theme-persist.js still persists.
+                    var tp = window.wippyThemePersist;
+                    if (tp) { tp.apply(mode); tp.write(mode); }
+                    setActive(mode);
+                });
+            });
+        })();
+
+        var form = document.getElementById('login-form');
+        var errorEl = document.getElementById('error');
+        var submitBtn = document.getElementById('submit-btn');
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            errorEl.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing in...';
+            try {
+                var res = await fetch('/api/public/user/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value })
+                });
+                var data = await res.json();
+                if (!res.ok || !data.success) throw new Error(data.error || 'Login failed');
+                localStorage.setItem('@wippy_token_info', JSON.stringify({ token: data.token }));
+                window.location.href = '/';
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Sign In';
+            }
+        });
+    </script>
+</body>
+</html>

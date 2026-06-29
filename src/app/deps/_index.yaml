@@ -211,8 +211,11 @@ entries:
         value: "false"
       - name: hide_nav_bar
         value: "true"
+      # Default login is the Jet page at /login (server-side cookie theme
+      # rendering). The static static/login.html (/app/login.html) is the
+      # alternative example.
       - name: login_path
-        value: /app/login.html
+        value: /login
       - name: session_type
         value: non-persistent
       - name: history_mode
@@ -221,6 +224,15 @@ entries:
       # regardless of OS; the sidebar switch can still override at runtime.
       - name: theme_mode
         value: auto
+      # Theme persistence is OPT-IN: the facade defaults theme_persist to "none"
+      # (no persistence). This app opts in with "cookie" so the Jet shell + Jet
+      # login apply the saved theme server-side (no flash); "localStorage" is the
+      # client-only alternative. The facade serves
+      # /api/public/facade/theme-persist.js with this key baked in.
+      - name: theme_persist
+        value: cookie
+      - name: theme_storage_key
+        value: "@wippy-theme-mode"
       # Theming files live in ./static alongside login.html (served at /app), so
       # content_fs resolves them from the same folder a static page could <link>.
       # `fs://` (not `file://`) keeps the value literal: the wippy loader reserves
