@@ -139,35 +139,43 @@
             width: 100%;
         }
 
-        /* Segmented theme control: 3 icon options, active one highlighted. */
+        /* Segmented theme control — mirrors the in-app sidebar switcher:
+           a subtle track with a raised active pill and primary-tinted icon. */
         #theme-switch.theme-switch {
             display: inline-flex;
+            align-items: center;
+            gap: 2px;
             margin-top: 14px;
-            border: 1px solid var(--p-surface-300);
+            padding: 2px;
             border-radius: 8px;
-            overflow: hidden;
-            background: var(--p-content-background);
+            background: var(--p-surface-200);
         }
         .theme-switch .theme-opt {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             width: 44px;
-            height: 32px;
+            height: 30px;
             padding: 0;
             border: none;
-            border-right: 1px solid var(--p-surface-300);
+            border-radius: 6px;
             background: transparent;
-            color: var(--p-text-muted-color);
+            color: var(--p-surface-500);
             cursor: pointer;
+            transition: background-color .15s, color .15s;
         }
-        .theme-switch .theme-opt:last-child { border-right: none; }
-        .theme-switch .theme-opt:hover { background: var(--p-surface-100); color: var(--p-text-color); }
+        .theme-switch .theme-opt:hover { color: var(--p-surface-700); }
         .theme-switch .theme-opt.active {
-            background: var(--p-primary);
-            color: var(--p-primary-contrast-color, #fff);
+            background: var(--p-surface-0);
+            color: var(--p-primary);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
         }
         .theme-switch .theme-opt svg { width: 16px; height: 16px; }
+
+        /* Dark: mirror the nav's surface-900 track / surface-700 raised pill. */
+        .w-theme-dark #theme-switch.theme-switch { background: var(--p-surface-900); }
+        .w-theme-dark .theme-switch .theme-opt:hover { color: var(--p-surface-300); }
+        .w-theme-dark .theme-switch .theme-opt.active { background: var(--p-surface-700); color: var(--p-primary); }
     </style>
 </head>
 <body>
@@ -186,13 +194,13 @@
                          and carries into the host. -->
                     <div id="theme-switch" class="theme-switch" role="group" aria-label="Theme">
                         <button type="button" class="theme-opt" data-mode="auto" title="Auto (system)" aria-label="Auto">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zm4 15h10m-8-4v4m6-4v4"/></svg>
                         </button>
                         <button type="button" class="theme-opt" data-mode="light" title="Light" aria-label="Light">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0m-5 0h1m8-9v1m8 8h1m-9 8v1M5.6 5.6l.7.7m12.1-.7l-.7.7m0 11.4l.7.7m-12.1-.7l-.7.7"/></svg>
                         </button>
                         <button type="button" class="theme-opt" data-mode="dark" title="Dark" aria-label="Dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3h.393a7.5 7.5 0 0 0 7.92 12.446A9 9 0 1 1 12 2.992z"/></svg>
                         </button>
                     </div>
                 </div>
