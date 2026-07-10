@@ -800,6 +800,15 @@ The compliance checklist enforces this:
 
 All variables are defined in `theme-config.css` and set on `:root`. At runtime, the host injects the real theme — these serve as the dev-time fallback and contract.
 
+### The token grammar (predictable naming)
+
+The `--p-*` token set follows one small, exceptionless grammar, so a human — or an AI agent generating styles — can *predict* a token name instead of looking it up. Two layers, with a hard contract between them:
+
+- **Numeric scale** — `--p-<family>-{50..950}` (and `--p-surface-{0..950}`). The fixed-hue anchor: **never theme-switchable**, identical in light and dark. Reach for it only when you explicitly do *not* want the value to flip with the theme.
+- **Semantic aliases** — `--p-<family>-color` / `-contrast-color` / `-hover-color` / `-active-color`. The theme-switchable layer: these flip in dark mode. `-color` always comes paired with `-contrast-color` (the text/fill color to place *on top* of it) plus its `-hover-color` / `-active-color` states, so a foreground and its guaranteed on-color arrive as a set — no `dark:` pairing needed.
+
+The grammar is exceptionless: those four aliases exist for **all eight** families (`primary`, `secondary`, `danger`, `success`, `warn`, `info`, `help`, `accent`) — nothing to memorize per family. Typography follows the same shape: `--p-font-<role>-<prop>`. The generated `tokens.json` manifest shipped in `@wippy-fe/theme` (name, layer, light/dark value, flip flag) is the machine-readable ground truth an agent can load instead of guessing.
+
 ### Primary palette (11 vars)
 
 Base: `--p-primary` (default: `rgb(0, 95, 178)`)
@@ -866,6 +875,33 @@ These **flip with dark mode** — use these for theme-dependent styling.
 | `--p-highlight-focus-background` | `primary-100` | `primary-400 @ 24%` |
 | `--p-highlight-focus-color` | `primary-800` | `white @ 87%` |
 | `--p-content-border-radius` | `6px` | `6px` |
+
+### Family aliases — all eight families
+
+The four `-color` / `-contrast-color` / `-hover-color` / `-active-color` aliases shown above for `primary` exist identically for **every** family (`secondary`, `danger`, `success`, `warn`, `info`, `help`, `accent`), remapped the same way per mode:
+
+| Alias | Light | Dark |
+|---|---|---|
+| `--p-<family>-color` | `<family>-500` | `<family>-400` |
+| `--p-<family>-contrast-color` | `surface-0` | `surface-900` |
+| `--p-<family>-hover-color` | `<family>-600` | `<family>-300` |
+| `--p-<family>-active-color` | `<family>-700` | `<family>-200` |
+
+So `var(--p-danger-color)` is the mode-correct danger fill and `var(--p-danger-contrast-color)` the text to sit on it — no `dark:` pair. The numeric scale (`--p-danger-500`) stays the fixed-hue anchor for uses that must NOT flip.
+
+### Font tokens
+
+One grammar per font role: `--p-font-<role>-<prop>` with roles `heading` / `body` / `mono` and props `family`, `scale` (a multiplier over the role's base sizes), `line-height`, `letter-spacing`, `stretch`, `variation-settings`. All are mode-independent and default to visually inert values, so setting one adjusts rendered-content typography (markdown headings/body/code) without touching host chrome.
+
+```css
+:root {
+  --p-font-heading-scale: 1.1;              /* content headings 10% larger */
+  --p-font-heading-letter-spacing: -0.01em; /* tighter content headings */
+  --p-font-mono-family: 'JetBrains Mono';   /* code / markdown mono */
+}
+```
+
+Which font *files* load — families, kept weights, `size-adjust`, `ascent-override` / `descent-override` — is an `@font-face`-level concern handled declaratively by the facade `fonts` theming param, which the host compiles into distributed CSS.
 
 ## Reference — Tailwind utility classes
 
