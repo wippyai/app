@@ -19,23 +19,6 @@ entries:
     func: hello
     path: /hello
 
-  - name: login_page
-    kind: function.lua
-    source: file://login_page.lua
-    modules:
-      - http
-      - security
-      - time
-    method: handler
-
-  - name: login_page.endpoint
-    kind: http.endpoint
-    meta:
-      router: app:api.public
-    method: GET
-    func: login_page
-    path: /auth/login
-
   # Jet login (default login page) — server-side cookie theme rendering (zero
   # flash). Served at the site root /login via the public `web` router. The
   # static static/login.html (at /app/login.html) is the alternative example.

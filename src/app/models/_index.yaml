@@ -210,7 +210,6 @@ entries:
         - embed
       class:
         - embed
-        - embedding
       priority: 90
     max_tokens: 8191
     dimensions: 1536
