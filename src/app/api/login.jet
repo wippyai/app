@@ -12,9 +12,9 @@
     <!-- Persist script: reconciles localStorage mode + exposes window.wippyThemePersist
          (in cookie mode the class above is already correct). -->
     <script src="/api/public/facade/theme-persist.js"></script>
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/theme-config.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/preflight.css">
-    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.41/@wippy-fe/assets/tailwind.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.42/@wippy-fe/assets/theme-config.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.42/@wippy-fe/assets/preflight.css">
+    <link rel="stylesheet" href="https://web-host.wippy.ai/webcomponents-1.0.42/@wippy-fe/assets/tailwind.css">
     <link rel="stylesheet" href="/api/public/facade/variables.css">
     <link rel="stylesheet" href="/app/custom-css.facade.css">
     <style>
