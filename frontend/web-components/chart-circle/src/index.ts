@@ -12,6 +12,8 @@ class ChartCircleElement extends WippyVueElement<ComponentProps, Events> {
       propsSchema: pkg.wippy.props as WippyPropsSchema,
       hostCssKeys: ['themeConfigUrl'] as const,
       inlineCss: stylesText,
+      // Self-styled SVG chart — opt out of facade custom-CSS injection.
+      customCss: false,
     }
   }
 
