@@ -53,14 +53,17 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
       .poll(() => logs.some(l => l.includes('[wf-probe]')), { timeout: 20_000, message: '[wf-probe] never logged' })
       .toBe(true)
 
-    // D) The app rendered real content into the fragment's shadow root.
+    // D) The app SPA fully mounted its real UI into the fragment shadow root
+    //    (not just its <wippy-loading> shell).
     await expect
       .poll(() => page.locator('web-fragment').first().evaluate((el) => {
         const host = (el as HTMLElement).shadowRoot?.querySelector('web-fragment-host') as HTMLElement | null
-        const doc = host?.shadowRoot?.querySelector('wf-document') as HTMLElement | null
-        return ((doc?.textContent) || '').replace(/\s+/g, '').length
-      }), { timeout: 20_000, message: 'fragment shadow never rendered app content' })
-      .toBeGreaterThan(40)
+        const app = host?.shadowRoot?.querySelector('#app') as HTMLElement | null
+        if (!app || app.querySelector('wippy-loading'))
+          return ''
+        return (app.innerText || '').replace(/\s+/g, ' ').trim()
+      }), { timeout: 25_000, message: 'app SPA never mounted its real UI (still at loading shell)' })
+      .toContain('Welcome to Wippy App')
 
     // E) No console / page errors during the fragment boot.
     expect(errors, errors.join('\n')).toHaveLength(0)
