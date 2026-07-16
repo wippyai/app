@@ -31,6 +31,9 @@ import { loginAsAdmin } from './helpers/login'
 const PRELOGIN_NOISE = /no token|Facade initialization failed/i
 
 test.describe('Web Fragments PoC (EE2-2313)', () => {
+  // Engine axis: this suite asserts the fragment path. Skip it under an iframe boot.
+  test.skip(process.env.WIPPY_ENGINE === 'iframe', 'fragment engine only')
+
   test('A–G: fragment renders with API, WS, theming, routing, isolation', async ({ page }) => {
     const errors: string[] = []
     page.on('console', (m) => {

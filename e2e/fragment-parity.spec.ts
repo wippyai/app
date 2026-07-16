@@ -11,6 +11,9 @@ import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 
 test.describe('Web Fragment parity (EE2-2313)', () => {
+  // Engine axis: this suite asserts the fragment path. Skip it under an iframe boot.
+  test.skip(process.env.WIPPY_ENGINE === 'iframe', 'fragment engine only')
+
   test('state round-trips, error capture installed, title propagates', async ({ page }) => {
     await loginAsAdmin(page)
     await page.goto('/home/users')
