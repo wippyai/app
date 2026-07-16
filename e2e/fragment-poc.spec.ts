@@ -94,13 +94,13 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
       return !!btn
     })
     expect(toggled, 'dark theme toggle present in the fragment UI').toBe(true)
-    // Generous timeout: the toggle round-trips app → host → @theme → proxy, which
-    // can be slow on the suite's first test while vite compiles modules cold.
+    // The host applies the theme DIRECTLY to the realm document (deterministic,
+    // <200ms) so the default poll window is ample.
     await expect
       .poll(() => page.locator('web-fragment').first().evaluate((el) => {
         const hsr = ((el as Element & { shadowRoot: ShadowRoot }).shadowRoot.querySelector('web-fragment-host') as Element & { shadowRoot: ShadowRoot }).shadowRoot
         return (hsr.querySelector('wf-html') as HTMLElement | null)?.className ?? ''
-      }), { timeout: 15_000, message: 'runtime dark toggle applies inside the shadow' })
+      }), { message: 'runtime dark toggle applies inside the shadow' })
       .toContain('w-theme-dark')
 
     // ── C) WebSocket round-trip through the fragment bridge: a command sent via
@@ -114,7 +114,7 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
       on('@message', (m) => { received ??= m })
       ws.send({ type: '__wf_e2e_probe__' })
       const start = Date.now()
-      while (!received && Date.now() - start < 10000)
+      while (!received && Date.now() - start < 6000)
         await new Promise(r => setTimeout(r, 100))
       return received ? JSON.stringify(received).slice(0, 200) : null
     })
@@ -197,22 +197,22 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
       const link = [...inner.querySelectorAll('a,button,[role=link]')].find(a => /nested\s*nav/i.test((a.textContent || '').trim())) as HTMLElement | undefined
       link?.click()
     })
+    // The nested embed is itself a REAL <web-fragment> (a reframed realm inside the
+    // outer realm), not a srcdoc iframe — traverse its shadow to the nested #app.
     await expect
       .poll(() => page.locator('web-fragment').first().evaluate((el) => {
         const inner = ((el as Element & { shadowRoot: ShadowRoot }).shadowRoot.querySelector('web-fragment-host') as Element & { shadowRoot: ShadowRoot }).shadowRoot
         const wa = inner.querySelector('#app w-artifact') as (Element & { shadowRoot: ShadowRoot | null }) | null
         const wiframe = wa?.shadowRoot?.querySelector('w-iframe') as (Element & { shadowRoot: ShadowRoot | null }) | null
-        const nested = wiframe?.shadowRoot?.querySelector('iframe') as HTMLIFrameElement | null
-        if (!nested)
+        const nestedWf = wiframe?.shadowRoot?.querySelector('web-fragment') as (Element & { shadowRoot: ShadowRoot | null }) | null
+        const nestedHost = nestedWf?.shadowRoot?.querySelector('web-fragment-host') as (Element & { shadowRoot: ShadowRoot | null }) | null
+        const nestedApp = nestedHost?.shadowRoot?.querySelector('#app') as HTMLElement | null
+        // No srcdoc iframe should exist for the nested embed — it is a fragment.
+        const isSrcdoc = !!wiframe?.shadowRoot?.querySelector('iframe[srcdoc]')
+        if (isSrcdoc || !nestedApp)
           return ''
-        try {
-          const body = nested.contentDocument?.body
-          return body ? (body.innerText || '').replace(/\s+/g, ' ').trim() : ''
-        }
-        catch {
-          return ''
-        }
-      }), { timeout: 20_000, message: 'nested <w-artifact> iframe renders real content in the realm' })
+        return (nestedApp.innerText || '').replace(/\s+/g, ' ').trim()
+      }), { timeout: 20_000, message: 'nested embed renders as a real <web-fragment> with content' })
       .toContain('Iframe Demo')
 
     expect(errors, errors.join('\n')).toHaveLength(0)
