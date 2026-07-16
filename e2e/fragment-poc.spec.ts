@@ -94,11 +94,13 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
       return !!btn
     })
     expect(toggled, 'dark theme toggle present in the fragment UI').toBe(true)
+    // Generous timeout: the toggle round-trips app → host → @theme → proxy, which
+    // can be slow on the suite's first test while vite compiles modules cold.
     await expect
       .poll(() => page.locator('web-fragment').first().evaluate((el) => {
         const hsr = ((el as Element & { shadowRoot: ShadowRoot }).shadowRoot.querySelector('web-fragment-host') as Element & { shadowRoot: ShadowRoot }).shadowRoot
         return (hsr.querySelector('wf-html') as HTMLElement | null)?.className ?? ''
-      }), { message: 'runtime dark toggle applies inside the shadow' })
+      }), { timeout: 15_000, message: 'runtime dark toggle applies inside the shadow' })
       .toContain('w-theme-dark')
 
     // ── C) WebSocket round-trip through the fragment bridge: a command sent via
@@ -112,7 +114,7 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
       on('@message', (m) => { received ??= m })
       ws.send({ type: '__wf_e2e_probe__' })
       const start = Date.now()
-      while (!received && Date.now() - start < 6000)
+      while (!received && Date.now() - start < 10000)
         await new Promise(r => setTimeout(r, 100))
       return received ? JSON.stringify(received).slice(0, 200) : null
     })
@@ -156,5 +158,63 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
     expect(errors, errors.join('\n')).toHaveLength(0)
 
     await page.screenshot({ path: 'e2e/fragment-poc.png', fullPage: true })
+  })
+
+  test('H-I: host CSS survives the reframed stream + nested <w-artifact> embeds render', async ({ page }) => {
+    const errors: string[] = []
+    page.on('console', (m) => {
+      if (m.type() === 'error' && !PRELOGIN_NOISE.test(m.text()))
+        errors.push(m.text())
+    })
+    page.on('pageerror', e => errors.push(`pageerror: ${e.message}`))
+
+    await loginAsAdmin(page)
+    await expect(page.locator('web-fragment').first()).toBeAttached({ timeout: 20_000 })
+
+    // ── H) The four host stylesheets the app INHERITS (theme-config tokens+fonts,
+    // primevue = Tailwind utilities + PrimeVue CSS, iframe, markdown) survive the
+    // reframed stream — reflected into the shadow — AND the token layer resolves.
+    // Guards the regression where they were injected into the stub head then wiped.
+    await expect
+      .poll(() => page.locator('web-fragment').first().evaluate((el) => {
+        const hsr = (el as Element & { shadowRoot: ShadowRoot | null }).shadowRoot?.querySelector('web-fragment-host') as (Element & { shadowRoot: ShadowRoot | null }) | null
+        const inner = hsr?.shadowRoot
+        if (!inner)
+          return false
+        const roles = ['theme-config', 'iframe', 'primevue', 'markdown']
+        const allPresent = roles.every(r => !!inner.querySelector(`link[data-role="wippy-host-styles-${r}"]`))
+        const app = inner.querySelector('#app') as HTMLElement | null
+        const primary = app ? getComputedStyle(app).getPropertyValue('--p-primary').trim() : ''
+        return allPresent && primary.length > 0
+      }), { timeout: 20_000, message: 'all four host CSS links reflected in shadow + --p-primary resolves' })
+      .toBe(true)
+
+    // ── I) Nested <w-artifact> embeds render inside the realm. "Nested Nav" embeds
+    // the iframe-demo view.page as a nav-owner; without <w-artifact>/<w-iframe>
+    // registered in the fragment proxy the panel was blank.
+    await page.locator('web-fragment').first().evaluate((el) => {
+      const inner = ((el as Element & { shadowRoot: ShadowRoot }).shadowRoot.querySelector('web-fragment-host') as Element & { shadowRoot: ShadowRoot }).shadowRoot
+      const link = [...inner.querySelectorAll('a,button,[role=link]')].find(a => /nested\s*nav/i.test((a.textContent || '').trim())) as HTMLElement | undefined
+      link?.click()
+    })
+    await expect
+      .poll(() => page.locator('web-fragment').first().evaluate((el) => {
+        const inner = ((el as Element & { shadowRoot: ShadowRoot }).shadowRoot.querySelector('web-fragment-host') as Element & { shadowRoot: ShadowRoot }).shadowRoot
+        const wa = inner.querySelector('#app w-artifact') as (Element & { shadowRoot: ShadowRoot | null }) | null
+        const wiframe = wa?.shadowRoot?.querySelector('w-iframe') as (Element & { shadowRoot: ShadowRoot | null }) | null
+        const nested = wiframe?.shadowRoot?.querySelector('iframe') as HTMLIFrameElement | null
+        if (!nested)
+          return ''
+        try {
+          const body = nested.contentDocument?.body
+          return body ? (body.innerText || '').replace(/\s+/g, ' ').trim() : ''
+        }
+        catch {
+          return ''
+        }
+      }), { timeout: 20_000, message: 'nested <w-artifact> iframe renders real content in the realm' })
+      .toContain('Iframe Demo')
+
+    expect(errors, errors.join('\n')).toHaveLength(0)
   })
 })
