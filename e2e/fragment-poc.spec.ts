@@ -5,54 +5,68 @@
  * as a <web-fragment> (reframed realm + shared DOM) served by the Lua fragment
  * gateway at /api/public/frag/{id}/..., instead of a srcdoc iframe.
  *
- * Prereqs (see the plan / EE2-2313):
+ * In compat mode the host direct-mounts into the facade-shell page (no host
+ * iframe), so we inspect the main page. The reframed realm is a hidden iframe
+ * named "wf:<id>"; the fragment DOM lives in the <web-fragment> shadow root.
+ *
+ * Prereqs (see EE2-2313 plan):
  *  - Backend: wippy.exe run -c -o app:gateway:addr=:8087 \
  *      -o wippy.facade:fe_facade_url:default=http://localhost:5173
- *    (with wippy.lock replacing wippy/views with the local checkout).
- *  - Host: pnpm exec vite --host --base=/   (on :5173)
+ *    (wippy.lock replaces wippy/views with the local checkout).
+ *  - Host bundle: pnpm exec vite --host --base=/   (on :5173)
  *  - Run: WIPPY_URL=http://localhost:8087 npx playwright test e2e/fragment-poc.spec.ts
  */
 import { expect, test } from '@playwright/test'
-import { HOST_IFRAME_SELECTOR, loginAsAdmin, navigateHostTo } from './helpers/login'
+import { loginAsAdmin } from './helpers/login'
+
+// Errors that occur on the pre-login facade shell (before auth) are expected.
+const PRELOGIN_NOISE = /no token|Facade initialization failed/i
 
 test.describe('Web Fragments PoC (EE2-2313)', () => {
-  test('a view.page renders as a <web-fragment> via the Lua gateway', async ({ page }) => {
+  test('view.page renders as a <web-fragment> via the Lua gateway; proxy boots in-realm', async ({ page }) => {
     const logs: string[] = []
     const errors: string[] = []
-    page.on('console', (msg) => {
-      const t = msg.text()
-      logs.push(t)
-      if (msg.type() === 'error')
-        errors.push(t)
+    const apiResponses: string[] = []
+    page.on('console', (m) => {
+      logs.push(m.text())
+      if (m.type() === 'error' && !PRELOGIN_NOISE.test(m.text()))
+        errors.push(m.text())
     })
-    page.on('pageerror', err => errors.push(`pageerror: ${err.message}`))
+    page.on('pageerror', e => errors.push(`pageerror: ${e.message}`))
+    page.on('response', (r) => {
+      if (/\/api\/v1\//.test(r.url()))
+        apiResponses.push(`${r.status()} ${r.url()}`)
+    })
 
     await loginAsAdmin(page)
-    await navigateHostTo(page, 'Iframe Demo')
 
-    const hostFrame = page.frameLocator(HOST_IFRAME_SELECTOR)
+    // A) Rendered as a web-fragment (fragment mode), with reframed realm iframe.
+    await expect(page.locator('web-fragment').first()).toBeAttached({ timeout: 20_000 })
+    await expect(page.locator('iframe[name^="wf:"]').first()).toBeAttached({ timeout: 20_000 })
 
-    // A) Rendered as a web-fragment (fragment mode), not a srcdoc iframe.
-    await expect(hostFrame.locator('web-fragment').first()).toBeAttached({ timeout: 20_000 })
+    // B) It is a web-fragment, NOT a legacy srcdoc iframe for this page.
+    const srcdocForPage = await page.locator('iframe[srcdoc]').count()
+    expect(srcdocForPage, 'no srcdoc iframe — page is delivered as a fragment').toBe(0)
 
-    // A2) reframed created the hidden realm iframe (name="wf:<id>").
-    await expect(hostFrame.locator('iframe[name^="wf:"]').first()).toBeAttached({ timeout: 20_000 })
-
-    // B) The fragment's DOM is reflected into a shadow root (real content, not empty).
-    const shadowChildren = await hostFrame.locator('web-fragment').first().evaluate((el) => {
-      const direct = (el as HTMLElement).shadowRoot
-      const host = direct?.querySelector('web-fragment-host') as HTMLElement | null
-      return host?.shadowRoot?.childElementCount ?? direct?.childElementCount ?? 0
-    })
-    expect(shadowChildren, 'fragment shadow root should have rendered content').toBeGreaterThan(0)
-
-    // C) The fragment proxy booted in-realm (probe breadcrumb from any frame).
+    // C) The fragment proxy bootstrapped the Wippy API inside the realm.
     await expect
-      .poll(() => logs.some(l => l.includes('[wf-probe]')), { timeout: 20_000, message: '[wf-probe] breadcrumb never logged' })
+      .poll(() => logs.some(l => l.includes('[wf-probe]')), { timeout: 20_000, message: '[wf-probe] never logged' })
       .toBe(true)
 
-    // D) No console / page errors during boot.
+    // D) The app rendered real content into the fragment's shadow root.
+    await expect
+      .poll(() => page.locator('web-fragment').first().evaluate((el) => {
+        const host = (el as HTMLElement).shadowRoot?.querySelector('web-fragment-host') as HTMLElement | null
+        const doc = host?.shadowRoot?.querySelector('wf-document') as HTMLElement | null
+        return ((doc?.textContent) || '').replace(/\s+/g, '').length
+      }), { timeout: 20_000, message: 'fragment shadow never rendered app content' })
+      .toBeGreaterThan(40)
+
+    // E) No console / page errors during the fragment boot.
     expect(errors, errors.join('\n')).toHaveLength(0)
+
+    // Informational (not gated): API traffic the fragment app produced.
+    console.log('##API## ' + JSON.stringify(apiResponses.slice(0, 10)))
 
     await page.screenshot({ path: 'e2e/fragment-poc.png', fullPage: true })
   })
