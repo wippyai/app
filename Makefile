@@ -54,4 +54,4 @@ dev:
 	cd frontend/applications/main && npm run dev
 
 run: build
-	./wippy run -c
+	wippy run -c
