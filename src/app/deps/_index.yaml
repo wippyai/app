@@ -143,6 +143,8 @@ entries:
     parameters:
       - name: target_db
         value: app:db
+      - name: user_security_scope
+        value: app.security:user
 
   - name: wc-mermaid
     kind: ns.dependency
