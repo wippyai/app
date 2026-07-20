@@ -1,11 +1,6 @@
 directories:
     modules: .wippy
     src: ./src
-replacements:
-    - from: wippy/views
-      to: ../wippy-framework/src/views
-    - from: wippy/facade
-      to: ../wippy-framework/src/facade
 modules:
     - name: keeper/keeper
       version: 0.5.63
@@ -38,8 +33,8 @@ modules:
       version: 0.5.4
       hash: cae8cf3ebe0a327a663f1da3a27429f9b78c15f046ef007fcd1ebbba0af3a7e9
     - name: wippy/facade
-      version: 0.6.26
-      hash: d2d31dd4da615eda5865f9efd265b124ea391bb8cda1c96f52c04343eb08e6d2
+      version: 0.6.27
+      hash: b06bd5cba8697f6db17cf89922c44385fe7b39800b2618a3a92b7d2726974c67
     - name: wippy/llm
       version: 0.4.36
       hash: a677d9a48c3104dba1390f404f2923b4fa07a1b8c671d4d477af2f1b5667e1b0
