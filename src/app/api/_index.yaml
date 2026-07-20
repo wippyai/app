@@ -45,6 +45,7 @@ entries:
         - app.api:*
       actions:
         - registry.get
+        - template.get
       effect: allow
 
   - name: login_jet

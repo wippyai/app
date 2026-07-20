@@ -58,7 +58,13 @@ local function handler()
         end
     end
 
-    local set = templates.get(TEMPLATE_SET)
+    local set, get_err = templates.get(TEMPLATE_SET)
+    if not set then
+        res:set_status(http.STATUS.INTERNAL_ERROR)
+        res:set_content_type("text/html")
+        res:write("Failed to load login template set: " .. tostring(get_err))
+        return nil, get_err
+    end
     local html, err = set:render("login", {
         hasTheme = has_theme,
         themeClass = theme_class,
@@ -68,6 +74,7 @@ local function handler()
         res:set_status(http.STATUS.INTERNAL_ERROR)
         res:set_content_type("text/html")
         res:write("Failed to render login page")
+        set:release()
         return nil, err
     end
 
@@ -75,6 +82,7 @@ local function handler()
     res:set_header("Cache-Control", "no-store")
     res:set_status(http.STATUS.OK)
     res:write(html)
+    set:release()
 end
 
 return { handler = handler }

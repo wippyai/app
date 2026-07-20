@@ -27,7 +27,7 @@
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 12px; font-weight: 500; color: var(--p-text-muted-color); margin-bottom: 6px; }
         .form-group .p-inputtext { width: 100%; }
-        .error-msg { display: none; margin-bottom: 16px; padding: 10px 12px; background: color-mix(in srgb, var(--p-red-500) 10%, transparent); border: 1px solid color-mix(in srgb, var(--p-red-500) 30%, transparent); border-radius: 8px; color: var(--p-red-500); font-size: 13px; }
+        #error.p-message { display: none; margin-bottom: 16px; }
         .submit-btn { width: 100%; }
         #theme-switch.theme-switch { display: inline-flex; align-items: center; gap: 2px; margin-top: 14px; padding: 2px; border-radius: 8px; background: var(--p-surface-200); }
         .theme-switch .theme-opt { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 30px; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--p-surface-500); cursor: pointer; transition: background-color .15s, color .15s; }
@@ -58,7 +58,12 @@
                         </button>
                     </div>
                 </div>
-                <div id="error" class="error-msg" role="alert" aria-live="assertive"></div>
+                <div id="error" class="p-message p-component p-message-error" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="p-message-content">
+                        <svg class="p-message-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6m0-6l6 6"/></svg>
+                        <div class="p-message-text"></div>
+                    </div>
+                </div>
                 <form id="login-form" aria-label="Sign in">
                     <div class="form-group">
                         <label for="email">Email</label>
@@ -105,10 +110,12 @@
 
         var form = document.getElementById('login-form');
         var errorEl = document.getElementById('error');
+        var errorTextEl = errorEl.querySelector('.p-message-text');
         var submitBtn = document.getElementById('submit-btn');
         form.addEventListener('submit', async function (e) {
             e.preventDefault();
             errorEl.style.display = 'none';
+            errorTextEl.textContent = '';
             submitBtn.disabled = true;
             submitBtn.textContent = 'Signing in...';
             try {
@@ -122,7 +129,7 @@
                 localStorage.setItem('@wippy_token_info', JSON.stringify({ token: data.token }));
                 window.location.href = '/';
             } catch (err) {
-                errorEl.textContent = err.message;
+                errorTextEl.textContent = err.message;
                 errorEl.style.display = 'block';
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Sign In';

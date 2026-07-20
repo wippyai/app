@@ -1,6 +1,11 @@
 directories:
     modules: .wippy
     src: ./src
+replacements:
+    - from: wippy/views
+      to: ../wippy-framework/src/views
+    - from: wippy/facade
+      to: ../wippy-framework/src/facade
 modules:
     - name: keeper/keeper
       version: 0.5.36
