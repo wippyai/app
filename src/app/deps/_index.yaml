@@ -9,9 +9,11 @@ entries:
     parameters:
       - name: env_storage
         value: app.env:store
-      - name: public_router
+      # userspace/users publishes namespace userspace.user (not userspace.users),
+      # so bare parameter names don't reach it; address the requirements by full id.
+      - name: userspace.user:public_router
         value: app:api.public
-      - name: router
+      - name: userspace.user:router
         value: app:api
 
   - name: uploads

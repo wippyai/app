@@ -36,7 +36,7 @@ URL.
 
 4. **Start wippy** on `:8086` (from this repo's root):
    ```sh
-   ./wippy.exe run -c -o app:gateway:addr=:8086 -o wippy.facade:fe_facade_url:default=http://localhost:5173
+   wippy run -c -o app:gateway:addr=:8086 -o wippy.facade:fe_facade_url:default=http://localhost:5173
    ```
 
 ## Run

@@ -12,11 +12,14 @@ A starter Wippy application — a Vue admin frontend, user management, an AI ass
 Requires the [Wippy CLI](https://wippy.ai) on your `PATH` and Node.js 18+.
 
 ```bash
-wippy install         # download backend modules from the hub into .wippy/
-cp .env.example .env  # configure environment (add ANTHROPIC_API_KEY for the AI features)
-make build            # build the frontend bundles
-wippy run -c          # start the runtime
+wippy install               # download backend modules from the hub into .wippy/
+cp .env.example .env        # configure environment (set OPENAI_COMPAT_API_KEY for the AI features)
+make build                  # build the frontend bundles
+set -a && . ./.env && set +a
+wippy run -c                # start the runtime
 ```
+
+`wippy run` reads configuration from OS environment variables, not from `.env` — export the file into your shell (the `set -a` line above) or the seeded admin credentials fall back to random values.
 
 - **App** — <http://localhost:8080> · default admin `admin@wippy.local` / `admin123`
 - **Keeper** — <http://localhost:8080/c/keeper:main>
