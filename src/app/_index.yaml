@@ -56,28 +56,6 @@ entries:
       server: gateway
     prefix: /login
 
-  # Web-Fragments gateway router (EE2-2313). Its own top-level prefix so a CDN can
-  # cache-route /@fragment/* independently of the dynamic /api/public/* surface, and
-  # so the gateway is NOT behind token_auth (it is auth-agnostic — the fragment proxy
-  # handshakes the host for auth client-side). Satisfies the
-  # wippy/views `fragment_router` requirement (see deps/_index.yaml).
-  - name: fragment.public
-    kind: http.router
-    meta:
-      server: gateway
-    middleware:
-      - cors
-      - compress
-    options:
-      allow_credentials: "true"
-      allow_headers: Authorization,Content-Type
-      allow_methods: '*'
-      allow_origins: '*.wippy.ai,web-host.wippy.ai,localhost,localhost:8080'
-      allow_private_network: "true"
-      compress.level: default
-      compress.min.length: "1024"
-    prefix: /@fragment
-
   - name: db
     kind: db.sql.sqlite
     file: ./.wippy/app.db

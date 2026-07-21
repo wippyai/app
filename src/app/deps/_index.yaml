@@ -120,8 +120,6 @@ entries:
     parameters:
       - name: api_router
         value: app:api.public
-      - name: fragment_router
-        value: app:fragment.public
       - name: env_storage
         value: app.env:store
 
