@@ -24,6 +24,24 @@ test.describe('Web Fragment parity (EE2-2313)', () => {
       return !!document.querySelector('web-fragment') && !!(f && f.$W)
     }, { timeout: 20_000 })
 
+    // $W presence is NOT proof the app rendered: it is set by the realm stub
+    // BEFORE the SPA boots. Assert the app actually painted its API-sourced UI —
+    // the users table rows — inside the realm document (reflected into the shadow).
+    // Without this, the suite passes on an empty fragment.
+    const renderedRows = await page.evaluate(async () => {
+      const realm = (window as any).frames[0]
+      const count = () => realm?.document?.querySelectorAll('table tr, .p-datatable-tbody tr, [role="row"]').length ?? 0
+      let rows = 0
+      const deadline = Date.now() + 15_000
+      while (rows === 0 && Date.now() < deadline) {
+        rows = count()
+        if (rows === 0)
+          await new Promise(r => setTimeout(r, 200))
+      }
+      return rows
+    })
+    expect(renderedRows, 'real API-sourced UI rendered in the fragment realm (not an empty $W shell)').toBeGreaterThan(0)
+
     const result = await page.evaluate(async () => {
       const realm = (window as any).frames[0]
       const w = realm.$W
