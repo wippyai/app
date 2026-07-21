@@ -3,7 +3,7 @@
  *
  * With FRAGMENT_MODE on in the Web Host, every iframe-destined view.page renders
  * as a <web-fragment> (reframed realm + shared DOM) served by the Lua fragment
- * gateway at /api/public/frag/{id}/..., instead of a srcdoc iframe.
+ * gateway at its own top-level /@fragment/{id}/..., instead of a srcdoc iframe.
  *
  * In compat mode the host direct-mounts into the facade-shell page (no host
  * iframe), so we inspect the main page. The reframed realm is a hidden iframe
@@ -18,11 +18,13 @@
  *   D theming (full-height layout, dark-in-shadow on boot AND at runtime)
  *
  * Prereqs (see EE2-2313 plan):
- *  - Backend: wippy.exe run -c -o app:gateway:addr=:8087 \
- *      -o wippy.facade:fe_facade_url:default=http://localhost:5173
- *    (wippy.lock replaces wippy/views with the local checkout).
+ *  - Backend: wippy.exe run -c \
+ *      -o wippy.facade:fe_facade_url:default=http://localhost:5173 \
+ *      -o wippy.facade:render_engine:default=fragment
+ *    (boots on the .env APP_PORT, 8080; wippy.lock replaces wippy/views with the
+ *    local checkout).
  *  - Host bundle: pnpm exec vite --host --base=/   (on :5173)
- *  - Run: WIPPY_URL=http://localhost:8087 npx playwright test e2e/fragment-poc.spec.ts
+ *  - Run: WIPPY_URL=http://localhost:8080 npx playwright test e2e/fragment-poc.spec.ts
  */
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'

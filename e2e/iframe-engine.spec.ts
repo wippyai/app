@@ -19,8 +19,11 @@ test.describe('Legacy iframe engine (EE2-2313)', () => {
   test('renders srcdoc, gateway dormant, $W + state work', async ({ page }) => {
     const fragRequests: string[] = []
     page.on('request', (r) => {
-      if (r.url().includes('/api/public/frag'))
-        fragRequests.push(r.url())
+      // Match the top-level /@fragment gateway (EE2-2313) AND the historical
+      // /api/public/frag path — any fragment-gateway hit is a leak into iframe mode.
+      const u = r.url()
+      if (u.includes('/@fragment') || u.includes('/api/public/frag/'))
+        fragRequests.push(u)
     })
 
     await loginAsAdmin(page)
@@ -38,7 +41,7 @@ test.describe('Legacy iframe engine (EE2-2313)', () => {
     expect(dom.hasRealm, 'no reframed realm iframe in iframe mode').toBe(false)
 
     // The fragment gateway is dormant — the endpoint is never requested.
-    expect(fragRequests, 'no /api/public/frag requests in iframe mode').toEqual([])
+    expect(fragRequests, 'no fragment-gateway (/@fragment) requests in iframe mode').toEqual([])
 
     // Real API content + state parity INSIDE the srcdoc iframe (same-origin).
     const result = await page.evaluate(async () => {
