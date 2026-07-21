@@ -60,7 +60,7 @@ modules:
       version: 0.3.24
       hash: 6d62fefb655ddfab62451edae651d14d62a31db7f29002f7b22ec176fda4798e
     - name: wippy/views
-      version: 0.5.8
-      hash: 0a5c065c1c7e37e8a3705833f7f2eeca3e9bf8657c75cc203376b854f0afdcb9
+      version: 0.5.9
+      hash: ee41fb927091dc3873752f97291080889a4d56fe610a540b910c01b98afffbe3
 options:
     unpack_modules: true
