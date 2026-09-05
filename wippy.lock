@@ -12,8 +12,8 @@ modules:
       version: 0.5.16
       hash: 62d61727c91b2eae3092b4a01c31236cb085ee66a61304f0548d597c5e9951fc
     - name: userspace/users
-      version: 0.1.8
-      hash: 96230a7b4d259daac0b846c6ac9fc8569ef7bfa72ef7ff91b826b93f4658c97b
+      version: 0.1.9
+      hash: b0cc8d47a557efda2c140752e0cba80a07260b2d74f0281ca3310183a52f9756
     - name: wippy-swiss/chartjs
       version: 0.1.1
       hash: 4082c02dbfe92206333a4e70c805bd468fea675aab7c6553b08e946db110610f
