@@ -8,7 +8,7 @@ export default defineConfig({
     vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => tag.startsWith('example-'),
+          isCustomElement: tag => tag.startsWith('example-') || tag.startsWith('wippy-') || tag === 'w-artifact',
         },
       },
     }),

@@ -19,7 +19,7 @@ export async function createMainApp() {
 
   const app = createApp(App)
 
-  installVueWarnSuppressor(app)
+  installVueWarnSuppressor(app as Parameters<typeof installVueWarnSuppressor>[0])
 
   app.provide(HOST_API, hostApi)
   app.provide(AXIOS_INSTANCE, axios)

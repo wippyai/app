@@ -7,6 +7,8 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:bridge": "playwright test e2e/bridge.spec.ts",
+    "test:e2e:attention": "playwright test -c playwright.attention.config.ts",
+    "test:e2e:attention:restart": "playwright test -c playwright.attention.restart.config.ts",
     "test:e2e:warn-suppressor": "playwright test e2e/warn-suppressor.spec.ts",
     "test:e2e:managed": "playwright test -c playwright.managed.config.ts"
   },

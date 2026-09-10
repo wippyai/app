@@ -34,6 +34,16 @@ const routes = [
     component: () => import('../pages/bridge.vue'),
   },
   {
+    path: '/attention-target/:side',
+    name: 'attention-target',
+    component: () => import('../pages/attention-target.vue'),
+  },
+  {
+    path: '/attention-leaf/:side',
+    name: 'attention-leaf',
+    component: () => import('../pages/attention-leaf.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     redirect: '/',

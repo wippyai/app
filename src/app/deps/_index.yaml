@@ -248,6 +248,11 @@ entries:
         value: "fs://css-variables.facade.json"
       - name: content_fs
         value: app:app_fs
+      # Attention is active for the production-shaped tracer fixture, while
+      # attaching it to a message remains an explicit per-send choice.
+      - name: attention
+        value: >-
+          {"enabled":true,"messageContext":{"enabled":true,"defaultInclude":false},"agentActions":{"enabled":true,"requireConfirmation":true},"visualCapture":{"enabled":true},"sampling":{"radiusCssPx":20,"stepCssPx":5},"privacy":{"text":"safe"}}
       # Managed-layout demo declaration. INERT unless the app is launched
       # with `-o wippy.facade:fe_mode:default=managed` — the facade only
       # forwards it to `hostConfig.layout`, and the compat entry
