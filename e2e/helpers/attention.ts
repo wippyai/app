@@ -9,7 +9,7 @@ import { attentionSnapshotsFromAttachments } from './attention-v2'
 export type AttentionEngine = 'iframe' | 'fragment'
 export type AttentionLayout = 'compat' | 'managed'
 export type AttentionMode = 'disabled' | 'enabled'
-export type AttentionVisualMode = 'denied' | 'none' | 'synthetic'
+export type AttentionVisualMode = 'denied' | 'none'
 
 export interface AttentionRuntimeCell {
   actionTtlSeconds: number
@@ -98,34 +98,9 @@ export interface AttentionSnapshot {
   snapshot_id: string
 }
 
-export interface AttentionVisualContext {
-  authorization: {
-    audience: 'agent-context'
-    expires_at: string
-    scope: 'session'
-    session_id: string
-  }
-  candidate_ids: string[]
-  capture_id: string
-  created_at: string
-  expires_at: string
-  host_instance_id: string
-  media: {
-    content_bytes: number
-    content_hash: string
-    content_type: 'image/png' | 'image/webp'
-    pixel_height: number
-    pixel_width: number
-  }
-  redactions_applied: number
-  reference: { kind: 'upload', opaque_id: string }
-  region: { height: number, width: number, x: number, y: number }
-  schema: 'wippy.attention.visual.v1'
-  snapshot_id: string
-}
-
 export interface CapturedSessionMessage {
   data: {
+    file_uuids?: string[]
     context_attachments?: ContextAttachment[]
     context_attachments_ref?: ContextAttachmentReference
     runtime_context?: {
@@ -240,6 +215,7 @@ export interface AcknowledgedSessionMessage extends CapturedSessionMessage {
 export interface CapturedUiActionResult {
   data: {
     in_reply_to_action_id: string
+    prepared_file?: { uuid: string, name: string, mime_type: string, byte_size: number, sha256: string, scope: string, [key: string]: unknown }
     selected_target?: { target_id: string }
     status: string
   }
@@ -483,8 +459,8 @@ export function attentionRuntimeCell(): AttentionRuntimeCell {
     throw new Error('WIPPY_ATTENTION_MODE must be one of: enabled, disabled')
   const visualCapture = booleanOption('WIPPY_ATTENTION_VISUAL')
   const visualMode = process.env.WIPPY_ATTENTION_VISUAL_MODE ?? (visualCapture ? 'denied' : 'none')
-  if (!['denied', 'none', 'synthetic'].includes(visualMode))
-    throw new Error('WIPPY_ATTENTION_VISUAL_MODE must be one of: denied, none, synthetic')
+  if (!['denied', 'none'].includes(visualMode))
+    throw new Error('WIPPY_ATTENTION_VISUAL_MODE must be one of: denied, none')
   return {
     layout: requiredOption<AttentionLayout>('WIPPY_LAYOUT', ['compat', 'managed']),
     engine: requiredOption<AttentionEngine>('WIPPY_ENGINE', ['iframe', 'fragment']),
@@ -1608,65 +1584,41 @@ export async function sha256Attachment(
   }, attachment)
 }
 
-export async function installVisualCaptureDenial(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const denied = async () => {
-      throw new DOMException('Attention E2E denied display capture', 'NotAllowedError')
-    }
-    if (navigator.mediaDevices) {
-      Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {
-        configurable: true,
-        value: denied,
-      })
-      return
-    }
-    Object.defineProperty(navigator, 'mediaDevices', {
-      configurable: true,
-      value: { getDisplayMedia: denied },
-    })
-  })
-}
-
-export async function installSyntheticVisualCapture(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const visualWindow = window as typeof window & { __wippyAttentionE2ECanvas?: HTMLCanvasElement }
-    const capture = async () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.max(1, window.innerWidth)
-      canvas.height = Math.max(1, window.innerHeight)
-      const context = canvas.getContext('2d')
-      if (!context)
-        throw new Error('Synthetic Attention capture canvas is unavailable')
-      context.fillStyle = '#1e293b'
-      context.fillRect(0, 0, canvas.width, canvas.height)
-      context.fillStyle = '#0ea5e9'
-      context.fillRect(0, 0, Math.max(1, canvas.width / 2), canvas.height)
-      context.fillStyle = '#f97316'
-      context.fillRect(Math.max(1, canvas.width / 2), 0, canvas.width, canvas.height)
-      visualWindow.__wippyAttentionE2ECanvas = canvas
-      const stream = canvas.captureStream(5)
-      const track = stream.getVideoTracks()[0]
-      if (!track)
-        throw new Error('Synthetic Attention capture has no video track')
-      const originalSettings = track.getSettings.bind(track)
-      Object.defineProperty(track, 'getSettings', {
-        configurable: true,
-        value: () => ({ ...originalSettings(), displaySurface: 'browser' }),
-      })
-      return stream
-    }
-    const mediaDevices = navigator.mediaDevices ?? {} as MediaDevices
-    Object.defineProperty(mediaDevices, 'getDisplayMedia', {
-      configurable: true,
-      value: capture,
-    })
-    if (!navigator.mediaDevices) {
-      Object.defineProperty(navigator, 'mediaDevices', {
-        configurable: true,
-        value: mediaDevices,
+export async function denyAttentionCaptureProvider(page: Page): Promise<() => Promise<void>> {
+  let restored = false
+  for (const frame of page.frames()) {
+    const found = await frame.evaluate(() => {
+      const host = window as typeof window & {
+        __WIPPY_ATTENTION_CAPTURE_PROVIDER__?: { captureFrame?: (...args: unknown[]) => unknown }
+        __wippyAttentionCaptureOriginal?: (...args: unknown[]) => unknown
+      }
+      const provider = host.__WIPPY_ATTENTION_CAPTURE_PROVIDER__
+      if (!provider || typeof provider.captureFrame !== 'function')
+        return false
+      host.__wippyAttentionCaptureOriginal = provider.captureFrame
+      provider.captureFrame = async () => {
+        throw new DOMException('Attention E2E capture denied', 'NotAllowedError')
+      }
+      return true
+    }).catch(() => false)
+    if (!found)
+      continue
+    return async () => {
+      if (restored)
+        return
+      restored = true
+      await frame.evaluate(() => {
+        const host = window as typeof window & {
+          __WIPPY_ATTENTION_CAPTURE_PROVIDER__?: { captureFrame?: (...args: unknown[]) => unknown }
+          __wippyAttentionCaptureOriginal?: (...args: unknown[]) => unknown
+        }
+        if (host.__WIPPY_ATTENTION_CAPTURE_PROVIDER__ && host.__wippyAttentionCaptureOriginal)
+          host.__WIPPY_ATTENTION_CAPTURE_PROVIDER__.captureFrame = host.__wippyAttentionCaptureOriginal
+        delete host.__wippyAttentionCaptureOriginal
       })
     }
-  })
+  }
+  throw new Error('Host Attention capture provider was not available')
 }
 
 export async function bootAttentionTracer(page: Page, cell: AttentionRuntimeCell): Promise<AttentionFixture> {
@@ -1722,19 +1674,25 @@ export async function startDeterministicAttentionChat(page: Page): Promise<Locat
   return findVisible(page, root => root.locator('textarea[placeholder="Type a message"]'), 'chat message textarea', 30_000)
 }
 
-export async function enablePointingContext(page: Page, includeScreenshot = false): Promise<void> {
+export async function enablePointingContext(page: Page): Promise<void> {
   const attachments = await findVisibleRole(page, 'button', 'Attachments')
+  if ((await attachments.getAttribute('aria-label'))?.match(/pointing context selected/))
+    return
   await attachments.click()
   const pointing = await findVisibleRole(page, 'menuitem', 'Include what I’m pointing at')
   await pointing.click()
   await expect(attachments).toHaveAttribute('aria-label', /pointing context selected/)
+}
 
-  if (!includeScreenshot)
-    return
-  await attachments.click()
-  const screenshot = await findVisibleRole(page, 'menuitem', 'Include a screenshot of this area')
-  await screenshot.click()
-  await expect(attachments).toHaveAttribute('aria-label', /pointing context and screenshot selected/)
+export async function findVisibleUploadQueue(page: Page): Promise<Locator> {
+  return findVisible(page, root => root.locator('.chat-input__upload-list, .message-input__files'), 'ordinary composer upload queue', 30_000)
+}
+
+export async function removeFirstUpload(page: Page): Promise<void> {
+  const queue = await findVisibleUploadQueue(page)
+  const remove = queue.locator('.w-file__item [aria-label*="remove" i], .w-file__item [aria-label*="delete" i], .w-file__item svg.iconify--tabler').last()
+  await expect(remove).toBeVisible()
+  await remove.click({ force: true })
 }
 
 export async function capturedPayloadMetrics(page: Page): Promise<AttentionPayloadMetrics[]> {
@@ -1808,11 +1766,20 @@ export async function waitForTerminalDispatch(page: Page, sessionId: string, mes
   return packet!
 }
 
-export async function sendChatMessage(page: Page, composer: Locator, text: string): Promise<AcknowledgedSessionMessage> {
+export async function sendChatMessage(
+  page: Page,
+  composer: Locator,
+  text: string,
+  options?: { beforeSubmit?: () => Promise<void>, submit?: () => Promise<void> },
+): Promise<AcknowledgedSessionMessage> {
   await recordSendLifecycle(page, 'before-fill')
   await composer.fill(text)
   await recordSendLifecycle(page, 'before-enter')
-  await composer.press('Enter')
+  await options?.beforeSubmit?.()
+  if (options?.submit)
+    await options.submit()
+  else
+    await composer.press('Enter')
   await recordSendLifecycle(page, 'after-enter')
 
   let captured: CapturedSessionMessage | undefined
@@ -1874,6 +1841,7 @@ export async function waitForUiActionResult(
   sessionId: string,
   status: string,
   timeout = 20_000,
+  excludeActionId?: string,
 ): Promise<CapturedUiActionResult> {
   let captured: CapturedUiActionResult | undefined
   await expect.poll(async () => {
@@ -1882,6 +1850,7 @@ export async function waitForUiActionResult(
       item.type === 'session_ui_action_result'
       && item.session_id === sessionId
       && item.data.status === status
+      && item.data.in_reply_to_action_id !== excludeActionId
     ))
     return Boolean(captured)
   }, { timeout, message: `session_ui_action_result with status ${status}` }).toBe(true)
@@ -1948,16 +1917,6 @@ export function attentionSnapshot(command: CapturedSessionMessage): AttentionSna
   if (!snapshots.length)
     throw new Error('Message has no supported Attention semantic snapshot')
   return snapshots[0]
-}
-
-export function attentionVisualContext(command: CapturedSessionMessage): AttentionVisualContext {
-  const attachment = resolvedContextAttachments(command)?.find(item => item.kind === 'wippy.attention.visual')
-  if (!attachment)
-    throw new Error('Outbound message has no wippy.attention.visual attachment')
-  const parsed = JSON.parse(attachment.content) as AttentionVisualContext
-  if (parsed.schema !== 'wippy.attention.visual.v1')
-    throw new Error(`Unexpected Attention visual schema: ${String(parsed.schema)}`)
-  return parsed
 }
 
 export function pointerCandidates(snapshot: AttentionSnapshot): AttentionCandidate[] {

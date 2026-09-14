@@ -14,7 +14,6 @@ URL.
    dotenv + @types/node):
    ```sh
    pnpm install
-   npx playwright install chromium
    ```
    `.env` must define `USERSPACE_USER_DEFAULT_ADMIN_EMAIL` /
    `USERSPACE_USER_DEFAULT_ADMIN_PASSWORD` — copy `.env.example` if you
@@ -98,7 +97,7 @@ C:/Projects/app-template-raw/wippy.exe test -c -o app:gateway:lifecycle.auto_sta
 The command exits nonzero when any provider case fails. It does not update the
 lock or install a replacement test framework.
 
-Four additional runtime cells are explicit because Playwright cannot change a
+Additional runtime cells are explicit because Playwright cannot change a
 server-owned capability or broker lifetime after Wippy starts:
 
 - Timeout: set `SESSION_UI_ACTION_TTL_SECONDS=5` in the Wippy runtime process;
@@ -109,19 +108,22 @@ server-owned capability or broker lifetime after Wippy starts:
 - Disabled: launch with
   `-o wippy.facade:attention:default={"enabled":false}`, then set
   `WIPPY_ATTENTION_MODE=disabled`.
-- Display-capture denial: launch with the normal Attention JSON except
-  `visualCapture.enabled=true`, then set `WIPPY_ATTENTION_VISUAL=true`.
-  Playwright rejects `getDisplayMedia` with `NotAllowedError` and verifies that
-  the semantic attachment still reaches the agent with a permission-denied
-  omission.
-- Synthetic visual success: launch with the same
-  `visualCapture.enabled=true` runtime capability, then set
-  `WIPPY_ATTENTION_VISUAL=true` and `WIPPY_ATTENTION_VISUAL_MODE=synthetic` in
-  the Playwright process. The committed Chromium case captures a deterministic
-  canvas stream, verifies bounded region geometry and target linkage, uploads
-  the redacted PNG, and proves the authorized reference reaches the provider as
-  multimodal input. Firefox and WebKit skip only this synthetic capture case;
-  their non-visual Attention coverage remains part of the matrix.
+- Visual capture denial: the top-level Host owns the capture provider. The
+  capture flow asks the user for approval, and a provider denial is recorded as
+  a denied visual mode without fabricating an image.
+
+The visual capture action is separate from message submission. After approval,
+the prepared image uses the ordinary composer upload flow. The top-level Host
+provider captures the selected target or region, with
+the target and region defaulting to the current selection when the user does
+not choose another one. The user must approve capture, and full viewport is a
+separate choice from target or region capture.
+
+The resulting image is an ordinary removable file in the composer queue. The
+later Send action references that file through `file_uuids`, so the normal
+multimodal message path handles it. Removing the file releases its local
+preview data without deleting an ordinary server upload. Provider denial keeps
+the semantic Attention data and omits the visual file.
 
 Run compatibility and managed modes sequentially. Each runtime cell still runs
 the committed Chromium, Firefox, and WebKit projects. Keep the `--config`
@@ -139,7 +141,7 @@ seed step uses create-only file semantics and refuses to overwrite prior evidenc
 Set the same values for both Playwright runs:
 
 ```powershell
-$env:WIPPY_URL = 'http://localhost:8086'
+$env:WIPPY_URL = 'http://127.0.0.1:8086'
 $env:WIPPY_LAYOUT = 'compat'
 $env:WIPPY_ENGINE = 'iframe'
 $env:WIPPY_ATTENTION_MODE = 'enabled'
@@ -245,8 +247,7 @@ pnpm test:e2e:headed
   5. Verifies Escape cancellation, focus restoration, resize-driven stale target,
      broker expiry, transport disconnect, reconnect, and same-session persistence.
   6. Verifies atomic attachment rejection, forged visual-reference rejection,
-     disabled mode, display-capture denial, and synthetic visual success in their
-     explicit runtime cells.
+     disabled mode, and provider denial in their explicit runtime cells.
 
 ## Adding tests
 

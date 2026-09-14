@@ -30,7 +30,7 @@ export default defineConfig({
   },
   outputDir: `test-results/attention-restart-${phase}-${browser}`,
   use: {
-    baseURL: process.env.WIPPY_URL || 'http://localhost:8086',
+    baseURL: process.env.WIPPY_URL || 'http://127.0.0.1:8086',
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',

@@ -52,7 +52,7 @@ function allowlistedMetrics(value: unknown) {
   if (cell && (!['compat', 'managed'].includes(String(cell.layout))
     || !['iframe', 'fragment'].includes(String(cell.engine))
     || !['enabled', 'disabled'].includes(String(cell.mode))
-    || !['none', 'denied', 'synthetic'].includes(String(cell.visualMode))
+    || !['none', 'denied'].includes(String(cell.visualMode))
     || typeof cell.visualCapture !== 'boolean')) {
     throw new Error('invalid metrics cell')
   }

@@ -6,7 +6,6 @@ import {
   attentionProtocolDiagnostics,
   attentionRuntimeCell,
   attentionSnapshot,
-  attentionVisualContext,
   bootAttentionTracer,
   cancelStagedContextForTest,
   canonicalContextValue,
@@ -21,14 +20,15 @@ import {
   enablePointingContext,
   findVisible,
   findVisibleRole,
+  findVisibleUploadQueue,
   installAttentionWireTap,
-  installSyntheticVisualCapture,
-  installVisualCaptureDenial,
+  denyAttentionCaptureProvider,
   moveToSiblingBoundary,
   navigateAttentionHost,
   openPersistedSession,
   pointerCandidates,
   resolvedContextAttachments,
+  removeFirstUpload,
   sendChatMessage,
   sendRawSessionMessage,
   sendStagedSessionMessage,
@@ -215,10 +215,6 @@ function expectAgentPathMatches(actual: AttentionPath, expected: AttentionPath):
 
 test.beforeEach(async ({ page }) => {
   await installAttentionWireTap(page)
-  if (cell.visualMode === 'denied')
-    await installVisualCaptureDenial(page)
-  if (cell.visualMode === 'synthetic')
-    await installSyntheticVisualCapture(page)
 })
 
 test.afterEach(async ({ page }, testInfo) => {
@@ -243,9 +239,17 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const fixture = await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
     await enablePointingContext(page)
-    await fixture.leftTarget.hover()
+    await fixture.rightTarget.hover()
 
-    const command = await sendChatMessage(page, composer, 'What am I pointing at?')
+    const command = await sendChatMessage(page, composer, 'What am I pointing at?', {
+      beforeSubmit: async () => {
+        await fixture.leftTarget.focus()
+        await expect(fixture.leftTarget).toBeFocused()
+      },
+      submit: async () => {
+        await page.locator('.chat-input__send-button').dispatchEvent('click')
+      },
+    })
     expect(attentionAttachment(command).version).toBe(3)
     const snapshot = attentionSnapshot(command)
     const pointed = pointerCandidates(snapshot)
@@ -270,15 +274,15 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     }, null, 2)}`
 
     expect(pointed.length, pointerDiagnostics).toBeGreaterThan(0)
-    const left = pointed.find(candidate => JSON.stringify(candidate.summary).includes('left nested target'))
-    expect(left, pointerDiagnostics).toBeDefined()
-    expect(left!.path.length).toBeLessThanOrEqual(32)
-    expectCompleteNestedPath(left!.path, pointerDiagnostics)
+    const right = pointed.find(candidate => JSON.stringify(candidate.summary).includes('right nested target'))
+    expect(right, pointerDiagnostics).toBeDefined()
+    expect(right!.path.length).toBeLessThanOrEqual(32)
+    expectCompleteNestedPath(right!.path, pointerDiagnostics)
     expect(snapshot.host_instance_id).toBe(command.data.runtime_context?.attention?.host_instance_id)
     expect(snapshot.mount_generation).toBeGreaterThanOrEqual(0)
     expect(Number.isNaN(Date.parse(snapshot.created_at))).toBe(false)
     expect(snapshot.pointer).toEqual(expect.objectContaining({
-      candidate_ids: expect.arrayContaining([left!.target_id]),
+      candidate_ids: expect.arrayContaining([right!.target_id]),
       observed_at: expect.any(String),
       sequence: expect.any(Number),
     }))
@@ -290,6 +294,8 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     }))
     expect(snapshot.focus!.path.length).toBeGreaterThanOrEqual(2)
     expect(snapshot.focus!.path.at(-1)?.kind).toBe('element')
+    expect(snapshot.focus!.path).toHaveLength(17)
+    expect(JSON.stringify(snapshot.focus!.summary)).toContain('left nested target')
     expect(Date.parse(snapshot.focus!.focused_at)).toBeLessThanOrEqual(Date.parse(snapshot.created_at))
     expect(snapshot.coordinate_space).toEqual(expect.objectContaining({
       device_pixel_ratio: expect.any(Number),
@@ -315,10 +321,10 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     }))
 
     const answer = await waitForAgentText(page, 'ATTENTION_E2E_TARGET')
-    await expect(answer).toContainText(`PATH_SEGMENTS ${left!.path.length}`)
-    await expect(answer).toContainText('Safe text for the left nested target')
-    await expect(answer).toContainText(left!.target_id)
-    expectAgentPathMatches(await extractAgentPath(answer), left!.path)
+    await expect(answer).toContainText(`PATH_SEGMENTS ${right!.path.length}`)
+    await expect(answer).toContainText('Safe text for the right nested target')
+    await expect(answer).toContainText(right!.target_id)
+    expectAgentPathMatches(await extractAgentPath(answer), right!.path)
 
     const persisted = await waitForPersistedMessage(
       page,
@@ -330,6 +336,40 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
           item.attachment_id === attentionAttachment(command).attachment_id
           && item.content_hash === attentionAttachment(command).content_hash
         )) === true,
+    )
+    const persistedAttachment = persisted.metadata?.context_attachments?.find(item => item.kind === 'wippy.attention')
+    expect(persistedAttachment).toEqual(attentionAttachment(command))
+  })
+
+  test('records the current Host panel after a real Send click moves focus out of the nested document', async ({ page }) => {
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
+    const fixture = await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page)
+    await enablePointingContext(page)
+    await fixture.rightTarget.hover()
+
+    const command = await sendChatMessage(page, composer, 'What is focused after Send?', {
+      beforeSubmit: async () => {
+        await fixture.leftTarget.focus()
+        await expect(fixture.leftTarget).toBeFocused()
+      },
+      submit: async () => {
+        await page.locator('.chat-input__send-button').click()
+      },
+    })
+    const snapshot = attentionSnapshot(command)
+    expect(snapshot.focus).toEqual(expect.objectContaining({
+      focused_at: expect.any(String),
+      path: expect.any(Array),
+      sequence: expect.any(Number),
+    }))
+    expect(snapshot.focus!.path.map(segment => segment.kind)).toEqual(['host', 'panel'])
+    expect(JSON.stringify(snapshot.focus!.summary)).not.toContain('left nested target')
+
+    const persisted = await waitForPersistedMessage(
+      page,
+      command.session_id,
+      message => message.type === 'user' && message.message_id === command.persistedMessageId,
     )
     const persistedAttachment = persisted.metadata?.context_attachments?.find(item => item.kind === 'wippy.attention')
     expect(persistedAttachment).toEqual(attentionAttachment(command))
@@ -394,20 +434,13 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       message => message.type === 'user' && message.message_id === command.persistedMessageId,
     )
     expect(persisted.metadata?.context_attachments).toEqual(resolvedContextAttachments(command))
-    const left = await findVisible(
-      page,
-      root => root.locator('[data-wippy-attention-overlay]').getByRole('button', { name: 'Attention target left', exact: true }),
-      'left Attention overlay candidate',
-      30_000,
-    )
-    const right = await findVisible(
-      page,
-      root => root.locator('[data-wippy-attention-overlay]').getByRole('button', { name: 'Attention target right', exact: true }),
-      'right Attention overlay candidate',
-      30_000,
-    )
-    await expect(left).toHaveAttribute('data-wippy-attention-target', '')
-    await expect(right).toHaveAttribute('data-wippy-attention-target', '')
+    const overlay = await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'Attention confirmation overlay', 30_000)
+    const targets = overlay.locator('button[data-wippy-attention-target]')
+    await expect(targets).toHaveCount(2)
+    const left = targets.nth(0)
+    const right = targets.nth(1)
+    await expect(left).toHaveAttribute('data-wippy-attention-target')
+    await expect(right).toHaveAttribute('data-wippy-attention-target')
     const projectedLeft = await left.evaluate(element => ({
       height: Number.parseFloat(element.style.height),
       left: Number.parseFloat(element.style.left),
@@ -800,18 +833,35 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     )
   })
 
-  test('preserves semantic context when display capture permission is denied', async ({ page }) => {
+  test('preserves semantic context when the Host capture provider denies the request', async ({ page }) => {
     test.skip(cell.mode !== 'enabled' || cell.visualMode !== 'denied', 'requires the visual-capture denial runtime cell')
     const fixture = await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
-    await enablePointingContext(page, true)
+    await enablePointingContext(page)
     await fixture.leftTarget.hover()
 
-    const command = await sendChatMessage(page, composer, 'What am I pointing at with denied screenshot context?')
-    const snapshot = attentionSnapshot(command)
-    expect(resolvedContextAttachments(command)).toHaveLength(1)
-    expect(snapshot.omissions).toContainEqual(expect.objectContaining({ capture_code: 'permission-denied' }))
-    const left = pointerCandidates(snapshot).find(candidate => JSON.stringify(candidate.summary).includes('left nested target'))
+    const restoreProvider = await denyAttentionCaptureProvider(page)
+    try {
+      const command = await sendChatMessage(page, composer, 'prepare screenshot of this area')
+      expect(resolvedContextAttachments(command)).toHaveLength(1)
+      expect(resolvedContextAttachments(command)?.some(item => item.kind === 'wippy.attention.visual')).toBe(false)
+      const overlay = await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'visual capture overlay', 30_000)
+      await overlay.getByRole('button', { name: 'Add image to message', exact: true }).click()
+      const denied = await waitForUiActionResult(page, command.session_id, 'denied')
+      expect(await terminalResultsForAction(page, denied.data.in_reply_to_action_id)).toHaveLength(1)
+      expect(await attentionOverlayCount(page)).toBe(0)
+      await expect(page.locator('.chat-input__upload-list, .message-input__files')).toHaveCount(0)
+    }
+    finally {
+      await restoreProvider()
+    }
+
+    await enablePointingContext(page)
+    await fixture.leftTarget.hover()
+    const semantic = await sendChatMessage(page, composer, 'What am I pointing at after denied capture?')
+    const semanticSnapshot = attentionSnapshot(semantic)
+    expect(semanticSnapshot.omissions).not.toContainEqual(expect.objectContaining({ capture_code: 'permission-denied' }))
+    const left = pointerCandidates(semanticSnapshot).find(candidate => JSON.stringify(candidate.summary).includes('left nested target'))
     expect(left).toBeDefined()
     expectCompleteNestedPath(left!.path)
     const answerPath = await extractAgentPath(await waitForAgentText(page, 'ATTENTION_E2E_TARGET'))
@@ -819,69 +869,69 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     expectAgentPathMatches(answerPath, left!.path)
   })
 
-  test('uploads a redacted region and maps its authorized reference to multimodal input', async ({ page, browserName }) => {
-    test.skip(cell.mode !== 'enabled' || cell.visualMode !== 'synthetic', 'requires the synthetic visual-capture runtime cell')
-    test.skip(browserName !== 'chromium', 'canvas captureStream is the deterministic Chromium capture source')
+  test('prepares a removable target capture and attaches it only on later Send', async ({ page }) => {
+    test.skip(cell.mode !== 'enabled' || !cell.visualCapture, 'requires the enabled visual-capture runtime cell')
     const fixture = await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
-    await enablePointingContext(page, true)
+    await enablePointingContext(page)
     await fixture.leftTarget.hover()
 
-    const command = await sendChatMessage(page, composer, 'What am I pointing at with a successful screenshot?')
-    expect(resolvedContextAttachments(command)).toHaveLength(2)
+    const command = await sendChatMessage(page, composer, 'prepare screenshot of this area')
+    expect(resolvedContextAttachments(command)).toHaveLength(1)
     const snapshot = attentionSnapshot(command)
-    const visual = attentionVisualContext(command)
-    const pointed = pointerCandidates(snapshot)
-    const intended = pointed.find(candidate => JSON.stringify(candidate.summary).includes('left nested target'))
+    const intended = pointerCandidates(snapshot).find(candidate => JSON.stringify(candidate.summary).includes('left nested target'))
     expect(intended).toBeDefined()
-    expect(visual).toEqual(expect.objectContaining({
-      authorization: expect.objectContaining({
-        audience: 'agent-context',
-        scope: 'session',
-        session_id: command.session_id,
-      }),
-      candidate_ids: expect.arrayContaining([intended!.target_id]),
-      host_instance_id: snapshot.host_instance_id,
-      redactions_applied: expect.any(Number),
-      snapshot_id: snapshot.snapshot_id,
-    }))
-    expect(visual.redactions_applied).toBeGreaterThanOrEqual(1)
-    expect(visual.reference).toEqual({ kind: 'upload', opaque_id: expect.any(String) })
-    expect(visual.media).toEqual(expect.objectContaining({
-      content_bytes: expect.any(Number),
-      content_hash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
-      content_type: 'image/png',
-      pixel_height: expect.any(Number),
-      pixel_width: expect.any(Number),
-    }))
-    expect(visual.media.content_bytes).toBeGreaterThan(0)
-    expect(visual.media.pixel_height).toBeGreaterThan(0)
-    expect(visual.media.pixel_width).toBeGreaterThan(0)
-    expect(Object.values(visual.region).every(Number.isFinite)).toBe(true)
-    expect(visual.region.x).toBeGreaterThanOrEqual(0)
-    expect(visual.region.y).toBeGreaterThanOrEqual(0)
-    expect(visual.region.width).toBeGreaterThan(0)
-    expect(visual.region.height).toBeGreaterThan(0)
-    expect(visual.region.x + visual.region.width).toBeLessThanOrEqual(snapshot.coordinate_space.width)
-    expect(visual.region.y + visual.region.height).toBeLessThanOrEqual(snapshot.coordinate_space.height)
-    expect(visual.candidate_ids.every(candidateId => (
-      snapshot.candidates.some(candidate => candidate.target_id === candidateId)
-    ))).toBe(true)
-    expect(visual.region.x).toBeLessThan(intended!.action_ref!.rect.x + intended!.action_ref!.rect.width)
-    expect(visual.region.x + visual.region.width).toBeGreaterThan(intended!.action_ref!.rect.x)
-    expect(visual.region.y).toBeLessThan(intended!.action_ref!.rect.y + intended!.action_ref!.rect.height)
-    expect(visual.region.y + visual.region.height).toBeGreaterThan(intended!.action_ref!.rect.y)
-    expect(Date.parse(visual.expires_at)).toBeGreaterThan(Date.parse(visual.created_at))
-    expect(visual.authorization.expires_at).toBe(visual.expires_at)
+    const overlay = await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'visual capture overlay', 30_000)
+    const selectedArea = overlay.getByRole('button', { name: 'Selected area', exact: true })
+    const viewport = overlay.getByRole('button', { name: 'Entire app viewport', exact: true })
+    await expect(selectedArea).toHaveAttribute('aria-pressed', 'true')
+    await expect(viewport).toHaveAttribute('aria-pressed', 'false')
+    await overlay.getByRole('button', { name: 'Add image to message', exact: true }).click()
 
+    const result = await waitForUiActionResult(page, command.session_id, 'prepared')
+    expect(result.data.prepared_file?.uuid).toMatch(/^[\w-]+$/)
+    expect(result.data.prepared_file?.mime_type).toMatch(/^image\//)
+    expect(result.data.prepared_file?.name).toBeTruthy()
+    expect(result.data.prepared_file?.byte_size).toBeGreaterThan(0)
+    expect(result.data.prepared_file?.sha256).toMatch(/^sha256:[a-f0-9]{64}$/)
+    expect(result.data.prepared_file?.scope).toBe('target')
+    expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
+    const queue = await findVisibleUploadQueue(page)
+    await expect(queue).toHaveCount(1)
+    await expect(queue).toContainText(result.data.prepared_file!.name!)
+    expect(await capturedWireMessages(page)).not.toContainEqual(expect.objectContaining({
+      type: 'session_message',
+      data: expect.objectContaining({ context_attachments: expect.arrayContaining([expect.objectContaining({ kind: 'wippy.attention.visual' })]) }),
+    }))
+
+    const sentMessagesBeforeRemoval = (await capturedWireMessages(page))
+      .filter(message => message.type === 'session_message').length
+    await removeFirstUpload(page)
+    await expect(queue).toHaveCount(0)
+    await page.waitForTimeout(250)
+    expect((await capturedWireMessages(page))
+      .filter(message => message.type === 'session_message')).toHaveLength(sentMessagesBeforeRemoval)
+
+    await enablePointingContext(page)
+    await fixture.leftTarget.hover()
+    const recapture = await sendChatMessage(page, composer, 'prepare screenshot of this area again')
+    const recaptureOverlay = await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'second visual capture overlay', 30_000)
+    await recaptureOverlay.getByRole('button', { name: 'Add image to message', exact: true }).click()
+    const prepared = await waitForUiActionResult(
+      page,
+      recapture.session_id,
+      'prepared',
+      20_000,
+      result.data.in_reply_to_action_id,
+    )
+    expect(prepared.data.prepared_file?.uuid).toMatch(/^[\w-]+$/)
+    const recaptureQueue = await findVisibleUploadQueue(page)
+    await expect(recaptureQueue).toContainText(prepared.data.prepared_file!.name!)
+    const sent = await sendChatMessage(page, composer, 'What am I pointing at with a successful screenshot?')
+    expect((resolvedContextAttachments(sent) ?? []).some(item => item.kind === 'wippy.attention.visual')).toBe(false)
+    expect(sent.data.file_uuids).toContain(prepared.data.prepared_file!.uuid)
     const answer = await waitForAgentText(page, 'ATTENTION_E2E_VISUAL')
     await expect(answer).toContainText('image/png')
-    const persisted = await waitForPersistedMessage(
-      page,
-      command.session_id,
-      message => message.message_id === command.persistedMessageId && message.type === 'user',
-    )
-    expect(persisted.metadata?.context_attachments).toEqual(resolvedContextAttachments(command))
   })
 
   test('rejects one malformed attachment atomically and keeps normal chat usable', async ({ page }) => {

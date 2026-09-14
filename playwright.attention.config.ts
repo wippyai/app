@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { defineConfig, devices } from '@playwright/test'
 
-const WIPPY_URL = process.env.WIPPY_URL || 'http://localhost:8086'
+const WIPPY_URL = process.env.WIPPY_URL || 'http://127.0.0.1:8086'
 const attentionMetricsFile = process.env.WIPPY_ATTENTION_METRICS_FILE
 
 export default defineConfig({
