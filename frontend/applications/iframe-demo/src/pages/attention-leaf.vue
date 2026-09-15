@@ -69,7 +69,7 @@ function recordKey(event: KeyboardEvent) {
         Safe text for the {{ side }} nested target
       </span>
       <span
-        data-wippy-attention="redact"
+        :data-wippy-attention="side === 'left' ? 'exclude' : 'redact'"
         :data-testid="`attention-private-text-${side}`"
         class="attention-leaf__private-text"
       >

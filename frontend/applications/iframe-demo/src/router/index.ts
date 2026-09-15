@@ -1,6 +1,5 @@
-import type { Router } from 'vue-router'
 import type { HostApi, ProxyApiInstance } from '../types'
-import { createMemoryHistory, createRouter } from 'vue-router'
+import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 
 // Reuse the proxy's exact `on()` typing instead of redeclaring a looser
 // alias — gives correct `@history` callback inference and tracks upstream
