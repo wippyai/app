@@ -351,16 +351,7 @@ local function handler(contract_args)
     local messages = contract_args.messages or {}
     local action_result = decode_function_result(messages)
     if action_result then
-        local selected = action_result.selected_target_id
-            or (action_result.selected_target and action_result.selected_target.target_id)
-            or (action_result.prepared_file and action_result.prepared_file.uuid)
-            or (action_result.target and action_result.target.target_id)
-            or "none"
-        return finish(string.format(
-            "ATTENTION_E2E_ACTION_RESULT %s %s",
-            tostring(action_result.status or "unknown"),
-            tostring(selected)
-        ))
+        return finish("")
     end
 
     local user_text = string.lower(latest_user_text(messages))
