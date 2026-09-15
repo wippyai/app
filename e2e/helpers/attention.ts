@@ -88,7 +88,7 @@ export interface AttentionSnapshot {
   }
   host_instance_id: string
   mount_generation: number
-  omissions?: Array<{ capture_code?: string, reason: string }>
+  omissions?: Array<{ capture_code?: string, mount_id?: string, point_id?: string, reason: string }>
   pointer?: {
     candidate_ids: string[]
     event_id: string
@@ -897,6 +897,28 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
         return 'user_disconnect'
       return 'other_redacted'
     }
+    const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+    const safeText = (value: unknown): string | undefined => typeof value === 'string' && value.length <= 160 ? value : undefined
+    const safeInteger = (value: unknown): number | undefined => Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : undefined
+    const safeMountIds = (value: unknown): string[] | undefined => {
+      if (!Array.isArray(value) || value.length > 32)
+        return undefined
+      const mountIds = value.map(item => record(item) ? item.mount_id : undefined)
+        .filter((item): item is string => typeof item === 'string' && item.length > 0 && item.length <= 160)
+      return mountIds.length ? mountIds : undefined
+    }
+    const safePathKinds = (value: unknown): string[] | undefined => {
+      if (!Array.isArray(value) || value.length > 64)
+        return undefined
+      const kinds = value.map((item) => record(item) ? safeText(item.kind) : undefined)
+      return kinds.every(Boolean) ? kinds as string[] : undefined
+    }
+    const safeOmissionReasons = (value: unknown): string[] | undefined => {
+      if (!Array.isArray(value) || value.length > 32)
+        return undefined
+      const reasons = value.map(item => record(item) ? safeText(item.reason) : undefined)
+      return reasons.every(Boolean) ? reasons as string[] : undefined
+    }
     window.addEventListener('message', (event) => {
       if (typeof event.data !== 'string')
         return
@@ -905,6 +927,8 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
         const message = envelope?.message
         if (envelope?.action !== 'attention-protocol' || !message)
           return
+        const observations = record(message.observations) ? message.observations : undefined
+        const focus = observations && record(observations.focus) ? observations.focus : undefined
         wire.__wippyAttentionE2EProtocol!.push({
           accepted_at: new Date().toISOString(),
           budget_remaining_bytes: Number.isSafeInteger(message.budget?.remaining_bytes)
@@ -917,6 +941,17 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
           code: message.code,
           created_at: message.created_at,
           deadline_at: message.deadline_at,
+          complete: typeof message.complete === 'boolean'
+            ? message.complete
+            : typeof observations?.complete === 'boolean' ? observations.complete : undefined,
+          focus_present: Boolean(focus),
+          focus_candidate_id_present: Boolean(focus && typeof focus.candidate_id === 'string'),
+          focused_at: safeText(focus?.focused_at),
+          focus_sequence: safeInteger(focus?.sequence),
+          focus_final_tag: safeText(focus?.tag_name ?? focus?.tag ?? focus?.name),
+          focus_final_path_kinds: safePathKinds(focus?.path),
+          omission_reasons: safeOmissionReasons(message.omissions),
+          omission_mount_ids: safeMountIds(message.omissions),
           message_type: message.message_type,
           safe_message: [
             'normalized-query-result-candidates-invalid',

@@ -343,14 +343,53 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       sequence: expect.any(Number),
     }))
     expect(Date.parse(snapshot.pointer!.observed_at)).toBeLessThanOrEqual(Date.parse(snapshot.created_at))
-    expect(snapshot.focus).toEqual(expect.objectContaining({
+    const focusDiagnostics = `attention protocol focus diagnostics: ${JSON.stringify((await attentionProtocolDiagnostics(page)).map((entry) => {
+      const frame = entry as { frame?: unknown, messages?: unknown[] }
+      return {
+        frame: frame.frame,
+        messages: (frame.messages ?? []).filter((message) => {
+          const item = message as Record<string, unknown>
+          return item.message_type === 'query-result'
+            || item.message_type === 'error'
+            || item.focus_present === true
+            || (Array.isArray(item.omission_reasons) && item.omission_reasons.length > 0)
+        }).map((message) => {
+          const item = message as Record<string, unknown>
+          return {
+            message_type: item.message_type,
+            request_id: item.request_id,
+            parent_request_id: item.parent_request_id,
+            source_mount_id: item.source_mount_id,
+            target_mount_id: item.target_mount_id,
+            complete: item.complete,
+            focus_present: item.focus_present,
+            focus_candidate_id_present: item.focus_candidate_id_present,
+            focused_at: item.focused_at,
+            focus_sequence: item.focus_sequence,
+            focus_final_tag: item.focus_final_tag,
+            focus_final_path_kinds: item.focus_final_path_kinds,
+            omission_reasons: item.omission_reasons,
+            omission_mount_ids: item.omission_mount_ids,
+          }
+        }),
+        final_snapshot: {
+          focus_path_kinds: snapshot.focus?.path.slice(0, 32).map(segment => segment.kind),
+          omissions: snapshot.omissions?.slice(0, 32).map(omission => ({
+            reason: omission.reason,
+            mount_id: omission.mount_id,
+            point_id: omission.point_id,
+          })),
+        },
+      }
+    }), null, 2)}`
+    expect(snapshot.focus, focusDiagnostics).toEqual(expect.objectContaining({
       focused_at: expect.any(String),
       path: expect.any(Array),
       sequence: expect.any(Number),
     }))
     expect(snapshot.focus!.path.length).toBeGreaterThanOrEqual(2)
     expect(snapshot.focus!.path.at(-1)?.kind).toBe('element')
-    expect(snapshot.focus!.path).toHaveLength(17)
+    expectCompleteNestedPath(snapshot.focus!.path, focusDiagnostics)
     expect(JSON.stringify(snapshot.focus!.summary)).toContain('left nested target')
     expect(Date.parse(snapshot.focus!.focused_at)).toBeLessThanOrEqual(Date.parse(snapshot.created_at))
     expect(snapshot.coordinate_space).toEqual(expect.objectContaining({
