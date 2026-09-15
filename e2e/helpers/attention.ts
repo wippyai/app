@@ -47,7 +47,10 @@ export interface AttentionPathSegment {
 
 export interface AttentionCandidate {
   action_ref?: {
+    generation: number
+    host_instance_id: string
     label?: string
+    mount_id: string
     path_digest: string
     rect: { height: number, width: number, x: number, y: number }
     target_id: string
@@ -216,7 +219,16 @@ export interface CapturedUiActionResult {
   data: {
     in_reply_to_action_id: string
     prepared_file?: { uuid: string, name: string, mime_type: string, byte_size: number, sha256: string, scope: string, [key: string]: unknown }
-    selected_target?: { target_id: string }
+    selected_target?: {
+      snapshot_id: string
+      target_id: string
+      host_instance_id: string
+      mount_id: string
+      generation: number
+      path_digest: string
+      rect: { height: number, width: number, x: number, y: number }
+      label?: string
+    }
     status: string
   }
   session_id: string
@@ -226,7 +238,7 @@ export interface CapturedUiActionResult {
 export interface PersistedMessage {
   data: string
   message_id: string
-  metadata?: { context_attachments?: ContextAttachment[], call_id?: string, status?: string, source_id?: string }
+  metadata?: { context_attachments?: ContextAttachment[], call_id?: string, result?: unknown, status?: string, source_id?: string }
   session_id: string
   type: string
 }
@@ -1758,12 +1770,66 @@ export async function capturedIncomingPackets(page: Page): Promise<CapturedIncom
 export async function waitForTerminalDispatch(page: Page, sessionId: string, messageId: string): Promise<CapturedIncomingPacket> {
   let packet: CapturedIncomingPacket | undefined
   await expect.poll(async () => {
-    packet = (await capturedIncomingPackets(page)).find(item => item.type === 'dispatch_status'
+    const incoming = await capturedIncomingPackets(page)
+    packet = incoming.find(item => item.type === 'dispatch_status'
       && item.topic === `session:${sessionId}` && item.dispatch?.message_id === messageId
       && ['completed', 'interrupted', 'cancelled'].includes(item.dispatch.state))
+    if (!packet) {
+      for (const item of incoming) {
+        if (item.topic !== `session:${sessionId}`)
+          continue
+        const dispatch = item.dispatches?.find(candidate => candidate.message_id === messageId
+          && ['completed', 'interrupted', 'cancelled'].includes(candidate.state))
+        if (dispatch) {
+          packet = { ...item, dispatch }
+          break
+        }
+      }
+    }
     return Boolean(packet)
   }, { timeout: 30_000, message: `terminal dispatch for accepted root ${messageId}` }).toBe(true)
   return packet!
+}
+
+export async function requestDispatchStatus(
+  page: Page,
+  sessionId: string,
+  dispatchId: string,
+): Promise<CapturedDispatchDescriptor> {
+  const composer = await findSessionComposer(page, sessionId)
+  const requestId = crypto.randomUUID()
+  await composer.evaluate((_element, request) => {
+    const sockets = (window as typeof window & { __wippyAttentionE2ESockets?: WebSocket[] })
+      .__wippyAttentionE2ESockets ?? []
+    const socket = [...sockets].reverse().find(candidate => (
+      candidate.readyState === WebSocket.OPEN
+      && new URL(candidate.url).pathname === '/api/v1/ws/join'
+    ))
+    if (!socket)
+      throw new Error('The reconnected session has no open owning WebSocket')
+    socket.send(JSON.stringify({
+      data: {
+        command: 'dispatch_status',
+        dispatch_ids: [request.dispatchId],
+      },
+      request_id: request.requestId,
+      session_id: request.sessionId,
+      type: 'session_command',
+    }))
+  }, { dispatchId, requestId, sessionId })
+
+  let descriptor: CapturedDispatchDescriptor | undefined
+  await expect.poll(async () => {
+    const response = (await capturedIncomingPackets(page)).find(packet => (
+      packet.type === 'command_response'
+      && packet.topic === `session:${sessionId}`
+      && packet.request_id === requestId
+      && packet.success === true
+    ))
+    descriptor = response?.dispatches?.find(candidate => candidate.dispatch_id === dispatchId)
+    return Boolean(descriptor)
+  }, { timeout: 20_000, message: `dispatch status response for ${dispatchId}` }).toBe(true)
+  return descriptor!
 }
 
 export async function sendChatMessage(

@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import {
   attentionAttachment,
   attentionOverlayCount,
@@ -27,6 +27,7 @@ import {
   navigateAttentionHost,
   openPersistedSession,
   pointerCandidates,
+  requestDispatchStatus,
   resolvedContextAttachments,
   removeFirstUpload,
   sendChatMessage,
@@ -64,6 +65,8 @@ const PATH_IDENTITY_FIELDS = [
   'coordinate_quality',
 ] as const
 type AttentionPath = ReturnType<typeof pointerCandidates>[number]['path']
+type AttentionCandidate = ReturnType<typeof pointerCandidates>[number]
+type SelectedAttentionTarget = NonNullable<Awaited<ReturnType<typeof waitForUiActionResult>>['data']['selected_target']>
 interface FixturePathRect {
   height: number
   width: number
@@ -97,7 +100,7 @@ function expectCompleteNestedPath(path: ReturnType<typeof pointerCandidates>[num
   expect(path.some(segment => segment.kind === 'web-component' && Boolean(segment.tag_name)), diagnostics).toBe(true)
   expect(path.at(-1), diagnostics).toEqual(expect.objectContaining({
     kind: 'element',
-    tag_name: 'span',
+    tag_name: 'button',
   }))
 }
 
@@ -211,6 +214,59 @@ function expectAgentPathMatches(actual: AttentionPath, expected: AttentionPath):
       segmentIndex,
     )
   })
+}
+
+async function expectNoAttentionDebugChat(page: Page, sessionId: string): Promise<void> {
+  const history = await sessionMessages(page, sessionId)
+  const markers = ['ATTENTION_E2E_HIGHLIGHT_REQUESTED', 'ATTENTION_E2E_ACTION_RESULT']
+  expect(history.filter(message => message.type === 'assistant'
+    && markers.some(marker => message.data.includes(marker)))).toHaveLength(0)
+  const visibleCount = (await Promise.all([
+    page,
+    ...page.frames(),
+  ].map(root => root.locator('.chat-message--agent-message')
+    .filter({ hasText: /ATTENTION_E2E_(?:HIGHLIGHT_REQUESTED|ACTION_RESULT)/ })
+    .count().catch(() => 0)))).reduce((total, count) => total + count, 0)
+  expect(visibleCount).toBe(0)
+}
+
+async function expectCompletedWithoutAttentionDebugChat(
+  page: Page,
+  command: Awaited<ReturnType<typeof sendChatMessage>>,
+): Promise<void> {
+  const terminal = await waitForTerminalDispatch(page, command.session_id, command.persistedMessageId)
+  expect(terminal.dispatch?.state).toBe('completed')
+  await expectNoAttentionDebugChat(page, command.session_id)
+}
+
+function expectFreshSelectionMatchesCandidate(
+  selected: SelectedAttentionTarget,
+  candidate: AttentionCandidate,
+  safeLabel: string,
+  selectedPoint: { x: number, y: number },
+): void {
+  const expected = candidate.action_ref
+  expect(expected).toBeDefined()
+  const side = safeLabel.trim().split(/\s+/)[0]
+  expect(selected).toEqual(expect.objectContaining({
+    snapshot_id: expect.any(String),
+    target_id: expect.any(String),
+    host_instance_id: expected!.host_instance_id,
+    mount_id: expected!.mount_id,
+    generation: expected!.generation,
+    path_digest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+    label: expect.stringMatching(new RegExp(`\\b${side}\\b`, 'i')),
+    rect: expect.objectContaining({
+      height: expect.any(Number),
+      width: expect.any(Number),
+      x: expect.any(Number),
+      y: expect.any(Number),
+    }),
+  }))
+  expect(selectedPoint.x).toBeGreaterThanOrEqual(selected.rect.x - FIXTURE_JSON_NUMERIC_TOLERANCE)
+  expect(selectedPoint.x).toBeLessThanOrEqual(selected.rect.x + selected.rect.width + FIXTURE_JSON_NUMERIC_TOLERANCE)
+  expect(selectedPoint.y).toBeGreaterThanOrEqual(selected.rect.y - FIXTURE_JSON_NUMERIC_TOLERANCE)
+  expect(selectedPoint.y).toBeLessThanOrEqual(selected.rect.y + selected.rect.height + FIXTURE_JSON_NUMERIC_TOLERANCE)
 }
 
 test.beforeEach(async ({ page }) => {
@@ -531,9 +587,6 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const result = await waitForUiActionResult(page, command.session_id, 'confirmed')
     expect(result.data.selected_target?.target_id).toBe(rightCandidate.target_id)
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
-    const answer = await waitForAgentText(page, 'ATTENTION_E2E_ACTION_RESULT')
-    await expect(answer).toContainText('confirmed')
-    await expect(answer).toContainText(result.data.selected_target!.target_id)
     const terminal = await waitForTerminalDispatch(page, command.session_id, command.persistedMessageId)
     if (terminal.dispatch?.state !== 'completed') {
       const [history, incoming] = await Promise.all([
@@ -584,7 +637,9 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     expect(functions).toHaveLength(1)
     expect(functions[0].message_id).toBe(pendingFunction.message_id)
     expect(functions[0].metadata?.status).toBe('success')
-    expect(history.filter(message => message.type === 'assistant' && message.data.includes('ATTENTION_E2E_ACTION_RESULT'))).toHaveLength(1)
+    expect(history.filter(message => message.type === 'assistant'
+      && message.data.includes('ATTENTION_E2E_ACTION_RESULT'))).toHaveLength(0)
+    await expectNoAttentionDebugChat(page, command.session_id)
   })
 
   test('selects an unoffered area with a pointer and explicit confirmation', async ({ page }) => {
@@ -628,11 +683,12 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     await overlay.getByRole('button', { name: 'Use this area' }).click()
 
     const result = await waitForUiActionResult(page, command.session_id, 'selected')
-    expect(result.data.selected_target?.target_id).toBe(intended!.target_id)
+    expectFreshSelectionMatchesCandidate(result.data.selected_target!, intended!, 'left nested target', {
+      x: targetBox!.x + targetBox!.width / 2,
+      y: targetBox!.y + targetBox!.height / 2,
+    })
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
-    const answer = await waitForAgentText(page, 'ATTENTION_E2E_ACTION_RESULT')
-    await expect(answer).toContainText('selected')
-    await expect(answer).toContainText(intended!.target_id)
+    await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
   test('highlights the exact pointer target through the dedicated agent action', async ({ page }) => {
@@ -675,8 +731,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const result = await waitForUiActionResult(page, command.session_id, 'confirmed')
     expect(result.data.selected_target?.target_id).toBe(intended!.target_id)
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
-    const answer = await waitForAgentText(page, 'ATTENTION_E2E_ACTION_RESULT')
-    await expect(answer).toContainText(`confirmed ${intended!.target_id}`)
+    await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
   test('selects the current pointer area entirely by keyboard', async ({ page }) => {
@@ -685,6 +740,8 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const composer = await startDeterministicAttentionChat(page)
     await enablePointingContext(page)
     await fixture.rightTarget.hover()
+    const targetBox = await fixture.rightTarget.boundingBox()
+    expect(targetBox).not.toBeNull()
     await composer.focus()
 
     const command = await sendChatMessage(page, composer, 'Click the area I meant using the keyboard')
@@ -719,15 +776,12 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     await page.keyboard.press('Enter')
 
     const result = await waitForUiActionResult(page, command.session_id, 'selected')
-    expect(result.data.selected_target?.target_id, `keyboard target mismatch: ${JSON.stringify({
-      intended: {
-        path: intended!.path.map(segment => segment.kind),
-        summary: intended!.summary,
-        target_id: intended!.target_id,
-      },
-      selected: result.data.selected_target,
-    }, null, 2)}`).toBe(intended!.target_id)
+    expectFreshSelectionMatchesCandidate(result.data.selected_target!, intended!, 'right nested target', {
+      x: targetBox!.x + targetBox!.width / 2,
+      y: targetBox!.y + targetBox!.height / 2,
+    })
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
+    await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
   test('cancels with Escape and restores composer focus', async ({ page }) => {
@@ -743,7 +797,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const result = await waitForUiActionResult(page, command.session_id, 'cancelled')
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
     await expect(composer).toBeFocused()
-    await expect(await waitForAgentText(page, 'ATTENTION_E2E_ACTION_RESULT')).toContainText('cancelled')
+    await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
   test('invalidates a live target when viewport geometry changes', async ({ page }) => {
@@ -760,7 +814,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
 
     const result = await waitForUiActionResult(page, command.session_id, 'stale')
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
-    await expect(await waitForAgentText(page, 'ATTENTION_E2E_ACTION_RESULT')).toContainText('stale')
+    await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
   test('returns one stale result when Host navigation invalidates a pending action', async ({ page }) => {
@@ -774,7 +828,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
 
     const result = await waitForUiActionResult(page, command.session_id, 'stale')
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
-    await expect(await waitForAgentText(page, 'ATTENTION_E2E_ACTION_RESULT')).toContainText('stale')
+    await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
   test('expires through the real broker and host timer in a short-TTL runtime cell', async ({ page }) => {
@@ -787,7 +841,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'Attention selection overlay', 30_000)
     const result = await waitForUiActionResult(page, command.session_id, 'expired', (cell.actionTtlSeconds + 10) * 1000)
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
-    await expect(await waitForAgentText(page, 'ATTENTION_E2E_ACTION_RESULT')).toContainText('expired')
+    await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
   test('disconnects a pending action and recovers the same session after reconnect', async ({ page }) => {
@@ -797,6 +851,13 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
 
     const command = await sendChatMessage(page, composer, 'Click the area I meant across disconnect and reconnect')
     await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'Attention selection overlay', 30_000)
+    const pendingFunction = await waitForPersistedMessage(
+      page,
+      command.session_id,
+      message => message.type === 'private_function'
+        && message.metadata?.call_id === 'attention-e2e-select-1'
+        && message.metadata.status === 'pending',
+    )
     expect(await disconnectAttentionSockets(page)).toBeGreaterThan(0)
     await expect.poll(async () => {
       try {
@@ -809,13 +870,35 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
 
     await waitForAttentionSocketReplacement(page)
     const reopenedComposer = await openPersistedSession(page, command.session_id)
-    const persisted = await waitForPersistedMessage(
+    const lifecycle = await waitForPersistedMessage(
       page,
       command.session_id,
-      message => message.type === 'assistant' && message.data.includes('ATTENTION_E2E_ACTION_RESULT disconnected'),
+      message => message.message_id === pendingFunction.message_id
+        && message.type === 'private_function'
+        && message.metadata?.status !== 'pending',
       45_000,
     )
-    expect(persisted.data).toContain('disconnected')
+    expect(lifecycle.metadata?.status).toBe('success')
+    expect(lifecycle.metadata?.result).toEqual(expect.objectContaining({
+      in_reply_to_action_id: expect.any(String),
+      session_id: command.session_id,
+      status: 'disconnected',
+    }))
+    const completedFunctions = (await sessionMessages(page, command.session_id)).filter(message => (
+      message.message_id === pendingFunction.message_id
+      && message.type === 'private_function'
+      && message.metadata?.status === 'success'
+    ))
+    expect(completedFunctions).toHaveLength(1)
+    const terminal = await requestDispatchStatus(page, command.session_id, command.command_response.dispatch!.dispatch_id)
+    expect(terminal).toEqual(expect.objectContaining({
+      dispatch_id: command.command_response.dispatch?.dispatch_id,
+      message_id: command.persistedMessageId,
+      response_id: command.command_response.dispatch?.response_id,
+      state: 'completed',
+      terminal_code: 'DISPATCH_COMPLETED',
+    }))
+    await expectNoAttentionDebugChat(page, command.session_id)
 
     const reconnected = await sendChatMessage(page, reopenedComposer, 'Verify the session WebSocket after reconnect')
     expect(reconnected.session_id).toBe(command.session_id)
@@ -1354,9 +1437,9 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const knownKindNewerVersion = await sha256Attachment(page, {
       attachment_id: crypto.randomUUID(),
       kind: 'wippy.attention',
-      version: 3,
+      version: 4,
       content_type: 'application/json',
-      content: JSON.stringify({ schema: 'wippy.attention.v3' }),
+      content: JSON.stringify({ schema: 'wippy.attention.v4' }),
       created_at: now.toISOString(),
     })
     const newerVersion = await sendRawSessionMessage(
