@@ -11,6 +11,7 @@ const targets = [
     title: 'Right nested target',
   },
 ] as const
+
 </script>
 
 <template>
@@ -48,6 +49,13 @@ const targets = [
         />
       </section>
     </div>
+
+    <wippy-voice-orb
+      data-testid="attention-voice-orb"
+      data-wippy-attention="exclude"
+      agent-name="app.attention_e2e:agent"
+      attention-context-enabled
+    />
   </section>
 </template>
 

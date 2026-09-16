@@ -170,9 +170,17 @@ entries:
       - name: server
         value: app:gateway
 
-  # wc-voice (wippy-swiss/voice 0.1.2) removed: its tts_token.endpoint entry
-  # ships without router metadata and aborts boot ("router metadata is
-  # required"). Not needed for the theming e2e harness.
+  - name: wc-voice
+    kind: ns.dependency
+    component: wippy-swiss/voice
+    version: '>=v0.1.0'
+    parameters:
+      - name: server
+        value: app:gateway
+      - name: router
+        value: app:api
+      - name: env_storage
+        value: app.env:store
 
   - name: keeper
     kind: ns.dependency

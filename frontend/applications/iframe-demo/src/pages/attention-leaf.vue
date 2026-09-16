@@ -133,5 +133,7 @@ function recordKey(event: KeyboardEvent) {
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
+  cursor: text;
+  user-select: text;
 }
 </style>

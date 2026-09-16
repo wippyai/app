@@ -211,7 +211,7 @@ local function tool_call(messages, tools, registry_id, action, arguments)
     }
 end
 
-local function handle_pointing(snapshot)
+local function handle_pointing(snapshot, require_selection)
     local candidate, err = pointed_candidate(snapshot)
     if not candidate then
         return fail(err)
@@ -221,12 +221,21 @@ local function handle_pointing(snapshot)
     end
     local summary = json.encode(candidate.summary or {})
     local path = json.encode(candidate.path)
+    local selection_line = ""
+    if require_selection then
+        local selection = snapshot.selection
+        if type(selection) ~= "table" or type(selection.text) ~= "string" or selection.text == "" then
+            return fail("ATTENTION_E2E_SELECTION_MISSING")
+        end
+        selection_line = string.format("\nSELECTION_TEXT %s", selection.text)
+    end
     return finish(string.format(
-        "ATTENTION_E2E_TARGET %s\nSUMMARY %s\nPATH_SEGMENTS %d\nPATH %s",
+        "ATTENTION_E2E_TARGET %s\nSUMMARY %s\nPATH_SEGMENTS %d\nPATH %s%s",
         tostring(candidate.target_id),
         tostring(summary),
         #candidate.path,
-        tostring(path)
+        tostring(path),
+        selection_line
     ))
 end
 
@@ -386,7 +395,7 @@ local function handler(contract_args)
         or string.find(user_text, "is that it", 1, true) then
         return handle_confirmation(messages, contract_args.tools, snapshot)
     end
-    return handle_pointing(snapshot)
+    return handle_pointing(snapshot, string.find(user_text, "selection", 1, true) ~= nil)
 end
 
 return { handler = handler }

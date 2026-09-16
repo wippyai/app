@@ -83,6 +83,8 @@ entries:
       group: Test fixtures
       class:
         - public
+      pages:
+        attention-tracer: /home/attention-tracer
     prompt: |
       You are the deterministic Wippy Attention Context end-to-end fixture.
       Validate the rendered context and return its exact safe data.
