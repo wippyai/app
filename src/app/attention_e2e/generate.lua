@@ -322,6 +322,20 @@ local function handle_area_selection(messages, tools)
     return finish("", { call })
 end
 
+local function handle_attention_setting(messages, tools, enabled)
+    local call, err = tool_call(
+        messages,
+        tools,
+        "wippy.agent.tools:attention_context_set",
+        "attention-context",
+        { enabled = enabled }
+    )
+    if not call then
+        return fail(err)
+    end
+    return finish("", { call })
+end
+
 local function handle_visual_capture(messages, tools, snapshot)
     local candidate, candidate_err = pointed_candidate(snapshot)
     if not candidate then
@@ -360,10 +374,37 @@ local function handler(contract_args)
     local messages = contract_args.messages or {}
     local action_result = decode_function_result(messages)
     if action_result then
-        return finish("")
+        local attention_context = action_result.attention_context
+        if type(attention_context) == "table" and type(attention_context.enabled) == "boolean" then
+            return finish(string.format(
+                "Attention context is now %s for this session at revision %s.",
+                attention_context.enabled and "enabled" or "disabled",
+                tostring(attention_context.revision or "unknown")
+            ))
+        end
+        if type(action_result.status) == "string" then
+            local selected = "none"
+            if type(action_result.selected_target) == "table" then
+                selected = action_result.selected_target.label
+                    or action_result.selected_target.target_id
+                    or selected
+            end
+            return finish(string.format(
+                "ATTENTION_E2E_ACTION_RESULT %s %s",
+                action_result.status,
+                tostring(selected)
+            ))
+        end
+        return finish("ATTENTION_E2E_ACTION_RESULT unknown none")
     end
 
     local user_text = string.lower(latest_user_text(messages))
+    if string.find(user_text, "disable attention", 1, true) then
+        return handle_attention_setting(messages, contract_args.tools, false)
+    end
+    if string.find(user_text, "enable attention", 1, true) then
+        return handle_attention_setting(messages, contract_args.tools, true)
+    end
     if string.find(user_text, "click the area", 1, true) then
         return handle_area_selection(messages, contract_args.tools)
     end

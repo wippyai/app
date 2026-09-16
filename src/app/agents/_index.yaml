@@ -158,7 +158,12 @@ entries:
       capture UI action with the exact immutable target reference. This asks the
       Host and user to prepare a removable ordinary composer file. It never sends
       a message and must not be described as already attached or sent.
+
+      If the user asks to enable or disable Attention for the current session,
+      use the session Attention context tool. This changes later message context
+      through Session state and events. It is not a chat attachment or UI action.
     tools:
+      - wippy.agent.tools:attention_context_set
       - wippy.agent.tools:ui_action_highlight
       - wippy.agent.tools:ui_action_confirm
       - wippy.agent.tools:ui_action_select
