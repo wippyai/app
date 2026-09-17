@@ -49,19 +49,24 @@ local function latest_user_text(messages)
 end
 
 local function latest_user_image(messages)
-    local index = latest_user_index(messages)
-    local content = index and messages[index].content
-    if type(content) ~= "table" then
-        return nil
-    end
-    for _, part in ipairs(content) do
-        if type(part) == "table"
-            and part.type == "image"
-            and type(part.source) == "table"
-            and part.source.type == "base64"
-            and type(part.source.mime_type) == "string"
-            and type(part.source.data) == "string" then
-            return part
+    for index = #messages, 1, -1 do
+        local message = messages[index]
+        if message.role == "user" then
+            local content = message.content
+            if type(content) ~= "table" then
+                return nil
+            end
+            for _, part in ipairs(content) do
+                if type(part) == "table"
+                    and part.type == "image"
+                    and type(part.source) == "table"
+                    and part.source.type == "base64"
+                    and type(part.source.mime_type) == "string"
+                    and type(part.source.data) == "string" then
+                    return part
+                end
+            end
+            return nil
         end
     end
     return nil
@@ -374,7 +379,7 @@ local function handler(contract_args)
     local messages = contract_args.messages or {}
     local action_result = decode_function_result(messages)
     if action_result then
-        local attention_context = action_result.attention_context
+        local attention_context = rawget(action_result, "attention_context")
         if type(attention_context) == "table" and type(attention_context.enabled) == "boolean" then
             return finish(string.format(
                 "Attention context is now %s for this session at revision %s.",
@@ -384,18 +389,33 @@ local function handler(contract_args)
         end
         if type(action_result.status) == "string" then
             local selected = "none"
-            if type(action_result.selected_target) == "table" then
-                selected = action_result.selected_target.label
-                    or action_result.selected_target.target_id
+            local selected_target = rawget(action_result, "selected_target")
+            if type(selected_target) == "table" then
+                selected = selected_target.label
+                    or selected_target.target_id
                     or selected
             end
-            return finish(string.format(
-                "ATTENTION_E2E_ACTION_RESULT %s %s",
-                action_result.status,
-                tostring(selected)
-            ))
+            if action_result.status == "confirmed" and selected ~= "none" then
+                return finish("I highlighted " .. tostring(selected) .. ".")
+            end
+            if action_result.status == "selected" and selected ~= "none" then
+                return finish("You selected " .. tostring(selected) .. ".")
+            end
+            if action_result.status == "prepared" then
+                return finish("I added the captured image to the composer for your review.")
+            end
+            local messages_by_status = {
+                cancelled = "The on-screen request was cancelled.",
+                denied = "The on-screen request was denied.",
+                disconnected = "The on-screen request ended because the connection was interrupted.",
+                error = "The on-screen request could not be completed.",
+                expired = "The on-screen request expired before a selection was made.",
+                stale = "That on-screen target is no longer available.",
+                unavailable = "The on-screen request is unavailable.",
+            }
+            return finish(messages_by_status[action_result.status] or "The on-screen request finished.")
         end
-        return finish("ATTENTION_E2E_ACTION_RESULT unknown none")
+        return finish("The on-screen request finished.")
     end
 
     local user_text = string.lower(latest_user_text(messages))

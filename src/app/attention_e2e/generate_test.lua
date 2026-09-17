@@ -113,7 +113,7 @@ local function define_tests()
                 },
             })
             local call = result.result.tool_calls[1]
-            test.eq(result.result.content, "ATTENTION_E2E_HIGHLIGHT_REQUESTED")
+            test.eq(result.result.content, "")
             test.eq(call.name, "HighlightTarget")
             test.eq(call.registry_id, "wippy.agent.tools:ui_action_highlight")
             test.eq(#call.arguments.targets, 1)
@@ -149,7 +149,7 @@ local function define_tests()
                     },
                 },
             })
-            test.eq(result.result.content, "ATTENTION_E2E_ACTION_RESULT selected right")
+            test.eq(result.result.content, "You selected right.")
         end)
 
         test.it("fails visibly when pointer linkage is absent", function()
