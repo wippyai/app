@@ -456,7 +456,7 @@ local function handler(contract_args)
         or string.find(user_text, "is that it", 1, true) then
         return handle_confirmation(messages, contract_args.tools, snapshot)
     end
-    return handle_pointing(snapshot, string.find(user_text, "selection", 1, true) ~= nil)
+    return handle_pointing(snapshot, string.find(user_text, "select", 1, true) ~= nil)
 end
 
 return { handler = handler }
