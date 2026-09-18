@@ -148,19 +148,219 @@ local function find_candidate(snapshot, predicate)
     return nil
 end
 
-local function pointed_candidate(snapshot)
-    local ids = snapshot.pointer and snapshot.pointer.candidate_ids
-    if type(ids) ~= "table" or #ids == 0 then
-        return nil, "ATTENTION_E2E_POINTER_LINK_MISSING"
+local function segment_identity(segment)
+    if type(segment) ~= "table" or segment.kind == "omitted" then
+        return nil
     end
-    local wanted = tostring(ids[1])
-    local candidate = find_candidate(snapshot, function(item)
-        return tostring(item.target_id) == wanted
-    end)
-    if not candidate then
+    local kind = segment.kind or segment[1]
+    local mount_id = segment.mount_id or segment[2]
+    local generation = segment.generation or segment[3]
+    if kind == nil or mount_id == nil or generation == nil then
+        return nil
+    end
+    return table.concat({
+        tostring(kind),
+        tostring(mount_id),
+        tostring(generation),
+    }, "\0")
+end
+
+local function path_segment_identity(snapshot, path_index)
+    local dictionary = snapshot.path_dictionary
+    if type(dictionary) ~= "table" then
+        return nil
+    end
+    local segment = dictionary[(tonumber(path_index) or -1) + 1]
+    return segment_identity(segment)
+end
+
+local function compact_paths_share_prefix(snapshot, candidate_path, selection_path)
+    if type(candidate_path) ~= "table" or type(selection_path) ~= "table" or #candidate_path > #selection_path then
+        return false
+    end
+    for index, value in ipairs(candidate_path) do
+        local candidate_identity = path_segment_identity(snapshot, value)
+        local selection_identity = path_segment_identity(snapshot, selection_path[index])
+        if not candidate_identity or candidate_identity ~= selection_identity then
+            return false
+        end
+    end
+    return true
+end
+
+local function rendered_paths_match(candidate_path, selection_path)
+    if type(candidate_path) ~= "table" or type(selection_path) ~= "table"
+        or #candidate_path == 0 or #selection_path == 0 then
+        return false
+    end
+
+    local omitted_index = nil
+    for index, segment in ipairs(selection_path) do
+        if type(segment) == "table" and segment.kind == "omitted" then
+            omitted_index = index
+            break
+        end
+    end
+
+    local leading = omitted_index and omitted_index - 1 or #selection_path
+    if leading > #candidate_path then
+        return false
+    end
+    for index = 1, leading do
+        local candidate_identity = segment_identity(candidate_path[index])
+        local selection_identity = segment_identity(selection_path[index])
+        if not candidate_identity or candidate_identity ~= selection_identity then
+            return false
+        end
+    end
+
+    if not omitted_index then
+        return #candidate_path == #selection_path
+    end
+
+    local trailing = #selection_path - omitted_index
+    if leading + trailing > #candidate_path then
+        return false
+    end
+    for offset = 0, trailing - 1 do
+        local candidate_identity = segment_identity(candidate_path[#candidate_path - offset])
+        local selection_identity = segment_identity(selection_path[#selection_path - offset])
+        if not candidate_identity or candidate_identity ~= selection_identity then
+            return false
+        end
+    end
+    return true
+end
+
+local function rect_values(rect)
+    if type(rect) ~= "table" then
+        return nil
+    end
+    local x = tonumber(rect.x or rect[1])
+    local y = tonumber(rect.y or rect[2])
+    local width = tonumber(rect.width or rect[3])
+    local height = tonumber(rect.height or rect[4])
+    if not x or not y or not width or not height or width < 0 or height < 0 then
+        return nil
+    end
+    return {
+        x = x or 0,
+        y = y or 0,
+        width = width or 0,
+        height = height or 0,
+    }
+end
+
+local function selection_center(selection)
+    for _, range in ipairs(selection.ranges or {}) do
+        if range.coordinate_space == "host-viewport" then
+            local rect = rect_values(range.rect)
+            if rect then
+                return rect.x + rect.width / 2, rect.y + rect.height / 2
+            end
+        end
+    end
+    return nil
+end
+
+local function rect_contains(rect, x, y)
+    if not x or not y then
+        return false
+    end
+    local values = rect_values(rect)
+    if not values then
+        return false
+    end
+    local left = tonumber(values.x) or 0
+    local top = tonumber(values.y) or 0
+    local right = left + (tonumber(values.width) or 0)
+    local bottom = top + (tonumber(values.height) or 0)
+    return x >= left and x <= right and y >= top and y <= bottom
+end
+
+local function rect_area(rect)
+    local values = rect_values(rect)
+    if not values then
+        return math.huge
+    end
+    return values.width * values.height
+end
+
+local function candidate_contains_text(candidate, selected_text)
+    if type(selected_text) ~= "string" or selected_text == "" then
+        return false
+    end
+    local summary = candidate.summary or {}
+    for _, key in ipairs({ "name", "text", "value" }) do
+        local value = summary[key]
+        if type(value) == "string"
+            and (string.find(value, selected_text, 1, true)
+                or string.find(selected_text, value, 1, true)) then
+            return true
+        end
+    end
+    return false
+end
+
+local function better_selection_candidate(rank, best)
+    if not best then
+        return true
+    end
+    if rank.geometry ~= best.geometry then
+        return rank.geometry > best.geometry
+    end
+    if rank.text ~= best.text then
+        return rank.text > best.text
+    end
+    if rank.depth ~= best.depth then
+        return rank.depth > best.depth
+    end
+    return rank.area < best.area
+end
+
+local function primary_candidate(snapshot)
+    local ids = snapshot.pointer and snapshot.pointer.candidate_ids
+    if type(ids) == "table" and #ids > 0 then
+        local wanted = tostring(ids[1])
+        local candidate = find_candidate(snapshot, function(item)
+            return tostring(item.target_id) == wanted
+        end)
+        if candidate then
+            return candidate
+        end
         return nil, "ATTENTION_E2E_POINTER_CANDIDATE_MISSING: " .. wanted
     end
-    return candidate
+
+    local selection = snapshot.selection
+    if type(selection) == "table" and selection.state == "selected" then
+        local best = nil
+        local best_rank = nil
+        local selection_x, selection_y = selection_center(selection)
+        for _, candidate in ipairs(snapshot.candidates or {}) do
+            local path = candidate.path_indices
+            local matches = rendered_paths_match(candidate.path, selection.anchor_path)
+                or rendered_paths_match(candidate.path, selection.focus_path)
+                or compact_paths_share_prefix(snapshot, path, selection.anchor_path_indices)
+                or compact_paths_share_prefix(snapshot, path, selection.focus_path_indices)
+            if matches then
+                local candidate_path = candidate.path or path or {}
+                local rank = {
+                    geometry = rect_contains(candidate.rect, selection_x, selection_y) and 1 or 0,
+                    text = candidate_contains_text(candidate, selection.text) and 1 or 0,
+                    depth = #candidate_path,
+                    area = rect_area(candidate.rect),
+                }
+                if better_selection_candidate(rank, best_rank) then
+                    best = candidate
+                    best_rank = rank
+                end
+            end
+        end
+        if best then
+            return best
+        end
+    end
+    return nil, "ATTENTION_E2E_POINTER_LINK_MISSING"
 end
 
 local function candidate_label(candidate)
@@ -217,7 +417,7 @@ local function tool_call(messages, tools, registry_id, action, arguments)
 end
 
 local function handle_pointing(snapshot, require_selection)
-    local candidate, err = pointed_candidate(snapshot)
+    local candidate, err = primary_candidate(snapshot)
     if not candidate then
         return fail(err)
     end
@@ -280,7 +480,7 @@ local function handle_confirmation(messages, tools, snapshot)
 end
 
 local function handle_highlight(messages, tools, snapshot)
-    local candidate, candidate_err = pointed_candidate(snapshot)
+    local candidate, candidate_err = primary_candidate(snapshot)
     if not candidate then
         return fail(candidate_err)
     end
@@ -342,7 +542,7 @@ local function handle_attention_setting(messages, tools, enabled)
 end
 
 local function handle_visual_capture(messages, tools, snapshot)
-    local candidate, candidate_err = pointed_candidate(snapshot)
+    local candidate, candidate_err = primary_candidate(snapshot)
     if not candidate then
         return fail(candidate_err)
     end

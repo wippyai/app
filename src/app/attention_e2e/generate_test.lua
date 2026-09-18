@@ -67,6 +67,70 @@ local function define_tests()
             test.eq(result.metadata.fixture_provider, "app.attention_e2e:provider")
         end)
 
+        test.it("uses selected text to choose among matching paths when pointer linkage is absent", function()
+            local value = snapshot()
+            value.pointer = nil
+            value.selection = {
+                state = "selected",
+                text = "Safe text for the right nested target",
+                anchor_path = value.candidates[2].path,
+                focus_path = value.candidates[2].path,
+            }
+
+            local result = generator.handler({
+                messages = context_message(value, "What is selected?"),
+            })
+
+            test.is_true(result.success)
+            test.contains(result.result.content, "ATTENTION_E2E_TARGET right")
+            test.contains(result.result.content, "SELECTION_TEXT Safe text for the right nested target")
+        end)
+
+        test.it("uses host geometry when selection paths and text are identical", function()
+            local value = snapshot()
+            value.pointer = nil
+            value.candidates[1].summary.text = "Shared selected text"
+            value.candidates[2].summary.text = "Shared selected text"
+            value.candidates[1].rect = { x = 10, y = 10, width = 20, height = 20 }
+            value.candidates[2].rect = { x = 40, y = 10, width = 20, height = 20 }
+            value.selection = {
+                state = "selected",
+                text = "Shared selected text",
+                anchor_path = value.candidates[2].path,
+                focus_path = value.candidates[2].path,
+                ranges = {
+                    {
+                        coordinate_space = "host-viewport",
+                        rect = { x = 45, y = 15, width = 5, height = 5 },
+                    },
+                },
+            }
+
+            local result = generator.handler({
+                messages = context_message(value, "What is selected?"),
+            })
+
+            test.is_true(result.success)
+            test.contains(result.result.content, "ATTENTION_E2E_TARGET right")
+        end)
+
+        test.it("does not reuse stale selection data from a clear tombstone", function()
+            local value = snapshot()
+            value.pointer = nil
+            value.selection = {
+                state = "cleared",
+                text = "Safe text for the right nested target",
+                anchor_path = value.candidates[2].path,
+                focus_path = value.candidates[2].path,
+            }
+
+            local result = generator.handler({
+                messages = context_message(value, "What is selected?"),
+            })
+
+            test.eq(result.result.content, "ATTENTION_E2E_POINTER_LINK_MISSING")
+        end)
+
         test.it("proves a verified screenshot reached the provider as multimodal input", function()
             local messages = context_message(snapshot(), "What am I pointing at with a successful screenshot?")
             table.insert(messages[1].content, {
