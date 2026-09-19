@@ -366,6 +366,7 @@ const emit = useComponentEvents()
               <code class="text-[10px] ml-1 text-surface-400">&lt;template data-type="..."&gt;</code>
             </div>
             <example-mermaid>
+              <!-- eslint-disable-next-line vue/no-lone-template -->
               <template data-type="text/vnd.mermaid">
                 sequenceDiagram
                 participant H as Host

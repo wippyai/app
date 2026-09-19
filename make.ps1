@@ -73,13 +73,25 @@ function Invoke-Recipe {
 
 function Invoke-Lint {
     param([Parameter(Mandatory)][string]$Dir)
+    $hadFlatConfigSetting = Test-Path 'Env:ESLINT_USE_FLAT_CONFIG'
+    $previousFlatConfigSetting = $env:ESLINT_USE_FLAT_CONFIG
     Push-Location $Dir
     try {
         Write-Host "==> lint $Dir" -ForegroundColor Cyan
+        # These packages intentionally use local .eslintrc.cjs files. The
+        # candidate worktree can live under a repository with a flat config,
+        # so select legacy mode explicitly instead of inheriting that parent.
+        $env:ESLINT_USE_FLAT_CONFIG = 'false'
         npm run lint
         if ($LASTEXITCODE -ne 0) { throw "npm run lint failed in $Dir (exit $LASTEXITCODE)" }
     }
     finally {
+        if ($hadFlatConfigSetting) {
+            $env:ESLINT_USE_FLAT_CONFIG = $previousFlatConfigSetting
+        }
+        else {
+            Remove-Item 'Env:ESLINT_USE_FLAT_CONFIG' -ErrorAction SilentlyContinue
+        }
         Pop-Location
     }
 }

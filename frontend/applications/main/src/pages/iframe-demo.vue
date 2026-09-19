@@ -24,29 +24,29 @@
     </div>
 
     <div class="iframe-demo-container flex-1 min-h-0 relative">
-    <div class="iframe-demo-grid absolute inset-0 gap-4">
-      <div class="flex flex-col border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden min-h-[300px]">
-        <div class="px-3 py-1.5 bg-surface-50 dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 text-xs font-medium text-surface-500 shrink-0">
-          Default Theme
+      <div class="iframe-demo-grid absolute inset-0 gap-4">
+        <div class="flex flex-col border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden min-h-[300px]">
+          <div class="px-3 py-1.5 bg-surface-50 dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 text-xs font-medium text-surface-500 shrink-0">
+            Default Theme
+          </div>
+          <w-artifact
+            id="app.views:iframe-demo"
+            type="page"
+            class="flex-1"
+          />
         </div>
-        <w-artifact
-          id="app.views:iframe-demo"
-          type="page"
-          class="flex-1"
-        />
-      </div>
 
-      <div class="flex flex-col border border-purple-200 dark:border-purple-900 rounded-lg overflow-hidden min-h-[300px]">
-        <div class="px-3 py-1.5 bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-900 text-xs font-medium text-purple-600 dark:text-purple-400 shrink-0">
-          Custom Palette (configOverrides)
+        <div class="flex flex-col border border-purple-200 dark:border-purple-900 rounded-lg overflow-hidden min-h-[300px]">
+          <div class="px-3 py-1.5 bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-900 text-xs font-medium text-purple-600 dark:text-purple-400 shrink-0">
+            Custom Palette (configOverrides)
+          </div>
+          <w-artifact
+            id="app.views:iframe-demo-themed"
+            type="page"
+            class="flex-1"
+          />
         </div>
-        <w-artifact
-          id="app.views:iframe-demo-themed"
-          type="page"
-          class="flex-1"
-        />
       </div>
-    </div>
     </div>
   </div>
 </template>
