@@ -107,7 +107,7 @@ function recordKey(event: KeyboardEvent) {
   padding: 0;
   border: 0;
   color: var(--p-primary-contrast-color, white);
-  background: var(--p-primary-500);
+  background: var(--p-primary-500, #1d4ed8);
   cursor: crosshair;
 }
 
