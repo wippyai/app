@@ -318,6 +318,22 @@ local function better_selection_candidate(rank, best)
     return rank.area < best.area
 end
 
+local function selected_snapshot_selection(value)
+    if type(value) ~= "table" then
+        return nil
+    end
+    if value.state == "cleared" or value.state == "unknown" or value.collapsed == true then
+        return nil
+    end
+    if value.state == "selected" and type(value.selection) == "table" then
+        value = value.selection
+    end
+    if type(value.text) ~= "string" or value.text == "" or value.collapsed == true then
+        return nil
+    end
+    return value
+end
+
 local function primary_candidate(snapshot)
     local ids = snapshot.pointer and snapshot.pointer.candidate_ids
     if type(ids) == "table" and #ids > 0 then
@@ -331,8 +347,8 @@ local function primary_candidate(snapshot)
         return nil, "ATTENTION_E2E_POINTER_CANDIDATE_MISSING: " .. wanted
     end
 
-    local selection = snapshot.selection
-    if type(selection) == "table" and selection.state == "selected" then
+    local selection = selected_snapshot_selection(snapshot.selection)
+    if selection then
         local best = nil
         local best_rank = nil
         local selection_x, selection_y = selection_center(selection)
