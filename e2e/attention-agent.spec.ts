@@ -79,7 +79,11 @@ interface FixturePathTransform {
   matrix: number[]
 }
 
-function expectCompleteNestedPath(path: ReturnType<typeof pointerCandidates>[number]['path'], diagnostics?: string): void {
+function expectCompleteNestedPath(
+  path: ReturnType<typeof pointerCandidates>[number]['path'],
+  diagnostics?: string,
+  finalTagName = 'button',
+): void {
   const kinds = path.map(segment => segment.kind)
   const rendererKind = cell.engine === 'fragment' ? 'web-fragment' : 'iframe'
   expect(kinds[0], diagnostics).toBe('host')
@@ -100,7 +104,7 @@ function expectCompleteNestedPath(path: ReturnType<typeof pointerCandidates>[num
   expect(path.some(segment => segment.kind === 'web-component' && Boolean(segment.tag_name)), diagnostics).toBe(true)
   expect(path.at(-1), diagnostics).toEqual(expect.objectContaining({
     kind: 'element',
-    tag_name: 'button',
+    tag_name: finalTagName,
   }))
 }
 
@@ -290,29 +294,39 @@ test.afterEach(async ({ page }, testInfo) => {
 })
 
 test.describe(`Attention agent acceptance: ${describeCell}`, () => {
-  test('persists the explicit point context and answers from the complete nested path', async ({ page }) => {
+  test('persists the explicit point and selection context and answers from the complete nested path', async ({ page }) => {
     test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
     const fixture = await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
     await enablePointingContext(page)
+    const selectedText = (await fixture.rightSafeText.textContent())?.trim()
+    expect(selectedText).toBeTruthy()
+    await fixture.rightSafeText.evaluate((element) => {
+      const selection = element.ownerDocument.getSelection()
+      if (!selection)
+        throw new Error('document selection is unavailable')
+      const range = element.ownerDocument.createRange()
+      range.selectNodeContents(element)
+      selection.removeAllRanges()
+      selection.addRange(range)
+      element.ownerDocument.dispatchEvent(new Event('selectionchange'))
+    })
     await fixture.rightTarget.hover()
 
-    const command = await sendChatMessage(page, composer, 'What am I pointing at?', {
+    const command = await sendChatMessage(page, composer, 'What am I pointing at, and what text is selected?', {
       beforeSubmit: async () => {
         await fixture.leftTarget.focus()
         await expect(fixture.leftTarget).toBeFocused()
       },
-      submit: async () => {
-        await page.locator('.chat-input__send-button').dispatchEvent('click')
-      },
     })
-    expect(attentionAttachment(command).version).toBe(3)
+    expect(attentionAttachment(command).version).toBe(4)
     const snapshot = attentionSnapshot(command)
     const pointed = pointerCandidates(snapshot)
     const pointerDiagnostics = `attention snapshot: ${JSON.stringify({
       capture: snapshot.capture,
       omissions: snapshot.omissions,
       pointer: snapshot.pointer,
+      selection: snapshot.selection,
       pointerCandidates: pointed.map(candidate => ({
         kinds: candidate.path.map(segment => segment.kind),
         path: candidate.path,
@@ -392,6 +406,29 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     expectCompleteNestedPath(snapshot.focus!.path, focusDiagnostics)
     expect(JSON.stringify(snapshot.focus!.summary)).toContain('left nested target')
     expect(Date.parse(snapshot.focus!.focused_at)).toBeLessThanOrEqual(Date.parse(snapshot.created_at))
+    const selectionDiagnostics = `attention selection diagnostics: ${JSON.stringify({
+      selection: snapshot.selection,
+      omissions: snapshot.omissions,
+      protocol: await attentionProtocolDiagnostics(page),
+    }, null, 2)}`
+    expect(snapshot.selection, selectionDiagnostics).toEqual(expect.objectContaining({
+      selection_id: expect.any(String),
+      selected_at: expect.any(String),
+      kind: 'text',
+      collapsed: false,
+      text: expect.stringContaining(selectedText!),
+      anchor_path: expect.any(Array),
+      focus_path: expect.any(Array),
+      ranges: expect.any(Array),
+    }))
+    expect(Buffer.byteLength(snapshot.selection!.text, 'utf8'), selectionDiagnostics).toBeLessThanOrEqual(1024)
+    expect(Date.parse(snapshot.selection!.selected_at), selectionDiagnostics).toBeLessThanOrEqual(Date.parse(snapshot.created_at))
+    expect(snapshot.selection!.anchor_path.length, selectionDiagnostics).toBeLessThanOrEqual(32)
+    expect(snapshot.selection!.focus_path.length, selectionDiagnostics).toBeLessThanOrEqual(32)
+    expectCompleteNestedPath(snapshot.selection!.anchor_path, selectionDiagnostics, 'span')
+    expectCompleteNestedPath(snapshot.selection!.focus_path, selectionDiagnostics, 'span')
+    expect(snapshot.selection!.ranges.length, selectionDiagnostics).toBeGreaterThan(0)
+    expect(snapshot.selection!.ranges.length, selectionDiagnostics).toBeLessThanOrEqual(4)
     expect(snapshot.coordinate_space).toEqual(expect.objectContaining({
       device_pixel_ratio: expect.any(Number),
       kind: 'host-viewport',
@@ -418,6 +455,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const answer = await waitForAgentText(page, 'ATTENTION_E2E_TARGET')
     await expect(answer).toContainText(`PATH_SEGMENTS ${right!.path.length}`)
     await expect(answer).toContainText('Safe text for the right nested target')
+    await expect(answer).toContainText(`SELECTION_TEXT ${selectedText}`)
     await expect(answer).toContainText(right!.target_id)
     expectAgentPathMatches(await extractAgentPath(answer), right!.path)
 
