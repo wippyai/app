@@ -97,6 +97,20 @@ export interface AttentionSnapshot {
     sequence: number
   }
   recent_events: Array<{ event_id: string, observed_at: string, sequence: number }>
+  selection?: {
+    selection_id: string
+    selected_at: string
+    kind: 'text'
+    collapsed: false
+    direction: 'forward' | 'backward' | 'none'
+    text: string
+    anchor_path: AttentionPathSegment[]
+    focus_path: AttentionPathSegment[]
+    ranges: Array<{
+      rect: { x: number, y: number, width: number, height: number }
+      coordinate_space: 'host-viewport' | { mount_id: string, generation: number }
+    }>
+  }
   schema: 'wippy.attention.v1'
   snapshot_id: string
 }
@@ -698,20 +712,20 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
         if (Array.isArray(attachments)) {
           metric.attachmentCount = attachments.length
           for (const attachment of attachments) {
-            if (attachment?.kind !== 'wippy.attention' || ![1, 2, 3].includes(attachment.version) || typeof attachment.content !== 'string')
+            if (attachment?.kind !== 'wippy.attention' || ![1, 2, 3, 4].includes(attachment.version) || typeof attachment.content !== 'string')
               continue
             const snapshot = JSON.parse(attachment.content)
             if (!Array.isArray(snapshot.candidates) || !Array.isArray(snapshot.recent_events))
               continue
             const bytes = (value: unknown) => value === undefined ? 0 : Buffer.byteLength(JSON.stringify(value))
-            const paths = snapshot.candidates.map((candidate: AttentionCandidate & { path_indices?: number[] }) => attachment.version === 2 || attachment.version === 3 ? candidate.path_indices ?? [] : candidate.path ?? [])
+            const paths = snapshot.candidates.map((candidate: AttentionCandidate & { path_indices?: number[] }) => [2, 3, 4].includes(attachment.version) ? candidate.path_indices ?? [] : candidate.path ?? [])
             metric.attention.push({
               encodingVersion: attachment.version,
               pathDictionaryBytes: bytes(snapshot.path_dictionary),
               snapshotJsonBytes: Buffer.byteLength(attachment.content),
               candidateCount: snapshot.candidates.length,
               pathSegmentCount: paths.flat().length,
-              uniquePathSegmentCount: attachment.version === 2 || attachment.version === 3 ? snapshot.path_dictionary?.length ?? 0 : new Set(paths.flat().map((segment: AttentionPathSegment) => JSON.stringify(segment))).size,
+              uniquePathSegmentCount: [2, 3, 4].includes(attachment.version) ? snapshot.path_dictionary?.length ?? 0 : new Set(paths.flat().map((segment: AttentionPathSegment) => JSON.stringify(segment))).size,
               recentEventCount: snapshot.recent_events.length,
               samplePointCount: attachment.version === 1 ? snapshot.capture?.points?.length ?? 0 : snapshot.capture?.sampled_points ?? 0,
               candidatesBytes: bytes(snapshot.candidates),
@@ -1139,20 +1153,20 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
             const attachments = Array.isArray(parsed.data?.context_attachments) ? parsed.data.context_attachments : []
             const attention: AttentionPayloadMetrics['attention'] = []
             for (const attachment of attachments) {
-              if (attachment?.kind !== 'wippy.attention' || ![1, 2, 3].includes(attachment.version) || typeof attachment.content !== 'string')
+              if (attachment?.kind !== 'wippy.attention' || ![1, 2, 3, 4].includes(attachment.version) || typeof attachment.content !== 'string')
                 continue
               try {
                 const snapshot = JSON.parse(attachment.content)
                 if (!Array.isArray(snapshot.candidates) || !Array.isArray(snapshot.recent_events))
                   continue
-                const paths = snapshot.candidates.map((candidate: AttentionCandidate & { path_indices?: number[] }) => attachment.version === 2 || attachment.version === 3 ? candidate.path_indices ?? [] : Array.isArray(candidate.path) ? candidate.path : [])
+                const paths = snapshot.candidates.map((candidate: AttentionCandidate & { path_indices?: number[] }) => [2, 3, 4].includes(attachment.version) ? candidate.path_indices ?? [] : Array.isArray(candidate.path) ? candidate.path : [])
                 attention.push({
                   encodingVersion: attachment.version,
                   pathDictionaryBytes: bytes(snapshot.path_dictionary),
                   snapshotJsonBytes: new TextEncoder().encode(attachment.content).byteLength,
                   candidateCount: snapshot.candidates.length,
                   pathSegmentCount: paths.reduce((count: number, path: AttentionPathSegment[]) => count + path.length, 0),
-                  uniquePathSegmentCount: attachment.version === 2 || attachment.version === 3 ? snapshot.path_dictionary?.length ?? 0 : new Set(paths.flat().map((segment: AttentionPathSegment) => JSON.stringify(segment))).size,
+                  uniquePathSegmentCount: [2, 3, 4].includes(attachment.version) ? snapshot.path_dictionary?.length ?? 0 : new Set(paths.flat().map((segment: AttentionPathSegment) => JSON.stringify(segment))).size,
                   recentEventCount: snapshot.recent_events.length,
                   samplePointCount: attachment.version === 1 ? (Array.isArray(snapshot.capture?.points) ? snapshot.capture.points.length : 0) : snapshot.capture?.sampled_points ?? 0,
                   candidatesBytes: bytes(snapshot.candidates),

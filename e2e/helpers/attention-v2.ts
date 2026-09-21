@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 
 // Independent test oracle for the frozen wire contract; no production codec imports.
 export const ATTENTION_ORACLE_LIMITS = {
-  envelopeV2: 16384, envelopeV3: 16384, attachmentSet: 32768, expanded: 262144,
+  envelopeV2: 16384, envelopeV3: 16384, envelopeV4: 16384, attachmentSet: 32768, expanded: 262144,
   dictionary: 4128, path: 32, candidates: 128, points: 4096,
   events: 32, omissions: 128, memberships: 16384,
 } as const
@@ -162,11 +162,33 @@ function validateSemanticSnapshot(snapshot: ObjectValue): void {
     requireValid(typeof snapshot.focus.focused_at === 'string' && Number.isFinite(Date.parse(snapshot.focus.focused_at))
       && (snapshot.focus.candidate_id === undefined || targets.has(snapshot.focus.candidate_id as string)))
   }
+  if (snapshot.selection) {
+    fields(snapshot.selection, ['selection_id', 'selected_at', 'kind', 'collapsed', 'direction', 'text', 'anchor_path', 'focus_path', 'ranges'])
+    requireValid(identifier(snapshot.selection.selection_id)
+      && typeof snapshot.selection.selected_at === 'string' && Number.isFinite(Date.parse(snapshot.selection.selected_at))
+      && snapshot.selection.kind === 'text' && snapshot.selection.collapsed === false
+      && ['forward', 'backward', 'none'].includes(snapshot.selection.direction as string)
+      && typeof snapshot.selection.text === 'string' && Buffer.byteLength(snapshot.selection.text) <= 1024)
+    validatePath(snapshot.selection.anchor_path)
+    validatePath(snapshot.selection.focus_path)
+    list(snapshot.selection.ranges, 4)
+    for (const range of snapshot.selection.ranges) {
+      fields(range, ['rect', 'coordinate_space'])
+      const rect = range.rect
+      fields(rect, ['x', 'y', 'width', 'height'])
+      requireValid(['x', 'y', 'width', 'height'].every(key => finite(rect[key]))
+        && (rect.width as number) >= 0 && (rect.height as number) >= 0)
+      if (range.coordinate_space !== 'host-viewport') {
+        fields(range.coordinate_space, ['mount_id', 'generation'])
+        requireValid(identifier(range.coordinate_space.mount_id, 160) && integer(range.coordinate_space.generation))
+      }
+    }
+  }
 }
 
 /** Reconstructs exactly; this test oracle is not a replacement for Session's full admission validator. */
 export function expandAttentionV2ForTest(payload: unknown, maximumBytes: number = ATTENTION_ORACLE_LIMITS.expanded): AttentionSnapshot {
-  fields(payload, ['schema', 'snapshot_id', 'host_instance_id', 'mount_generation', 'created_at', 'coordinate_space', 'capture', 'pointer', 'focus', 'recent_events', 'candidates', 'omissions', 'path_dictionary'])
+  fields(payload, ['schema', 'snapshot_id', 'host_instance_id', 'mount_generation', 'created_at', 'coordinate_space', 'capture', 'pointer', 'focus', 'selection', 'recent_events', 'candidates', 'omissions', 'path_dictionary'])
   requireValid(payload.schema === 'wippy.attention.v2' && integer(maximumBytes, ATTENTION_ORACLE_LIMITS.expanded))
   list(payload.path_dictionary, ATTENTION_ORACLE_LIMITS.dictionary)
   list(payload.candidates, ATTENTION_ORACLE_LIMITS.candidates)
@@ -190,7 +212,7 @@ export function expandAttentionV2ForTest(payload: unknown, maximumBytes: number 
   const points: Point[] = []
   const candidates: ObjectValue[] = []
   const output: ObjectValue = {
-    ...omit(payload, ['schema', 'capture', 'candidates', 'path_dictionary', 'focus']),
+    ...omit(payload, ['schema', 'capture', 'candidates', 'path_dictionary', 'focus', 'selection']),
     schema: 'wippy.attention.v1', capture: { ...omit(capture, ['points', 'point_encoding']), points }, candidates,
   }
   if (payload.focus !== undefined) {
@@ -304,6 +326,24 @@ export function expandAttentionV2ForTest(payload: unknown, maximumBytes: number 
   }
   if (output.focus)
     (output.focus as ObjectValue).path = expandPath((payload.focus as ObjectValue).path_indices)
+  if (payload.selection !== undefined) {
+    fields(payload.selection, ['selection_id', 'selected_at', 'kind', 'collapsed', 'direction', 'text', 'anchor_path', 'focus_path', 'anchor_path_indices', 'focus_path_indices', 'ranges'])
+    const hasDirectAnchor = payload.selection.anchor_path !== undefined
+    const hasDirectFocus = payload.selection.focus_path !== undefined
+    const hasIndexedAnchor = payload.selection.anchor_path_indices !== undefined
+    const hasIndexedFocus = payload.selection.focus_path_indices !== undefined
+    const directPaths = hasDirectAnchor && hasDirectFocus && !hasIndexedAnchor && !hasIndexedFocus
+    const indexedPaths = hasIndexedAnchor && hasIndexedFocus && !hasDirectAnchor && !hasDirectFocus
+    requireValid(directPaths || indexedPaths)
+    output.selection = directPaths
+      ? payload.selection
+      : {
+          ...omit(payload.selection, ['anchor_path_indices', 'focus_path_indices']),
+          anchor_path: expandPath(payload.selection.anchor_path_indices),
+          focus_path: expandPath(payload.selection.focus_path_indices),
+        }
+    charge(bytes(output) - used)
+  }
   requireValid(seenDictionary.size === dictionary.length && bytes(output) === used)
   validateSemanticSnapshot(output)
   return JSON.parse(oracleCanonicalJson(output)) as AttentionSnapshot
@@ -311,7 +351,7 @@ export function expandAttentionV2ForTest(payload: unknown, maximumBytes: number 
 
 /** Independently normalizes the v3 packed dictionary before the v2 expansion oracle. */
 export function expandAttentionV3ForTest(payload: unknown, maximumBytes: number = ATTENTION_ORACLE_LIMITS.expanded): AttentionSnapshot {
-  fields(payload, ['schema', 'snapshot_id', 'host_instance_id', 'mount_generation', 'created_at', 'coordinate_space', 'capture', 'pointer', 'focus', 'recent_events', 'candidates', 'omissions', 'path_dictionary'])
+  fields(payload, ['schema', 'snapshot_id', 'host_instance_id', 'mount_generation', 'created_at', 'coordinate_space', 'capture', 'pointer', 'focus', 'selection', 'recent_events', 'candidates', 'omissions', 'path_dictionary'])
   requireValid(payload.schema === 'wippy.attention.v3')
   list(payload.path_dictionary, ATTENTION_ORACLE_LIMITS.dictionary)
   return expandAttentionV2ForTest({
@@ -321,14 +361,21 @@ export function expandAttentionV3ForTest(payload: unknown, maximumBytes: number 
   }, maximumBytes)
 }
 
+/** Independently validates v4 and delegates its shared packed representation through the v3 and v2 oracle. */
+export function expandAttentionV4ForTest(payload: unknown, maximumBytes: number = ATTENTION_ORACLE_LIMITS.expanded): AttentionSnapshot {
+  fields(payload, ['schema', 'snapshot_id', 'host_instance_id', 'mount_generation', 'created_at', 'coordinate_space', 'capture', 'pointer', 'focus', 'selection', 'recent_events', 'candidates', 'omissions', 'path_dictionary'])
+  requireValid(payload.schema === 'wippy.attention.v4')
+  return expandAttentionV3ForTest({ ...payload, schema: 'wippy.attention.v3' }, maximumBytes)
+}
+
 export function attentionSnapshotFromAttachment(attachment: ContextAttachment, maximumBytes: number = ATTENTION_ORACLE_LIMITS.expanded): AttentionSnapshot {
-  requireValid(attachment.kind === 'wippy.attention' && [1, 2, 3].includes(attachment.version)
+  requireValid(attachment.kind === 'wippy.attention' && [1, 2, 3, 4].includes(attachment.version)
     && attachment.content_type === 'application/json' && typeof attachment.content === 'string'
     && Buffer.byteLength(attachment.content) <= ATTENTION_ORACLE_LIMITS.attachmentSet)
   requireValid(bytes(attachment) <= (attachment.version === 2
     ? ATTENTION_ORACLE_LIMITS.envelopeV2
-    : attachment.version === 3
-      ? ATTENTION_ORACLE_LIMITS.envelopeV3
+    : attachment.version === 3 || attachment.version === 4
+      ? attachment.version === 4 ? ATTENTION_ORACLE_LIMITS.envelopeV4 : ATTENTION_ORACLE_LIMITS.envelopeV3
       : ATTENTION_ORACLE_LIMITS.attachmentSet))
   const payload = JSON.parse(attachment.content)
   requireValid(oracleCanonicalJson(payload) === attachment.content && Buffer.byteLength(attachment.content) === attachment.content_bytes
@@ -338,6 +385,8 @@ export function attentionSnapshotFromAttachment(attachment: ContextAttachment, m
     return expandAttentionV2ForTest(payload, maximumBytes)
   if (attachment.version === 3)
     return expandAttentionV3ForTest(payload, maximumBytes)
+  if (attachment.version === 4)
+    return expandAttentionV4ForTest(payload, maximumBytes)
   requireValid(bytes(payload) <= maximumBytes)
   validateSemanticSnapshot(payload)
   return payload as AttentionSnapshot
