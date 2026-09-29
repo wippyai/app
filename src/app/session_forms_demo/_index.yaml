@@ -1,0 +1,63 @@
+# Development fixture for Session Forms tests, not for production.
+#
+# Gives the visible tests (M01, M14) a way to trigger a REAL server-side
+# artifact mutation through the same Session persistence path the agent
+# uses (wippy.session.persist:artifact_repo / :artifact_events), so the Host
+# can be observed refreshing off a genuine content_version bump + published
+# event — not a client-side fake.
+#
+# Gated two ways, both required:
+#   1. app.env:session_forms_dev_fixtures must be exactly "true" (checked in
+#      the handler; anything else answers 404, see env/_index.yaml).
+#   2. Caller must be in the app.security:admin group — enforced declaratively
+#      by endpoint_firewall via the deny-policy idiom already used for
+#      app.security:user in src/app/security/_index.yaml (user.forbid_registry):
+#      a broad user-group allow ('*'/'*') is already in place app-wide, so this
+#      namespace adds a narrow deny on this one endpoint's own resource id for
+#      app.security:user, leaving app.security:admin's existing admin.all_access
+#      allow (resources '*', actions '*') as the only policy that still matches.
+version: "1.0"
+namespace: app.session_forms_demo
+
+entries:
+  - name: touch_artifact
+    kind: function.lua
+    meta:
+      comment: Dev fixture — appends a touch line to an owned artifact's content via artifact_repo, CAS-guarded by content_version
+    source: file://touch_artifact.lua
+    modules:
+      - http
+      - security
+      - time
+      - env
+    imports:
+      artifact_repo: wippy.session.persist:artifact_repo
+      artifact_events: wippy.session.persist:artifact_events
+    method: handler
+    pool:
+      size: 2
+
+  - name: touch_artifact.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+      comment: Dev fixture endpoint — see namespace comment. Requires SESSION_FORMS_DEV_FIXTURES=true and the app.security:admin group.
+    method: POST
+    func: touch_artifact
+    path: /session-forms-dev/artifacts/{id}/touch
+
+  # Admin-only gate for touch_artifact.endpoint. Mirrors the deny-policy idiom
+  # already used by app.security:user.forbid_registry: app.security:user's
+  # app-wide allow ('*'/'*', see src/app/security/_index.yaml) is narrowed back
+  # down for this one resource, so only app.security:admin (whose blanket
+  # admin.all_access allow is untouched) can reach it. Not a new mechanism.
+  - name: touch_artifact.deny_user
+    kind: security.policy
+    meta:
+      comment: Denies app.security:user callers access to the dev fixture endpoint; app.security:admin is unaffected
+    groups:
+      - app.security:user
+    policy:
+      resources: app.session_forms_demo:touch_artifact.endpoint
+      actions: '*'
+      effect: deny

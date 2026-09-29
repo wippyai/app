@@ -31,6 +31,18 @@ entries:
     storage: app.env:store
     variable: CODEX_HOME
 
+  # Gates app.session_forms_demo's dev-only artifact-mutation fixture endpoints.
+  # Must be "true" (exact match) for those endpoints to answer anything but 404.
+  # Never enable in production — see src/app/session_forms_demo/_index.yaml.
+  - name: session_forms_dev_fixtures
+    kind: env.variable
+    meta:
+      comment: Enables the Session Forms dev-only artifact-mutation fixture endpoints (never enable in production)
+      private: true
+    default: "false"
+    storage: app.env:store
+    variable: SESSION_FORMS_DEV_FIXTURES
+
   - name: public_env_handler
     kind: function.lua
     source: file://public_env_handler.lua
