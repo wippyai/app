@@ -17,8 +17,9 @@ Set-Location $PSScriptRoot
 # (name, dir, out) tuples - single source of truth for every build-app-* /
 # build-wc-* target. Keep in sync with the Makefile when adding apps.
 $apps = @(
-    @{ name = 'main';        dir = 'frontend/applications/main';        out = 'static/app/main' }
-    @{ name = 'iframe-demo'; dir = 'frontend/applications/iframe-demo'; out = 'static/app/iframe-demo' }
+    @{ name = 'main';               dir = 'frontend/applications/main';               out = 'static/app/main' }
+    @{ name = 'iframe-demo';        dir = 'frontend/applications/iframe-demo';        out = 'static/app/iframe-demo' }
+    @{ name = 'session-forms-demo'; dir = 'frontend/applications/session-forms-demo'; out = 'static/app/session-forms-demo' }
 )
 
 $wcs = @(

@@ -30,6 +30,33 @@ entries:
       - id: app.agents:wippy_nav_trait
       - id: app.agents:wippy_artifacts_trait
 
+  # Session Forms demo (P2 package D). Real agent — routes through the normal
+  # LLM providers, not a fixture. Requires the Session-owned
+  # `wippy.session.forms:ask_user` trait to exist in the registry; if the
+  # Session package hasn't shipped it yet, this entry fails to resolve (see
+  # lint output).
+  - name: forms_demo
+    kind: registry.entry
+    meta:
+      type: agent.gen1
+      title: Forms demo
+      comment: Delivery-preferences assistant that asks the user with a form when it needs a choice
+      icon: tabler:truck-delivery
+      class:
+        - public
+    prompt: |
+      You are a delivery-preferences assistant.
+
+      When you need the user to choose how a parcel should be delivered,
+      ask them with a form instead of asking in plain text. Once they answer,
+      confirm their choice back to them in one sentence.
+    model: gpt-6-luna
+    temperature: 0.5
+    max_tokens: 8000
+    traits:
+      - id: userspace.user.traits:user_aware
+      - id: wippy.session.forms:ask_user
+
   - name: wippy_nav_trait
     kind: registry.entry
     meta:

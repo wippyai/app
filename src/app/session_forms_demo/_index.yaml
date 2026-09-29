@@ -20,6 +20,105 @@ version: "1.0"
 namespace: app.session_forms_demo
 
 entries:
+  # --- P2 package D: deterministic local provider + fixture agent ---------
+  # Dev fixture only. Backs the "Session forms" demo page's second button
+  # (app.session_forms_demo:fixture_agent) with a scripted, offline LLM
+  # driver — no external calls, same behavior every run. Never wire
+  # app.session_forms_demo:provider/model to a production-facing agent.
+  # See generate.lua for the exact request/response behavior.
+  - name: generate
+    kind: function.lua
+    meta:
+      type: llm_function
+      comment: Deterministic Session Forms demo generator — dev fixture, no external calls
+    source: file://generate.lua
+    modules:
+      - json
+    imports: {}
+    method: handler
+
+  - name: status
+    kind: function.lua
+    meta:
+      type: llm_function
+      comment: Deterministic Session Forms demo provider status — dev fixture
+    source: file://status.lua
+    modules: []
+    imports: {}
+    method: handler
+
+  - name: driver
+    kind: contract.binding
+    meta:
+      name: Session Forms demo driver
+      comment: Local deterministic provider used by the Session Forms demo fixture agent — dev fixture, no external calls
+      tags:
+        - session-forms
+        - fixture
+    contracts:
+      - contract: wippy.llm:generator
+        methods:
+          generate: app.session_forms_demo:generate
+      - contract: wippy.llm:provider
+        methods:
+          status: app.session_forms_demo:status
+
+  - name: provider
+    kind: registry.entry
+    meta:
+      name: session-forms-demo
+      type: llm.provider
+      title: Session Forms Demo
+      comment: Deterministic local provider for the Session Forms demo fixture agent — dev fixture, no external calls
+      tags:
+        - session-forms
+        - fixture
+    driver:
+      id: app.session_forms_demo:driver
+      options: {}
+
+  - name: model
+    kind: registry.entry
+    meta:
+      name: session-forms-deterministic
+      type: llm.model
+      title: Session Forms Deterministic
+      comment: Deterministic model that exercises the ask_user form flow without a real LLM — dev fixture
+      capabilities:
+        - generate
+        - tool_use
+      class:
+        - session-forms-fixture
+      priority: 100
+    max_tokens: 32768
+    output_tokens: 4096
+    providers:
+      - id: app.session_forms_demo:provider
+        provider_model: session-forms-deterministic
+
+  # Trait `wippy.session.forms:ask_user` is owned by wippy/session and
+  # needs a Session version that ships session forms; with an older one
+  # this entry fails to resolve at lint time.
+  - name: fixture_agent
+    kind: registry.entry
+    meta:
+      name: session-forms-fixture-agent
+      type: agent.gen1
+      title: Session Forms Fixture
+      comment: Deterministic fixture agent for the Session Forms demo — dev fixture, no external calls
+      icon: tabler:flask
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic Session Forms fixture agent used for demos
+      and tests. Say "ask me" to receive a delivery-preference form, or
+      answer one to get a confirmation.
+    model: session-forms-deterministic
+    max_tokens: 4096
+    traits:
+      - id: wippy.session.forms:ask_user
+
   - name: touch_artifact
     kind: function.lua
     meta:
