@@ -1,4 +1,4 @@
-.PHONY: build clean-build dev run lint build-app-main build-app-iframe-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
+.PHONY: build clean-build dev run run-dev lint build-app-main build-app-iframe-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
 
 build: build-app-main build-app-iframe-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
 
@@ -55,3 +55,6 @@ dev:
 
 run: build
 	wippy run -c
+
+run-dev: build
+	node scripts/run-dev.mjs

@@ -100,6 +100,7 @@ function Show-Help {
     Write-Host "  clean-build        Wipe node_modules + reinstall + rebuild"
     Write-Host "  dev                npm run dev in frontend/applications/main"
     Write-Host "  run                build, then ./wippy.exe run -c"
+    Write-Host "  run-dev            build, then node scripts/run-dev.mjs (generic local launcher)"
     Write-Host "  help               Show this message`n"
     Write-Host "Apps:           $($apps.name -join ', ')"
     Write-Host "Web components: $($wcs.name -join ', ')"
@@ -156,6 +157,12 @@ try {
         '^run$' {
             Invoke-BuildAll
             & "$PSScriptRoot/wippy.exe" run -c
+            break
+        }
+        '^run-dev$' {
+            Invoke-BuildAll
+            node scripts/run-dev.mjs
+            if ($LASTEXITCODE -ne 0) { throw "run-dev.mjs failed (exit $LASTEXITCODE)" }
             break
         }
         default {

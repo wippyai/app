@@ -39,6 +39,19 @@ URL.
    wippy run -c -o app:gateway:addr=:8086 -o wippy.facade:fe_facade_url:default=http://localhost:5173
    ```
 
+   Equivalent via the generic local launcher (`scripts/run-dev.mjs`), which
+   also keeps the `.env`-derived URLs (`WIPPY_URL` / `APP_BASE_URL` /
+   `PUBLIC_API_URL`) in sync with the port:
+   ```sh
+   APP_PORT=8086 FACADE_URL=http://localhost:5173 make run-dev
+   # Windows:
+   set APP_PORT=8086&& set FACADE_URL=http://localhost:5173&& make.bat run-dev
+   ```
+   Other supported env vars: `WIPPY` (path to the runtime binary),
+   `WIPPY_CONFIG` (extra `--config` files, delimited by `;` on Windows / `:`
+   elsewhere) and `WIPPY_OVERRIDES` (extra `entry:path=value` overrides,
+   delimited by `;`). Leave `APP_PORT` unset (or `auto`) to pick a free port.
+
 ## Run
 
 From the repo root:
