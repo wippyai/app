@@ -103,6 +103,18 @@ entries:
       - name: gc_interval
         value: 300s
 
+  # Local test provider: models from the Codex CLI sign-in. Set CODEX_HOME in
+  # .env to the Codex CLI home directory (the one holding auth.json).
+  - name: llm_codex
+    kind: ns.dependency
+    component: butschster/llm-codex
+    version: '>=v0.1.1'
+    parameters:
+      - name: codex_home_path
+        value: ${env:app.env:codex_home}
+      - name: user_security_scope
+        value: app.security:user
+
   - name: terminal
     kind: ns.dependency
     component: wippy/terminal
@@ -214,6 +226,8 @@ entries:
       - name: show_admin
         value: "false"
       - name: hide_nav_bar
+        value: "true"
+      - name: allow_select_model
         value: "true"
       # Default login is the Jet page at /login (server-side cookie theme
       # rendering). The static static/login.html (/app/login.html) is the
