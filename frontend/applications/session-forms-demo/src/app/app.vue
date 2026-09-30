@@ -88,8 +88,8 @@ async function openChat(agent: DemoAgent) {
         Session forms
       </h2>
       <p class="text-xs text-surface-500 mt-1">
-        Two agents exercise the same delivery-preference form: one talks to a
-        real model, the other is a scripted fixture that never leaves this
+        Four agents ask the same delivery-preference question: one talks to a
+        real model, the others are scripted fixtures that never leave this
         server.
       </p>
     </header>
