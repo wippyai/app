@@ -421,20 +421,20 @@ end
 -- "list forms": reports what this turn's prompt says about session forms,
 -- so a visible test can check the form index after a checkpoint. Only the
 -- Session's own index block and the presence of a checkpoint summary are
--- quoted; nothing else from the prompt.
+-- quoted; nothing else from the prompt. The Session adds its current index
+-- after the history, and earlier "list forms" replies in the history quote
+-- older copies, so the last occurrence is the current one.
 local function prompt_forms_report(messages)
     local index_text = nil
     local has_checkpoint = false
     for _, message in ipairs(messages or {}) do
         for _, text in ipairs(content_texts(message.content)) do
-            if not index_text then
-                local start = string.find(text, FORM_INDEX_HEADING, 1, true)
-                if start then
-                    local block = string.sub(text, start)
-                    local stop = string.find(block, "\n\n", 1, true)
-                    if stop then block = string.sub(block, 1, stop - 1) end
-                    index_text = string.sub(block, 1, 1500)
-                end
+            local start = string.find(text, FORM_INDEX_HEADING, 1, true)
+            if start then
+                local block = string.sub(text, start)
+                local stop = string.find(block, "\n\n", 1, true)
+                if stop then block = string.sub(block, 1, stop - 1) end
+                index_text = string.sub(block, 1, 1500)
             end
             if string.find(text, CHECKPOINT_SUMMARY_TEXT, 1, true) then
                 has_checkpoint = true
