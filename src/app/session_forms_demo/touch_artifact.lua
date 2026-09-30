@@ -68,6 +68,21 @@ local function handler()
         return
     end
 
+    -- Session forms are owned by wippy/session's own persistence rules
+    -- (definition immutability, answer/late-answer handling); this dev
+    -- fixture must not be usable as a side door around them. Detected the
+    -- same way wippy/session itself does (src/forms/form_artifact.lua's
+    -- META_KEY): a decoded meta.session_form key.
+    if type(artifact.meta) == "table" and artifact.meta.session_form ~= nil then
+        res:set_status(409)
+        res:write_json({
+            success = false,
+            code = "session_form",
+            message = "Session forms cannot be changed through this fixture.",
+        })
+        return
+    end
+
     local touched_line = "\n- touched " .. time.now():format_rfc3339()
     local new_content = (artifact.content or "") .. touched_line
 

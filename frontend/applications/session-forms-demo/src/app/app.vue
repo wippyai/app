@@ -40,6 +40,11 @@ const AGENTS: DemoAgent[] = [
     registryId: 'app.session_forms_demo:fixture_agent',
     description: 'Deterministic dev fixture with no external model call. Say "ask me" to get the same form, or answer it to get a scripted confirmation. Useful for offline demos and tests.',
   },
+  {
+    title: 'Session Forms Plain Fixture',
+    registryId: 'app.session_forms_demo:plain_fixture_agent',
+    description: 'Same deterministic fixture, without the forms trait. Say "ask me" and it will tell you it can\'t create forms here — useful for testing agents that don\'t offer forms.',
+  },
 ]
 
 const api = useApi()
