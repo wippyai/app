@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { loginAsAdmin } from './helpers/login'
+import { loginAsAdmin, pageIframeSelector } from './helpers/login'
 
 /**
  * E2E coverage for Session Forms V1 (EE2-2461), through the facade login
@@ -11,23 +11,17 @@ import { loginAsAdmin } from './helpers/login'
  * offline dev fixture (src/app/session_forms_demo/generate.lua). The real-model
  * "Forms demo" agent (first card) is never used here.
  *
- * Navigation note (empirically verified against a live run, 2026-10-01 — this
- * deviates from `helpers/login.ts`'s `navigateHostTo`/`HOST_IFRAME_SELECTOR`,
- * which assume the Host is embedded as an outer `<iframe src="...iframe.html">`
- * and that "Session Forms Demo" has a sidebar nav entry inside the "main" app;
- * neither holds for the currently running build — see the test report for
- * details):
- *  - In this build, the Host runs as the TOP-LEVEL document directly (no
- *    outer host iframe at all — confirmed via `document.querySelector('wippy-form')`
- *    resolving from `window === window.top`). Only CHILD pages/artifacts get
- *    their own nested (srcdoc) iframe.
- *  - "Session Forms Demo" (view.page `app.views:session-forms-demo`,
- *    `mountRoute: /session-forms-demo/:part(.*)*`) has no sidebar entry
- *    anywhere; it's reached by navigating the top-level URL directly to
- *    `/session-forms-demo`, same as the sibling "Iframe Demo" page's `/demo`.
+ * Navigation note — "Session Forms Demo" (view.page `app.views:session-forms-demo`,
+ * `mountRoute: /session-forms-demo/:part(.*)*`) has no sidebar entry anywhere
+ * (the current build boots with its sidebar closed — see
+ * `helpers/login.ts`'s `navigateHostTo` doc comment), so it's reached by
+ * navigating the top-level URL directly to `/session-forms-demo`, same as
+ * the sibling "Iframe Demo" page's `/demo`:
+ *  - The Host runs as the TOP-LEVEL document directly, with no outer host
+ *    iframe (see `helpers/login.ts`'s `getHostFrame`). Only child
+ *    pages/artifacts get their own nested (srcdoc) iframe.
  *  - That page's own content renders in a nested srcdoc iframe named
- *    `wippy:page:app.views:session-forms-demo` (w-page-iframe.vue's naming
- *    convention: `wippy:page:<registry id>`).
+ *    `wippy:page:app.views:session-forms-demo` (`pageIframeSelector`).
  *  - Clicking "Start chat" there calls `host.startChat(token, { sidebar: false })`,
  *    which navigates the TOP-level app to `/chat/:id`, replacing the demo
  *    page's iframe with the Host's own chat UI directly in the top document
@@ -47,11 +41,11 @@ import { loginAsAdmin } from './helpers/login'
  *    (that only applies to the multi-question "ask me many" form, not used
  *    here).
  *  - The raw `<wippy-form-answers>` record tag embedded in the user's chat
- *    message is a hidden, zero-height custom element (reports/P3/m03-choices-c1.txt);
- *    the only visible text for the answer is the form's `answered_message`.
+ *    message is a hidden, zero-height custom element; the only visible text
+ *    for the answer is the form's `answered_message`.
  */
 
-const DEMO_PAGE_IFRAME_SELECTOR = 'iframe[name="wippy:page:app.views:session-forms-demo"]'
+const DEMO_PAGE_IFRAME_SELECTOR = pageIframeSelector('app.views:session-forms-demo')
 const FIXTURE_REGISTRY_ID = 'app.session_forms_demo:fixture_agent'
 const CHAT_INPUT_PLACEHOLDER = 'Type a message'
 
