@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin, pageIframeSelector } from './helpers/login'
 
@@ -149,6 +149,231 @@ test.describe('Session Forms Fixture (EE2-2461)', () => {
     await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
     await expect(page.getByText(ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
     await expect(page.getByText(LATE_ANSWER_REPLY, { exact: true })).toBeVisible({ timeout: 10_000 })
+
+    expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+})
+
+/*
+ * V2 standard fields (EE2-2462, task P5-05): the fixture's "ask me delivery"
+ * and "ask me preferences" forms (see generate.lua's
+ * ASK_USER_DELIVERY_ARGUMENTS / ASK_USER_PREFERENCES_ARGUMENTS).
+ *
+ * STATUS: written against the V2 contract (decisions.md D32 and spec section 8
+ * and 16) before the V2 Session server and the V2 <wippy-form> renderer exist.
+ * Not run yet. Locators assume what the contract implies and what the V1
+ * fields form already does; re-align them at integration if the component
+ * differs:
+ *  - each control is reachable by its field label (`getByLabel`), a checkbox
+ *    by role + label, a radio by role + option label;
+ *  - the Submit button is named "Submit" (the fixtures set no `submit_label`);
+ *  - a client-side validation error is connected to its control through
+ *    `aria-describedby`, the first invalid control gets focus after a
+ *    user-initiated submit (spec section 16), and nothing is sent;
+ *  - the answered read-only view prints each field's label followed by its
+ *    value: text as typed, a number as its digits, a date as its stored ISO
+ *    text, a checkbox as Yes/No, an unanswered field as "Skipped";
+ *  - a fields form (any form that is not all-choice) reflects `card-state`
+ *    "active" and then "answered" on the <wippy-form> host, like the card.
+ *
+ * The fixture's acknowledgement reply prints every answered field as
+ * `<id>=<value>` (strings verbatim, numbers as stored, booleans as yes/no, an
+ * unanswered field left out), so comparing it to the typed values is the
+ * check that the SAVED values equal what was entered.
+ */
+const DELIVERY_ANSWERED_MESSAGE = 'Sent my delivery details.'
+const PREFERENCES_ANSWERED_MESSAGE = 'Answered questions about my delivery preferences.'
+
+/** POST /artifact/:id/state, the endpoint a form answer is submitted to. */
+const SUBMIT_ANSWER_URL = /\/artifact\/[^/]+\/state(?:[?#]|$)/
+
+/** The delivery-details answers the test types in (all inside the fixture's fixed bounds and pattern). */
+const DELIVERY_VALUES = {
+  fullName: 'Zoë Lovelace',
+  invalidEmail: 'not-an-email',
+  email: 'zoe.lovelace@example.com',
+  phone: '+44 20 7946 0958',
+  deliveryDate: '2026-11-02',
+  parcelCount: '7',
+  notes: 'Leave it with the neighbour',
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * One RegExp for a read-only form: every label followed, within a short gap,
+ * by its value, in the order given. Playwright matches a RegExp against the
+ * element's raw text (no whitespace between block elements), so the gap may be
+ * empty. The tight gap ties each value to its own label.
+ */
+function readOnlyValues(pairs: ReadonlyArray<readonly [label: string, value: string | RegExp]>): RegExp {
+  const source = pairs
+    .map(([label, value]) => `${escapeRegExp(label)}[\\s\\S]{0,60}?(?:${typeof value === 'string' ? escapeRegExp(value) : value.source})`)
+    .join('[\\s\\S]*?')
+  return new RegExp(source)
+}
+
+/** Picks a date by typing it (works for a typed picker and a native date input), then closes a picker overlay if there is one. */
+async function typeDate(control: Locator, isoDate: string) {
+  await control.fill(isoDate)
+  await control.press('Escape')
+}
+
+/** Counts answer submissions (POST /artifact/:id/state) the page makes. */
+function watchAnswerSubmissions(page: Page): string[] {
+  const urls: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && SUBMIT_ANSWER_URL.test(request.url()))
+      urls.push(request.url())
+  })
+  return urls
+}
+
+test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
+  test('ask me delivery -> an invalid email blocks submit -> the corrected details are saved exactly and survive a reload', async ({ page }) => {
+    const consoleErrors: string[] = []
+    page.on('console', (m) => {
+      if (m.type() === 'error')
+        consoleErrors.push(m.text())
+    })
+    page.on('pageerror', e => consoleErrors.push(e.message))
+    const answerSubmissions = watchAnswerSubmissions(page)
+
+    await openFixtureChat(page)
+    consoleErrors.length = 0
+
+    await sendChatMessage(page, 'ask me delivery')
+
+    const formCard = page.locator('wippy-form')
+    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    await expect(formCard.getByRole('heading', { name: 'Delivery details' })).toBeVisible()
+
+    const fullName = formCard.getByLabel('Full name')
+    const email = formCard.getByLabel('Email address')
+    const phone = formCard.getByLabel('Phone number')
+    const deliveryDate = formCard.getByLabel('Delivery date')
+    const parcelCount = formCard.getByLabel('Number of parcels')
+    const notes = formCard.getByLabel('Delivery notes')
+    const consent = formCard.getByRole('checkbox', { name: /agree to be contacted about this delivery/i })
+    const submit = formCard.getByRole('button', { name: /^submit$/i })
+
+    // A default is a prefill, not an answer: the parcel count starts at 1, the
+    // consent box starts unticked, and nothing has been sent.
+    await expect(parcelCount).toHaveValue('1')
+    await expect(consent).not.toBeChecked()
+    expect(answerSubmissions).toHaveLength(0)
+
+    await fullName.fill(DELIVERY_VALUES.fullName)
+    await email.fill(DELIVERY_VALUES.invalidEmail)
+    await phone.fill(DELIVERY_VALUES.phone)
+    await typeDate(deliveryDate, DELIVERY_VALUES.deliveryDate)
+    await parcelCount.fill(DELIVERY_VALUES.parcelCount)
+    await notes.fill(DELIVERY_VALUES.notes)
+    await consent.click()
+    await expect(consent).toBeChecked()
+    await submit.click()
+
+    // Client-side validation: the invalid email blocks the submit. The error
+    // is connected to the input (its accessible description), the input gets
+    // focus, the other answers stay, and no request is sent. The email field
+    // has no description of its own, so a non-empty description is the error.
+    await expect(email).toHaveAccessibleDescription(/email/i)
+    await expect(email).toBeFocused()
+    await expect(fullName).toHaveValue(DELIVERY_VALUES.fullName)
+    await expect(deliveryDate).toHaveValue(DELIVERY_VALUES.deliveryDate)
+    await expect(parcelCount).toHaveValue(DELIVERY_VALUES.parcelCount)
+    await expect(formCard).toHaveAttribute('card-state', 'active')
+    await expect(page.getByText(DELIVERY_ANSWERED_MESSAGE, { exact: true })).toHaveCount(0)
+    expect(answerSubmissions).toHaveLength(0)
+
+    await email.fill(DELIVERY_VALUES.email)
+    await submit.click()
+    await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
+    await expect.poll(() => answerSubmissions.length).toBe(1)
+
+    // The saved values, as the agent received them in the answer record.
+    const acknowledgement = `Thanks, noted: full_name=${DELIVERY_VALUES.fullName}; email=${DELIVERY_VALUES.email}; phone=${DELIVERY_VALUES.phone}; delivery_date=${DELIVERY_VALUES.deliveryDate}; parcel_count=${DELIVERY_VALUES.parcelCount}; notes=${DELIVERY_VALUES.notes}; consent=yes`
+    await expect(page.getByText(DELIVERY_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
+    await expect(page.getByText(acknowledgement, { exact: true })).toBeVisible({ timeout: 10_000 })
+
+    // The answered read-only view, after a reload, shows the same values and
+    // has no controls left.
+    const readOnly = readOnlyValues([
+      ['Full name', DELIVERY_VALUES.fullName],
+      ['Email address', DELIVERY_VALUES.email],
+      ['Phone number', DELIVERY_VALUES.phone],
+      ['Delivery date', DELIVERY_VALUES.deliveryDate],
+      ['Number of parcels', DELIVERY_VALUES.parcelCount],
+      ['Delivery notes', DELIVERY_VALUES.notes],
+      ['I agree to be contacted about this delivery', 'Yes'],
+    ])
+    await page.reload()
+
+    await expect(page.locator('wippy-form')).toHaveAttribute('card-state', 'answered', { timeout: 15_000 })
+    await expect(page.locator('wippy-form')).toHaveText(readOnly)
+    await expect(page.locator('wippy-form').getByRole('textbox')).toHaveCount(0)
+    await expect(page.locator('wippy-form').getByRole('button', { name: /^submit$/i })).toHaveCount(0)
+    await expect(page.getByText(DELIVERY_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
+    await expect(page.getByText(acknowledgement, { exact: true })).toBeVisible()
+    expect(answerSubmissions).toHaveLength(1)
+
+    expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+
+  test('ask me preferences -> unticked checkboxes are saved as no, a skipped note stays skipped, and both survive a reload', async ({ page }) => {
+    const consoleErrors: string[] = []
+    page.on('console', (m) => {
+      if (m.type() === 'error')
+        consoleErrors.push(m.text())
+    })
+    page.on('pageerror', e => consoleErrors.push(e.message))
+
+    await openFixtureChat(page)
+    consoleErrors.length = 0
+
+    await sendChatMessage(page, 'ask me preferences')
+
+    const formCard = page.locator('wippy-form')
+    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    await expect(formCard.getByRole('heading', { name: 'Preferences' })).toBeVisible()
+
+    // A form that mixes a choice with the new fields is a fields form: the
+    // radio is picked, then the form is sent with Submit (an all-choice form
+    // would send on the click).
+    const smsUpdates = formCard.getByRole('checkbox', { name: /send me sms updates/i })
+    const emailUpdates = formCard.getByRole('checkbox', { name: /send me email updates/i })
+    const leaveAtDoor = formCard.getByRole('checkbox', { name: /leave the parcel at the door/i })
+    await formCard.getByRole('radio', { name: 'Courier' }).click()
+    await smsUpdates.click()
+    await expect(smsUpdates).toBeChecked()
+    await expect(emailUpdates).not.toBeChecked()
+    await expect(leaveAtDoor).not.toBeChecked()
+    // The optional note is left empty on purpose.
+    await formCard.getByRole('button', { name: /^submit$/i }).click()
+
+    await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
+
+    // An unticked optional checkbox is an answer (`no`); the skipped note has
+    // no entry at all.
+    const acknowledgement = 'Thanks, noted: delivery=Courier; sms_updates=yes; email_updates=no; leave_at_door=no'
+    await expect(page.getByText(PREFERENCES_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
+    await expect(page.getByText(acknowledgement, { exact: true })).toBeVisible({ timeout: 10_000 })
+
+    const readOnly = readOnlyValues([
+      ['How should the parcel be delivered?', 'Courier'],
+      ['Send me SMS updates', 'Yes'],
+      ['Send me email updates', 'No'],
+      ['Leave the parcel at the door', 'No'],
+      ['Anything else we should know?', /Skipped|—/],
+    ])
+    await page.reload()
+
+    await expect(page.locator('wippy-form')).toHaveAttribute('card-state', 'answered', { timeout: 15_000 })
+    await expect(page.locator('wippy-form')).toHaveText(readOnly)
+    await expect(page.getByText(PREFERENCES_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
+    await expect(page.getByText(acknowledgement, { exact: true })).toBeVisible()
 
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
