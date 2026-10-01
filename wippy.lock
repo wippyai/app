@@ -2,9 +2,6 @@ directories:
     modules: .wippy
     src: ./src
 modules:
-    - name: butschster/llm-codex
-      version: 0.1.1
-      hash: f4fd26a2d4176f0e3bc103a5e76aa9d2967b288a1118a47fdb79eb3d5c4db95c
     - name: keeper/keeper
       version: 0.5.89
       hash: 7a5558627fab8bb6d2e7ae52cfed0bcbb66a0b12cab1b06d578cb2bccf07d801

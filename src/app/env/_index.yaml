@@ -22,15 +22,6 @@ entries:
       - app.env:file
       - app.env:os
 
-  - name: codex_home
-    kind: env.variable
-    meta:
-      comment: Codex CLI home directory (holds auth.json) for the local Codex LLM provider
-      private: true
-    default: .codex
-    storage: app.env:store
-    variable: CODEX_HOME
-
   # Gates app.session_forms_demo's dev-only artifact-mutation fixture endpoints.
   # Must be "true" (exact match) for those endpoints to answer anything but 404.
   # Never enable in production — see src/app/session_forms_demo/_index.yaml.
