@@ -64,6 +64,19 @@ const mermaidDef = `graph LR
     D --> E[Shadow DOM]
     E --> F[Vue App]`
 
+// Children-content example. Vue's template compiler condenses whitespace in
+// static text (newlines become single spaces), which flattens a multi-line
+// diagram into one line that Mermaid cannot parse. Binding the text with
+// v-text keeps the newlines, because the string is set at runtime.
+const mermaidChildrenDef = `sequenceDiagram
+    participant H as Host
+    participant C as Component
+    participant S as Shadow DOM
+    H->>C: Register tag
+    C->>S: Attach shadow
+    S->>S: Load CSS
+    S->>C: Mount Vue app`
+
 const markdownContent = `# Web Components
 
 Build **reusable** UI widgets with the Wippy component system.
@@ -366,16 +379,11 @@ const emit = useComponentEvents()
               <code class="text-[10px] ml-1 text-surface-400">&lt;template data-type="..."&gt;</code>
             </div>
             <example-mermaid>
-              <template data-type="text/vnd.mermaid">
-                sequenceDiagram
-                participant H as Host
-                participant C as Component
-                participant S as Shadow DOM
-                H->>C: Register tag
-                C->>S: Attach shadow
-                S->>S: Load CSS
-                S->>C: Mount Vue app
-              </template>
+              <!-- eslint-disable-next-line vue/no-lone-template -- native inert template, not a Vue slot template -->
+              <template
+                data-type="text/vnd.mermaid"
+                v-text="mermaidChildrenDef"
+              />
             </example-mermaid>
           </div>
         </div>
