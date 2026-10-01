@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useApi, useHost } from '../composables/useWippy'
 
-// Minimal shape of GET /api/v1/agents/list (see the Host's
-// src/shared/api/agents/types.ts `AgentApi.AgentListResponse` /
-// src/shared/types/agent.ts `ChatAgent` for the full response). Each agent
-// carries its own `start_token`, which is what `host.startChat()` needs —
-// there is no supported way to start a chat from an agent id/name alone
-// (see iframe-proxy.md "Start a New Chat").
+// Subset of GET /api/v1/agents/list. host.startChat() needs an agent's start_token.
 interface AgentListItem {
   name: string
   title: string
@@ -20,10 +15,7 @@ interface AgentListResponse {
 }
 
 interface DemoAgent {
-  // Matches this agent's registry `meta.title` exactly — that is what we
-  // match against the agents-list response below, since the response's
-  // `name` field format isn't documented here and the title is ours to
-  // keep stable.
+  // Must equal the agent's meta.title; the agents list is matched by title.
   title: string
   registryId: string
   description: string
@@ -33,50 +25,64 @@ const AGENTS: DemoAgent[] = [
   {
     title: 'Forms demo',
     registryId: 'app.agents:forms_demo',
-    description: 'Real agent, routed through the configured model. Two scenarios: say "I want to book a delivery" and it asks for delivery details (name, email, phone, delivery date, parcel count, notes, consent to be contacted); say "set my delivery preferences" and it asks for a delivery method, three checkboxes and a short note. It then confirms your answers in one sentence.',
+    description: 'Uses the configured model. Say "I want to book a delivery" for a delivery-details form (name, email, phone, date, parcel count, notes and consent), or "set my delivery preferences" for a delivery method, three checkboxes and a short note. It confirms your answers in one sentence.',
   },
   {
     title: 'Session Forms Fixture',
     registryId: 'app.session_forms_demo:fixture_agent',
-    description: 'Deterministic dev fixture with no external model call. Say "ask me" for a single delivery question, "ask me many" for a four-question order form, "ask me delivery" for the delivery-details form (text, email, date, number, notes and consent fields), or "ask me preferences" for a delivery method with three checkboxes and a short note. Answer a form to get a scripted confirmation that lists the saved values. Useful for offline demos and tests.',
+    description: 'Deterministic dev fixture with no external model call. Say "ask me" for one delivery question, "ask me many" for a four-question order form, "ask me delivery" for the delivery-details form, or "ask me preferences" for the preferences form. Answer a form to get a scripted confirmation that lists the saved values.',
   },
   {
     title: 'Session Forms Steering Fixture',
     registryId: 'app.session_forms_demo:steering_fixture_agent',
-    description: 'Same deterministic fixture and triggers ("ask me", "ask me many", "ask me delivery", "ask me preferences") with Session steering: you can keep typing while a turn runs. Useful for testing steering and form answers together.',
+    description: 'Same deterministic fixture and phrases with Session steering, so you can keep typing while a turn runs.',
   },
   {
     title: 'Session Forms Plain Fixture',
     registryId: 'app.session_forms_demo:plain_fixture_agent',
-    description: 'Same deterministic fixture, without the forms trait. Say "ask me" (or "ask me delivery", "ask me preferences") and it will tell you it can\'t create forms here — useful for testing agents that don\'t offer forms.',
+    description: 'Same deterministic fixture without the forms trait. Say "ask me" or any other form phrase and it replies that it can\'t create forms here.',
   },
 ]
 
 const api = useApi()
 const host = useHost()
 
-const pendingTitle = ref<string | null>(null)
 const errorMessage = ref<string | null>(null)
+// The agents the server lists, or null until the first response. The fixture
+// agents exist only when the app runs with the Session Forms dev fixtures on,
+// so a card is shown only for an agent the server returns.
+const listedAgents = ref<AgentListItem[] | null>(null)
 
-async function openChat(agent: DemoAgent) {
-  errorMessage.value = null
-  pendingTitle.value = agent.title
+const visibleAgents = computed(() => {
+  const listed = listedAgents.value
+  return listed ? AGENTS.filter(agent => listed.some(item => item.title === agent.title)) : []
+})
+
+async function loadAgents() {
   try {
     const response = await api.get<AgentListResponse>('/api/v1/agents/list')
-    const match = response.data.agents.find(item => item.title === agent.title)
-    if (!match || !match.start_token) {
-      errorMessage.value = `"${agent.title}" is not in the agents list yet (registry id ${agent.registryId}). Is it registered and lint-clean?`
-      return
-    }
-    // `host.startChat` (current API) takes an options object, not a bare
-    // boolean — that shape belongs to the deprecated `iframe.startChat`.
+    listedAgents.value = response.data.agents
+  }
+  catch (err) {
+    listedAgents.value = []
+    errorMessage.value = err instanceof Error ? err.message : 'Failed to load the agents list.'
+  }
+}
+
+onMounted(loadAgents)
+
+function openChat(agent: DemoAgent) {
+  errorMessage.value = null
+  const match = listedAgents.value?.find(item => item.title === agent.title)
+  if (!match?.start_token) {
+    errorMessage.value = `"${agent.title}" is not available. Check that ${agent.registryId} is registered.`
+    return
+  }
+  try {
     host.startChat(match.start_token, { sidebar: false })
   }
   catch (err) {
     errorMessage.value = err instanceof Error ? err.message : 'Failed to start the chat.'
-  }
-  finally {
-    pendingTitle.value = null
   }
 }
 </script>
@@ -88,16 +94,17 @@ async function openChat(agent: DemoAgent) {
         Session forms
       </h2>
       <p class="text-xs text-surface-500 mt-1">
-        Four agents ask delivery questions with forms: one talks to a real
-        model, the others are scripted fixtures that never leave this server.
-        The forms cover choice questions and the standard fields (text, email,
-        date, number, textarea and checkbox).
+        The agents here ask delivery questions with forms that hold choice
+        questions and the standard fields (text, email, date, number, textarea
+        and checkbox). Forms demo talks to a real model. When the app runs with
+        the Session Forms dev fixtures on, three scripted fixture agents that
+        never leave this server are listed as well.
       </p>
     </header>
 
     <div class="flex flex-col gap-3">
       <div
-        v-for="agent in AGENTS"
+        v-for="agent in visibleAgents"
         :key="agent.registryId"
         class="border border-surface-200 dark:border-surface-700 rounded-lg p-3 flex items-start justify-between gap-3"
       >
@@ -114,11 +121,10 @@ async function openChat(agent: DemoAgent) {
         </div>
         <button
           type="button"
-          class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-md bg-primary text-white disabled:opacity-50"
-          :disabled="pendingTitle === agent.title"
+          class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-md bg-primary text-white"
           @click="openChat(agent)"
         >
-          {{ pendingTitle === agent.title ? 'Starting…' : 'Start chat' }}
+          Start chat
         </button>
       </div>
     </div>

@@ -31,9 +31,8 @@ entries:
     storage: app.env:store
     variable: CODEX_HOME
 
-  # Gates app.session_forms_demo's dev-only artifact-mutation fixture endpoints.
-  # Must be "true" (exact match) for those endpoints to answer anything but 404.
-  # Never enable in production — see src/app/session_forms_demo/_index.yaml.
+  # Enables the Session Forms dev endpoint. Must be exactly "true" (see
+  # session_forms_demo/_index.yaml).
   - name: session_forms_dev_fixtures
     kind: env.variable
     meta:

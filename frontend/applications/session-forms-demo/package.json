@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "specification": "wippy-component-1.0",
   "title": "Session Forms Demo",
-  "description": "Explains the Session Forms real agent and deterministic fixture agent, and starts a chat with either one",
+  "description": "Starts a chat with the Session Forms demo agent, and with the deterministic fixture agents when the dev fixtures are on",
   "files": [
     "dist/",
     "src/",

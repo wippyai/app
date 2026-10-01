@@ -1,81 +1,40 @@
 import type { Locator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+import { collectConsoleErrors } from './helpers/console'
 import { loginAsAdmin, pageIframeSelector } from './helpers/login'
 
 /**
- * E2E coverage for Session Forms V1 (EE2-2461), through the facade login
- * flow (see e2e/README.md and helpers/login.ts's `loginAsAdmin`).
- *
- * Drives the "Session Forms Fixture" agent (`app.session_forms_demo:fixture_agent`,
- * the SECOND card on the "Session Forms Demo" page) — a deterministic, fully
- * offline dev fixture (src/app/session_forms_demo/generate.lua). The real-model
- * "Forms demo" agent (first card) is never used here.
- *
- * Navigation note — "Session Forms Demo" (view.page `app.views:session-forms-demo`,
- * `mountRoute: /session-forms-demo/:part(.*)*`) has no sidebar entry anywhere
- * (the current build boots with its sidebar closed — see
- * `helpers/login.ts`'s `navigateHostTo` doc comment), so it's reached by
- * navigating the top-level URL directly to `/session-forms-demo`, same as
- * the sibling "Iframe Demo" page's `/demo`:
- *  - The Host runs as the TOP-LEVEL document directly, with no outer host
- *    iframe (see `helpers/login.ts`'s `getHostFrame`). Only child
- *    pages/artifacts get their own nested (srcdoc) iframe.
- *  - That page's own content renders in a nested srcdoc iframe named
- *    `wippy:page:app.views:session-forms-demo` (`pageIframeSelector`).
- *  - Clicking "Start chat" there calls `host.startChat(token, { sidebar: false })`,
- *    which navigates the TOP-level app to `/chat/:id`, replacing the demo
- *    page's iframe with the Host's own chat UI directly in the top document
- *    — so the rest of each test drives `page` directly, no frameLocator.
- *  - `<wippy-form>` is a web component mounted straight into the Host's DOM
- *    (web-component-package-loader.vue's imperative `document.createElement`
- *    path, not a nested <w-artifact> iframe), with an OPEN shadow root
- *    (@wippy-fe/webcomponent-core's base-element.ts defaults to
- *    `shadowMode: 'open'`). Playwright locators pierce open shadow roots
- *    automatically, so no special shadow-DOM handling is needed.
- *  - The question card reflects its own state onto the <wippy-form> HOST
- *    element as a `card-state` attribute ("loading" | "active" | "review" |
- *    "answered" | "unsupported" — use-host-reflection.ts), which is a far
- *    more stable wait condition than any timing or text content.
- *  - A single-question form (the fixture's "Delivery preference" form)
- *    submits directly on option click — no separate "Send answers" step
- *    (that only applies to the multi-question "ask me many" form, not used
- *    here).
- *  - The raw `<wippy-form-answers>` record tag embedded in the user's chat
- *    message is a hidden, zero-height custom element; the only visible text
- *    for the answer is the form's `answered_message`.
+ * Session Forms end-to-end checks. They drive the scripted fixture agent
+ * (src/app/session_forms_demo/generate.lua), so the app must run with the
+ * `session-forms-fixtures` profile (see e2e/README.md).
  */
 
 const DEMO_PAGE_IFRAME_SELECTOR = pageIframeSelector('app.views:session-forms-demo')
 const FIXTURE_REGISTRY_ID = 'app.session_forms_demo:fixture_agent'
 const CHAT_INPUT_PLACEHOLDER = 'Type a message'
+// The first form needs a tool call, an artifact and a component load.
+const FORM_TIMEOUT = 15_000
 
 const DELIVERY_OPTION_1 = 'Courier'
 const DELIVERY_OPTION_2 = 'Pickup point'
+// These replies must match generate.lua.
 const ANSWERED_MESSAGE = 'Answered a question about delivery.'
 const PROPOSE_ACTION_REPLY = 'I plan to book a courier pickup. I will only do it after you confirm.'
 const LATE_ANSWER_REPLY = 'This answer arrived after the conversation moved on. Please confirm again before I act on it.'
 
-/**
- * Logs in, opens the "Session Forms Demo" page by its own top-level route,
- * and starts a brand-new chat with the Session Forms Fixture agent (the
- * second of four cards — see
- * frontend/applications/session-forms-demo/src/app/app.vue's AGENTS list).
- * After this resolves, `page` itself shows the chat (the demo page's own
- * iframe is gone — the Host swapped its top-level route to `/chat/:id`).
- */
+/** Logs in and starts a new chat with the fixture agent from the Session Forms Demo page. */
 async function openFixtureChat(page: Page) {
   await loginAsAdmin(page)
+  // The page has no sidebar entry, so open it by URL.
   await page.goto('/session-forms-demo')
 
   const demoFrame = page.frameLocator(DEMO_PAGE_IFRAME_SELECTOR)
-  // Filtered by the registry id (unique, unambiguous substring across all
-  // four cards) rather than the title text alone — "Session Forms Fixture"
-  // is also a substring-adjacent risk next to "Session Forms Steering
-  // Fixture" / "Session Forms Plain Fixture" if the markup ever reflows.
+  // The titles share a prefix, so match the card by registry id.
   const fixtureCard = demoFrame.locator('.rounded-lg').filter({ hasText: FIXTURE_REGISTRY_ID })
   await expect(fixtureCard).toHaveCount(1, { timeout: 15_000 })
   await fixtureCard.getByRole('button', { name: /start chat/i }).click()
 
+  // Start chat replaces the top-level route with /chat/:id, so later steps use page, not a frame.
   await expect(page.getByPlaceholder(CHAT_INPUT_PLACEHOLDER)).toBeVisible({ timeout: 15_000 })
 }
 
@@ -85,33 +44,27 @@ async function sendChatMessage(page: Page, text: string) {
   await chatInput.press('Enter')
 }
 
-test.describe('Session Forms Fixture (EE2-2461)', () => {
+/** Sends a fixture phrase that asks for a form and returns the form once it can be answered. */
+async function askForForm(page: Page, phrase = 'ask me') {
+  await sendChatMessage(page, phrase)
+  const formCard = page.locator('wippy-form')
+  await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: FORM_TIMEOUT })
+  return formCard
+}
+
+test.describe('Session Forms Fixture', () => {
   test('ask me -> pick an option -> answered, and it stays answered after reload', async ({ page }) => {
-    const consoleErrors: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error')
-        consoleErrors.push(m.text())
-    })
-    page.on('pageerror', e => consoleErrors.push(e.message))
+    const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page)
-    // loginAsAdmin's own pre-auth noise (facade boot with no token yet) is
-    // over by the time the chat is visible; judge only from here on.
+    // Ignore console errors from login.
     consoleErrors.length = 0
 
-    await sendChatMessage(page, 'ask me')
-
-    const formCard = page.locator('wippy-form')
-    // First form in a fresh session: tool-call round trip + artifact
-    // creation + component-tag load, observed up to ~6s in prior runs.
-    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const formCard = await askForForm(page)
     await formCard.getByRole('radio', { name: DELIVERY_OPTION_1 }).click()
 
     await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
 
-    // Exactly one visible user message for the answer — the raw
-    // <wippy-form-answers> record is a hidden, zero-height tag, never a
-    // second visible line.
     await expect(page.getByText(ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
     await expect(page.getByText(`Thanks, noted: ${DELIVERY_OPTION_1}.`, { exact: true })).toBeVisible({ timeout: 10_000 })
 
@@ -125,26 +78,16 @@ test.describe('Session Forms Fixture (EE2-2461)', () => {
   })
 
   test('ask me -> propose action -> answering the stale form gets the late-answer reply', async ({ page }) => {
-    const consoleErrors: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error')
-        consoleErrors.push(m.text())
-    })
-    page.on('pageerror', e => consoleErrors.push(e.message))
+    const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page)
     consoleErrors.length = 0
 
-    await sendChatMessage(page, 'ask me')
-    const formCard = page.locator('wippy-form')
-    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const formCard = await askForForm(page)
 
     await sendChatMessage(page, 'propose action')
     await expect(page.getByText(PROPOSE_ACTION_REPLY, { exact: true })).toBeVisible({ timeout: 10_000 })
 
-    // Answer the now-stale form: the fixture's dedicated late-answer branch
-    // (generate.lua: parsed.late -> LATE_ANSWER_TEXT), distinct from the
-    // ordinary "Thanks, noted: ..." reply in the first test.
     await formCard.getByRole('radio', { name: DELIVERY_OPTION_2 }).click()
     await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
     await expect(page.getByText(ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
@@ -155,8 +98,8 @@ test.describe('Session Forms Fixture (EE2-2461)', () => {
 })
 
 /*
- * Standard fields (EE2-2462): the fixture's "ask me delivery" and "ask me
- * preferences" forms (see generate.lua's ASK_USER_DELIVERY_ARGUMENTS and
+ * Standard fields: the fixture's "ask me delivery" and "ask me preferences"
+ * forms (see generate.lua's ASK_USER_DELIVERY_ARGUMENTS and
  * ASK_USER_PREFERENCES_ARGUMENTS).
  *
  * The date box is typed into one key at a time (`typeDateKeyByKey`), because a
@@ -253,23 +196,15 @@ function watchAnswerSubmissions(page: Page): string[] {
   return urls
 }
 
-test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
+test.describe('Session Forms V2 standard fields', () => {
   test('ask me delivery -> an invalid email blocks submit -> the corrected details are saved exactly and survive a reload', async ({ page }) => {
-    const consoleErrors: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error')
-        consoleErrors.push(m.text())
-    })
-    page.on('pageerror', e => consoleErrors.push(e.message))
+    const consoleErrors = collectConsoleErrors(page)
     const answerSubmissions = watchAnswerSubmissions(page)
 
     await openFixtureChat(page)
     consoleErrors.length = 0
 
-    await sendChatMessage(page, 'ask me delivery')
-
-    const formCard = page.locator('wippy-form')
-    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const formCard = await askForForm(page, 'ask me delivery')
     await expect(formCard.getByRole('heading', { name: 'Delivery details' })).toBeVisible()
 
     const fullName = formCard.getByLabel('Full name')
@@ -345,21 +280,13 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
   })
 
   test('ask me delivery -> a phone number that breaks the pattern is sent, refused by the server with a 422 under Phone, kept as typed, and the corrected number is saved', async ({ page }) => {
-    const consoleErrors: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error')
-        consoleErrors.push(m.text())
-    })
-    page.on('pageerror', e => consoleErrors.push(e.message))
+    const consoleErrors = collectConsoleErrors(page)
     const answerSubmissions = watchAnswerSubmissions(page)
 
     await openFixtureChat(page)
     consoleErrors.length = 0
 
-    await sendChatMessage(page, 'ask me delivery')
-
-    const formCard = page.locator('wippy-form')
-    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const formCard = await askForForm(page, 'ask me delivery')
 
     const phone = formCard.getByLabel('Phone number')
     const phoneField = formCard.locator('.w-form__field').filter({ has: page.getByLabel('Phone number') })
@@ -410,21 +337,13 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
   })
 
   test('ask me delivery -> a typed date that is not a valid date stays in the box with its error until it is corrected, and the corrected date is saved', async ({ page }) => {
-    const consoleErrors: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error')
-        consoleErrors.push(m.text())
-    })
-    page.on('pageerror', e => consoleErrors.push(e.message))
+    const consoleErrors = collectConsoleErrors(page)
     const answerSubmissions = watchAnswerSubmissions(page)
 
     await openFixtureChat(page)
     consoleErrors.length = 0
 
-    await sendChatMessage(page, 'ask me delivery')
-
-    const formCard = page.locator('wippy-form')
-    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const formCard = await askForForm(page, 'ask me delivery')
 
     const deliveryDate = formCard.getByLabel('Delivery date')
     const submit = formCard.getByRole('button', { name: /^submit$/i })
@@ -488,10 +407,7 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
 
   test('ask me delivery -> the date box can be edited in the middle of the text without the caret jumping to the end', async ({ page }) => {
     await openFixtureChat(page)
-    await sendChatMessage(page, 'ask me delivery')
-
-    const formCard = page.locator('wippy-form')
-    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const formCard = await askForForm(page, 'ask me delivery')
     const deliveryDate = formCard.getByLabel('Delivery date')
 
     await typeDateKeyByKey(deliveryDate, '2026-06-15')
@@ -509,10 +425,7 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
 
   test('ask me delivery -> the calendar picks a date by mouse and by keyboard, and its panel is readable in both themes', async ({ page }) => {
     await openFixtureChat(page)
-    await sendChatMessage(page, 'ask me delivery')
-
-    const formCard = page.locator('wippy-form')
-    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const formCard = await askForForm(page, 'ask me delivery')
     const deliveryDate = formCard.getByLabel('Delivery date')
     const calendarButton = formCard.getByRole('button', { name: /choose date/i })
     const calendar = formCard.getByRole('dialog', { name: /choose date/i })
@@ -609,20 +522,12 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
   })
 
   test('ask me preferences -> unticked checkboxes are saved as no, a skipped note stays skipped, and both survive a reload', async ({ page }) => {
-    const consoleErrors: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error')
-        consoleErrors.push(m.text())
-    })
-    page.on('pageerror', e => consoleErrors.push(e.message))
+    const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page)
     consoleErrors.length = 0
 
-    await sendChatMessage(page, 'ask me preferences')
-
-    const formCard = page.locator('wippy-form')
-    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const formCard = await askForForm(page, 'ask me preferences')
     await expect(formCard.getByRole('heading', { name: 'Preferences' })).toBeVisible()
 
     // A form that mixes a choice with the new fields is a fields form: the

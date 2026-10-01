@@ -32,16 +32,8 @@ build-wc-model-gallery:
 build-wc-counter-persist:
 	cd frontend/web-components/counter-persist && npm install && npm run build -- --outDir ../../../static/wc/counter-persist --emptyOutDir
 
-# Every app/web-component here lints via its own classic `.eslintrc.cjs` +
-# `eslint ... --ext .ts,.vue` (ESLint 8.x eslintrc mode). `--ext` is rejected
-# once ESLint resolves a flat `eslint.config.*` — and ESLint's flat-config
-# search walks up the filesystem past this repo's own root. Run from a
-# worktree nested under the gen-2-chat Web Host checkout (which has its own
-# root `eslint.config.mjs`), that search finds the HOST's unrelated flat
-# config and silently switches every app here into flat mode. Forcing
-# eslintrc mode here is the documented ESLint escape hatch for exactly this
-# ancestor-config collision, scoped to this one target (and anything that
-# depends on it, e.g. `verify`) — it does not touch the Host repo.
+# Lint in eslintrc mode: a flat config in a parent directory (such as the Web
+# Host checkout) would otherwise reject --ext.
 lint: export ESLINT_USE_FLAT_CONFIG := false
 lint:
 	cd frontend/applications/main && npm run lint
@@ -54,17 +46,15 @@ lint:
 	cd frontend/web-components/model-gallery && npm run lint
 	cd frontend/web-components/counter-persist && npm run lint
 
-# Full local verification: frontend build + lint across every app/web
-# component, then the backend Lua lint for this app's own namespaces
-# (`app`, `app.*`). The GitLab CI "Lint" stage lints the whole workspace,
-# vendored modules included; under wippy v0.3.43a that reports errors inside
-# the vendored keeper module (keeper.logger:client,
-# keeper.state.observer:registry_watcher), which this repo does not own.
-# Assumes `wippy` is resolvable on PATH, matching CI; see make.ps1's
-# Invoke-WippyLint for the Windows adapter's WIPPY/local-binary fallback (a
-# worktree has no vendored wippy.exe).
+# Frontend build and lint for every app and web component, then the Lua lint for
+# this app's own namespaces (`app`, `app.*`). The CI lint stage covers the whole
+# workspace, which also reports errors in the vendored keeper module that this
+# repo does not own. Needs `wippy` on PATH; make.ps1 has the Windows fallback.
+# The second wippy lint run selects the fixtures profile, because .wippy.yaml
+# removes that namespace from a release.
 verify: build lint
 	wippy lint --level error --ns 'app,app.*'
+	wippy lint --level error --ns 'app,app.*' --profile session-forms-fixtures
 
 clean-build:
 	cd frontend/applications/main && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir

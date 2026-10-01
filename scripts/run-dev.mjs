@@ -29,9 +29,28 @@ function resolveWippyBinary() {
   return existsSync(local) ? local : 'wippy'
 }
 
+// SESSION_FORMS_DEV_FIXTURES=true selects this profile, which keeps the Session
+// Forms dev fixtures in the registry (see README.md).
+const FIXTURES_PROFILE = 'session-forms-fixtures'
+const FIXTURES_ENV_KEY = 'SESSION_FORMS_DEV_FIXTURES'
+
+// Reads one named key the way the runtime's env store does, from the .env file
+// first and then the OS environment. It looks only at that key and never
+// prints the value, because .env can hold secrets.
+function readEnvKey(filePath, key) {
+  if (existsSync(filePath)) {
+    for (const line of readFileSync(filePath, 'utf8').split(/\r\n|\n/)) {
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
+      if (match && match[1] === key)
+        return match[2].trim().replace(/^(['"])(.*)\1$/, '$2')
+    }
+  }
+  return process.env[key]
+}
+
 // Rewrites only the four port-derived keys in an existing .env, preserving
 // every other line, comment, ordering and the file's own EOL style. Returns
-// the list of key NAMES that changed - never values, .env can hold secrets.
+// the names of the keys that changed, never their values.
 function rewriteEnvPort(filePath, port) {
   if (!existsSync(filePath))
     return []
@@ -85,6 +104,11 @@ async function main() {
 
   const wippyBin = resolveWippyBinary()
   const configs = process.env.WIPPY_CONFIG ? process.env.WIPPY_CONFIG.split(path.delimiter).filter(Boolean) : []
+  // Passing --config replaces the default `.wippy.yaml`, so keep it in the list.
+  const rootConfig = path.join(cwd, '.wippy.yaml')
+  if (configs.length > 0 && existsSync(rootConfig) && !configs.some(cfg => path.resolve(cwd, cfg) === rootConfig))
+    configs.unshift('.wippy.yaml')
+  const fixturesOn = readEnvKey(envPath, FIXTURES_ENV_KEY) === 'true'
   const facadeUrl = process.env.FACADE_URL || ''
 
   const overrides = [`app:gateway:addr=:${port}`]
@@ -100,6 +124,8 @@ async function main() {
   const args = ['run', '-c']
   for (const cfg of configs)
     args.push('--config', cfg)
+  if (fixturesOn)
+    args.push('--profile', FIXTURES_PROFILE)
   for (const o of overrides)
     args.push('-o', o)
 
@@ -116,6 +142,7 @@ async function main() {
     facade_url: facadeUrl || null,
     wippy: wippyBin,
     configs,
+    profiles: fixturesOn ? [FIXTURES_PROFILE] : [],
     overrides,
     started_at: new Date().toISOString(),
     pid: null,
@@ -127,6 +154,7 @@ async function main() {
 
   console.log(`[run-dev] ${wippyBin} ${args.join(' ')}`)
   console.log(`[run-dev] app=${appOrigin} facade=${facadeUrl || '(none)'} manifest=${manifestPath || '(none)'}`)
+  console.log(`[run-dev] session forms dev fixtures: ${fixturesOn ? `on (profile ${FIXTURES_PROFILE})` : 'off'}`)
 
   if (process.env.RUN_DEV_DRY_RUN === '1')
     return

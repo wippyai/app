@@ -64,10 +64,8 @@ const mermaidDef = `graph LR
     D --> E[Shadow DOM]
     E --> F[Vue App]`
 
-// Children-content example. Vue's template compiler condenses whitespace in
-// static text (newlines become single spaces), which flattens a multi-line
-// diagram into one line that Mermaid cannot parse. Binding the text with
-// v-text keeps the newlines, because the string is set at runtime.
+// v-text keeps the newlines that Vue's template compiler would otherwise
+// collapse (see component-guide.md, Children Content).
 const mermaidChildrenDef = `sequenceDiagram
     participant H as Host
     participant C as Component

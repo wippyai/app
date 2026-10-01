@@ -95,6 +95,36 @@ make build                                     # rebuild all bundles to static/
 wippy run -c                                   # server
 ```
 
+## Session Forms demo
+
+The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks for delivery details or delivery preferences with a form. The agent uses the `wippy.session.forms:ask_user` trait from the `wippy/session` module. It runs on `gpt-6-luna` from the local Codex test provider (the `llm_codex` dependency, which reads the Codex CLI sign-in from `CODEX_HOME`).
+
+### Dev fixtures
+
+The page can also start three scripted fixture agents. They make no model calls, so the e2e tests can rely on fixed replies. They belong to the `app.session_forms_demo` namespace, together with a deterministic model and provider and a test-only endpoint that edits an artifact. `.wippy.yaml` removes the namespace unless the `session-forms-fixtures` profile is selected, so a release has none of it.
+
+```bash
+wippy run -c --profile session-forms-fixtures
+# or, with SESSION_FORMS_DEV_FIXTURES=true in the environment or .env:
+make run-dev
+```
+
+`SESSION_FORMS_DEV_FIXTURES=true` also enables the test-only endpoint, which answers 404 otherwise and is open to admin users only. Passing `--config` replaces the default `.wippy.yaml`, so when you pass your own config file, add `--config .wippy.yaml` before it so the fixtures stay off.
+
+The fixture agents reply to these phrases, and anything else gets "Say 'ask me' to get a form." The plain fixture agent has no forms trait, so it answers "ask me" with "I can't create forms here." A form answer gets "Thanks, noted:" followed by the answer, or a late-answer notice when the form was answered after the conversation moved on. For a form with a field that is not a choice, the answer is each answered field as `id=value`, separated by `; `, with a checkbox as `yes` or `no` and a skipped field left out.
+
+| Phrase | Reply |
+|---|---|
+| `ask me` | Asks a single-question delivery form. |
+| `ask me many` | Asks a four-question order form. |
+| `ask me delivery` | Asks a delivery-details form with text, email, date, number, textarea and checkbox fields. |
+| `ask me preferences` | Asks a form with one choice question, three checkboxes and a short text note. |
+| `propose action` | Replies with a plan that waits for confirmation. |
+| `work slowly` | Replies after 25 seconds. |
+| `read form <id>` | Calls `read_form` for that form id. |
+| `list forms` | Reports whether the prompt holds a checkpoint summary, and the form index. |
+| `checkpoint now` | Reports enough prompt tokens for the Session to write a checkpoint. |
+
 ## Frontend & theming
 
 All frontend, theming, and web-component guidance lives in [`frontend/docs/`](frontend/docs/README.md). The one rule worth stating up front: customize appearance through the **facade** (`src/app/deps/_index.yaml`) — `css_variables` / `custom_css` propagate to every page and component; per-app CSS does not. See [`frontend/docs/theming.md`](frontend/docs/theming.md).

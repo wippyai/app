@@ -1,19 +1,5 @@
--- DEV FIXTURE — POST /api/v1/session-forms-dev/artifacts/{id}/touch
---
--- Development-only artifact mutation fixture for the Session Forms visible
--- tests (M01, M14). Appends one Markdown line to an artifact the caller owns
--- through the real Session persistence path (wippy.session.persist), so the
--- tests can trigger a genuine server mutation and observe the Host refresh —
--- not a way around Session's rules.
---
--- Gated by:
---   1. app.env:session_forms_dev_fixtures must equal "true" (else 404, first
---      check below — never reveals whether the artifact exists either way).
---   2. app.security:admin group membership, enforced declaratively by
---      endpoint_firewall via touch_artifact.deny_user in this namespace's
---      _index.yaml (a request from a non-admin never reaches this handler).
---
--- Never enable app.env:session_forms_dev_fixtures in production.
+-- Test-only endpoint that appends a line to an artifact the caller owns, through wippy.session persistence.
+-- It answers 404 unless app.env:session_forms_dev_fixtures is "true".
 local http = require("http")
 local security = require("security")
 local time = require("time")
@@ -24,18 +10,21 @@ local artifact_events = require("artifact_events")
 
 local FIXTURES_ENABLED_ENV = "app.env:session_forms_dev_fixtures"
 
+local function not_found(res)
+    res:set_status(http.STATUS.NOT_FOUND)
+    res:write_json({ success = false, error = "not found" })
+end
+
 local function handler()
     local res = http.response()
     local req = http.request()
     if not res or not req then return nil, "no http context" end
     res:set_content_type(http.CONTENT.JSON)
 
-    -- Dev-fixture gate. Checked before anything else, including auth, so a
-    -- disabled fixture looks identical to a route that does not exist.
+    -- Checked first, before auth, so a disabled endpoint looks like a missing route.
     local fixtures_enabled = env.get(FIXTURES_ENABLED_ENV)
     if fixtures_enabled ~= "true" then
-        res:set_status(http.STATUS.NOT_FOUND)
-        res:write_json({ success = false, error = "not found" })
+        not_found(res)
         return
     end
 
@@ -53,26 +42,15 @@ local function handler()
         return
     end
 
+    -- A missing artifact and another user's artifact get the same 404.
     local artifact, get_err = artifact_repo.get(artifact_id)
-    if get_err or not artifact then
-        -- Same response whether the artifact is missing or belongs to
-        -- someone else — never reveal existence to a non-owner.
-        res:set_status(http.STATUS.NOT_FOUND)
-        res:write_json({ success = false, error = "not found" })
+    if get_err or not artifact or artifact.user_id ~= actor:id() then
+        not_found(res)
         return
     end
 
-    if artifact.user_id ~= actor:id() then
-        res:set_status(http.STATUS.NOT_FOUND)
-        res:write_json({ success = false, error = "not found" })
-        return
-    end
-
-    -- Session forms are owned by wippy/session's own persistence rules
-    -- (definition immutability, answer/late-answer handling); this dev
-    -- fixture must not be usable as a side door around them. Detected the
-    -- same way wippy/session itself does (src/forms/form_artifact.lua's
-    -- META_KEY): a decoded meta.session_form key.
+    -- Form artifacts follow wippy/session's own rules, so refuse them here.
+    -- The meta key must match META_KEY in the Session's forms/form_artifact.lua.
     if type(artifact.meta) == "table" and artifact.meta.session_form ~= nil then
         res:set_status(409)
         res:write_json({
@@ -93,10 +71,8 @@ local function handler()
     )
 
     if update_err then
-        -- artifact_repo.update returns a plain string for validation failures
-        -- and an Error object (:kind()/:details()) for CONFLICT/NOT_FOUND —
-        -- cast to `any` before probing, same as artifact_repo_test.lua does,
-        -- and pcall-guard since a plain string has neither method.
+        -- artifact_repo.update returns a string for validation errors and an
+        -- Error object for CONFLICT and NOT_FOUND, so probe it with pcall.
         local update_err_any = update_err :: any
         local kind_ok, err_kind = pcall(function() return update_err_any:kind() end)
 
@@ -109,8 +85,7 @@ local function handler()
         end
 
         if kind_ok and err_kind == errors.NOT_FOUND then
-            res:set_status(http.STATUS.NOT_FOUND)
-            res:write_json({ success = false, error = "not found" })
+            not_found(res)
             return
         end
 
@@ -119,9 +94,7 @@ local function handler()
         return
     end
 
-    -- Read the row back on its own connection so the response — and the
-    -- published event — always carry what actually committed, never a value
-    -- a concurrent writer could have since moved past.
+    -- Read the row back so the response and the event carry what was committed.
     local updated_artifact, reread_err = artifact_repo.get(artifact_id)
     if reread_err or not updated_artifact then
         res:set_status(http.STATUS.INTERNAL_ERROR)

@@ -30,13 +30,10 @@ entries:
       - id: app.agents:wippy_nav_trait
       - id: app.agents:wippy_artifacts_trait
 
-  # Session Forms demo (EE2-2462). A real agent that routes through the normal
-  # LLM providers and is not a fixture. Its prompt spells out two scenarios
-  # (delivery details, preferences) so a model builds the same forms as the
-  # fixture's "ask me delivery" and "ask me preferences" triggers. The model
-  # binding below is set on purpose. The entry needs the
-  # `wippy.session.forms:ask_user` trait of wippy/session, and fails to resolve
-  # (see lint output) when the installed Session module does not have it.
+  # Session Forms demo agent. Needs a wippy/session release that ships
+  # Session Forms. Its prompt describes the same two forms as the fixture's
+  # "ask me delivery" and "ask me preferences" phrases. The model comes from
+  # the local Codex test provider (llm_codex in src/app/deps).
   - name: forms_demo
     kind: registry.entry
     meta:
