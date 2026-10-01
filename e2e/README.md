@@ -52,6 +52,13 @@ URL.
    elsewhere) and `WIPPY_OVERRIDES` (extra `entry:path=value` overrides,
    delimited by `;`). Leave `APP_PORT` unset (or `auto`) to pick a free port.
 
+   `session-forms.spec.ts` drives the deterministic Session Forms fixture
+   agents, which `.wippy.yaml` removes from the registry by default. Start the
+   app with `SESSION_FORMS_DEV_FIXTURES=true` (environment or `.env`) so
+   `make run-dev` adds `--profile session-forms-fixtures`, or pass that
+   profile to `wippy run` yourself. The launcher also keeps `.wippy.yaml` in
+   the config list when `WIPPY_CONFIG` is set.
+
 ## Run
 
 From the repo root:

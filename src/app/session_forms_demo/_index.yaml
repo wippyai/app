@@ -1,5 +1,13 @@
 # Development fixture for Session Forms tests, not for production.
 #
+# The whole namespace is removed from the registry by `.wippy.yaml` unless the
+# `session-forms-fixtures` profile is selected, so a release has none of these
+# entries (no fixture agents, provider, model or endpoint). `wippy run
+# --profile session-forms-fixtures` selects it; scripts/run-dev.mjs does so
+# when SESSION_FORMS_DEV_FIXTURES=true. Passing `--config` replaces the
+# default `.wippy.yaml`, so name it explicitly (`--config .wippy.yaml`) when
+# you also pass your own config file, or the gate is off.
+#
 # Gives the visible tests (M01, M14) a way to trigger a REAL server-side
 # artifact mutation through the same Session persistence path the agent
 # uses (wippy.session.persist:artifact_repo / :artifact_events), so the Host

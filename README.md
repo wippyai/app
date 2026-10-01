@@ -95,6 +95,20 @@ make build                                     # rebuild all bundles to static/
 wippy run -c                                   # server
 ```
 
+## Session Forms demo
+
+The **Session Forms Demo** page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks a delivery-preference question with a form. The agent uses the `wippy.session.forms:ask_user` trait from the `wippy/session` module and the same model as Ask Wippy.
+
+Test fixtures are off by default. `.wippy.yaml` removes the `app.session_forms_demo` namespace (three scripted fixture agents, a deterministic model and provider, and a dev-only artifact endpoint) unless the `session-forms-fixtures` profile is selected:
+
+```bash
+wippy run -c --profile session-forms-fixtures
+# or, with SESSION_FORMS_DEV_FIXTURES=true in the environment or .env:
+make run-dev
+```
+
+Passing `--config` replaces the default `.wippy.yaml`. When you pass your own config file, add `--config .wippy.yaml` before it so the fixtures stay off.
+
 ## Frontend & theming
 
 All frontend, theming, and web-component guidance lives in [`frontend/docs/`](frontend/docs/README.md). The one rule worth stating up front: customize appearance through the **facade** (`src/app/deps/_index.yaml`) — `css_variables` / `custom_css` propagate to every page and component; per-app CSS does not. See [`frontend/docs/theming.md`](frontend/docs/theming.md).

@@ -63,8 +63,13 @@ lint:
 # Assumes `wippy` is resolvable on PATH, matching CI; see make.ps1's
 # Invoke-WippyLint for the Windows adapter's WIPPY/local-binary fallback (a
 # worktree has no vendored wippy.exe).
+#
+# The second lint run selects the Session Forms fixtures profile: `.wippy.yaml`
+# removes the app.session_forms_demo namespace from a release registry, so the
+# first run does not check the fixture Lua.
 verify: build lint
 	wippy lint --level error --ns 'app,app.*'
+	wippy lint --level error --ns 'app,app.*' --profile session-forms-fixtures
 
 clean-build:
 	cd frontend/applications/main && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir

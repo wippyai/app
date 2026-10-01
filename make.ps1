@@ -114,9 +114,14 @@ function Resolve-WippyBinary {
 
 function Invoke-WippyLint {
     $wippyBin = Resolve-WippyBinary
-    Write-Host "==> $wippyBin lint --level error --ns app,app.*" -ForegroundColor Cyan
-    & $wippyBin lint --level error --ns 'app,app.*'
-    if ($LASTEXITCODE -ne 0) { throw "wippy lint failed (exit $LASTEXITCODE)" }
+    # Mirrors the Makefile's two lint runs. .wippy.yaml removes the
+    # app.session_forms_demo namespace from a release registry, so the second
+    # run selects the fixtures profile to check the fixture Lua too.
+    foreach ($profileArgs in @(@(), @('--profile', 'session-forms-fixtures'))) {
+        Write-Host "==> $wippyBin lint --level error --ns app,app.* $profileArgs" -ForegroundColor Cyan
+        & $wippyBin lint --level error --ns 'app,app.*' @profileArgs
+        if ($LASTEXITCODE -ne 0) { throw "wippy lint failed (exit $LASTEXITCODE)" }
+    }
 }
 
 function Show-Help {

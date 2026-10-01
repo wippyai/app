@@ -9,7 +9,9 @@ import { loginAsAdmin, pageIframeSelector } from './helpers/login'
  * Drives the "Session Forms Fixture" agent (`app.session_forms_demo:fixture_agent`,
  * the SECOND card on the "Session Forms Demo" page) — a deterministic, fully
  * offline dev fixture (src/app/session_forms_demo/generate.lua). The real-model
- * "Forms demo" agent (first card) is never used here.
+ * "Forms demo" agent (first card) is never used here. The fixture agents exist
+ * only when the app runs with the `session-forms-fixtures` profile
+ * (SESSION_FORMS_DEV_FIXTURES=true with `make run-dev`; see e2e/README.md).
  *
  * Navigation note — "Session Forms Demo" (view.page `app.views:session-forms-demo`,
  * `mountRoute: /session-forms-demo/:part(.*)*`) has no sidebar entry anywhere
