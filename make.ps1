@@ -35,6 +35,7 @@ $wcs = @(
 # Subset that runs `npm run lint` - mirrors Makefile's `lint:` recipe.
 $lintDirs = @(
     'frontend/applications/main'
+    'frontend/applications/session-forms-demo'
     'frontend/web-components/reaction-bar'
     'frontend/web-components/websocket-log'
     'frontend/web-components/chart-circle'
@@ -77,6 +78,14 @@ function Invoke-Lint {
     Push-Location $Dir
     try {
         Write-Host "==> lint $Dir" -ForegroundColor Cyan
+        # Mirrors the Makefile's `lint: export ESLINT_USE_FLAT_CONFIG :=
+        # false` - every app here lints via a classic `.eslintrc.cjs` +
+        # `--ext`, but ESLint's flat-config search walks up past this repo's
+        # own root. A worktree nested under the gen-2-chat Web Host checkout
+        # (which has its own root eslint.config.mjs) would otherwise have
+        # that unrelated flat config silently picked up, breaking `--ext`
+        # for every app. $env: here is process-scoped to this make.ps1 run.
+        $env:ESLINT_USE_FLAT_CONFIG = 'false'
         npm run lint
         if ($LASTEXITCODE -ne 0) { throw "npm run lint failed in $Dir (exit $LASTEXITCODE)" }
     }
@@ -91,6 +100,25 @@ function Invoke-BuildAll {
     }
 }
 
+# Resolves the wippy runtime binary the same way scripts/run-dev.mjs does:
+# an explicit $env:WIPPY path first, then a vendored ./wippy.exe (present on
+# a real checkout, git-ignored and normally absent in a bare worktree), then
+# bare `wippy` on PATH (what the GitLab CI "Lint" stage relies on after its
+# own `wippy install`). Mirrors run-dev.mjs's resolveWippyBinary() so both
+# entrypoints agree on where the binary comes from.
+function Resolve-WippyBinary {
+    if ($env:WIPPY) { return $env:WIPPY }
+    if (Test-Path './wippy.exe') { return './wippy.exe' }
+    return 'wippy'
+}
+
+function Invoke-WippyLint {
+    $wippyBin = Resolve-WippyBinary
+    Write-Host "==> $wippyBin lint --level error" -ForegroundColor Cyan
+    & $wippyBin lint --level error
+    if ($LASTEXITCODE -ne 0) { throw "wippy lint failed (exit $LASTEXITCODE)" }
+}
+
 function Show-Help {
     Write-Host "make - Windows mirror of the Makefile (via make.bat -> make.ps1)`n"
     Write-Host "Targets:"
@@ -98,6 +126,7 @@ function Show-Help {
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
+    Write-Host "  verify             build + lint + wippy lint --level error"
     Write-Host "  clean-build        Wipe node_modules + reinstall + rebuild"
     Write-Host "  dev                npm run dev in frontend/applications/main"
     Write-Host "  run                build, then ./wippy.exe run -c"
@@ -137,6 +166,14 @@ try {
         }
         '^lint$' {
             foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            break
+        }
+        '^verify$' {
+            # Mirrors the Makefile's `verify: build lint` + `wippy lint
+            # --level error` recipe one-for-one.
+            Invoke-BuildAll
+            foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            Invoke-WippyLint
             break
         }
         '^clean-build$' {
