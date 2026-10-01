@@ -159,11 +159,11 @@ test.describe('Session Forms Fixture (EE2-2461)', () => {
  * and "ask me preferences" forms (see generate.lua's
  * ASK_USER_DELIVERY_ARGUMENTS / ASK_USER_PREFERENCES_ARGUMENTS).
  *
- * STATUS: written against the V2 contract (decisions.md D32 and spec section 8
- * and 16) before the V2 Session server and the V2 <wippy-form> renderer exist.
- * Not run yet. Locators assume what the contract implies and what the V1
- * fields form already does; re-align them at integration if the component
- * differs:
+ * Written against the V2 contract (decisions.md D32 and spec section 8 and 16)
+ * and run against the V2 Session server and the V2 <wippy-form> renderer.
+ * The date box is typed into one key at a time (`typeDateKeyByKey`), because a
+ * single `fill` never shows a box that rewrites itself between keys. The
+ * locators rely on:
  *  - each control is reachable by its field label (`getByLabel`), a checkbox
  *    by role + label, a radio by role + option label;
  *  - the Submit button is named "Submit" (the fixtures set no `submit_label`);
@@ -215,10 +215,30 @@ function readOnlyValues(pairs: ReadonlyArray<readonly [label: string, value: str
   return new RegExp(source)
 }
 
-/** Picks a date by typing it (works for a typed picker and a native date input), then closes a picker overlay if there is one. */
-async function typeDate(control: Locator, isoDate: string) {
-  await control.fill(isoDate)
-  await control.press('Escape')
+/**
+ * Types a date into the date box one key at a time, with real key events, and
+ * checks after every key that the box holds exactly what was typed so far. A
+ * date box that rewrites itself from its last accepted date loses each key as
+ * it is typed (EE2-2462 test round, finding F1), which `fill` (one input
+ * event, like a paste) never shows.
+ */
+async function typeDateKeyByKey(control: Locator, text: string) {
+  await control.click()
+  let typed = ''
+  for (const key of text) {
+    typed += key
+    await control.pressSequentially(key)
+    await expect(control).toHaveValue(typed)
+  }
+}
+
+/** Selects what is in a box and types over it, key by key. */
+async function retypeDate(control: Locator, text: string) {
+  await control.click()
+  await control.press('Control+A')
+  await control.press('Backspace')
+  await expect(control).toHaveValue('')
+  await typeDateKeyByKey(control, text)
 }
 
 /** Counts answer submissions (POST /artifact/:id/state) the page makes. */
@@ -268,7 +288,7 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
     await fullName.fill(DELIVERY_VALUES.fullName)
     await email.fill(DELIVERY_VALUES.invalidEmail)
     await phone.fill(DELIVERY_VALUES.phone)
-    await typeDate(deliveryDate, DELIVERY_VALUES.deliveryDate)
+    await typeDateKeyByKey(deliveryDate, DELIVERY_VALUES.deliveryDate)
     await parcelCount.fill(DELIVERY_VALUES.parcelCount)
     await notes.fill(DELIVERY_VALUES.notes)
     await consent.click()
@@ -322,6 +342,186 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
+  test('ask me delivery -> a typed date that is not a valid date stays in the box with its error until it is corrected, and the corrected date is saved', async ({ page }) => {
+    const consoleErrors: string[] = []
+    page.on('console', (m) => {
+      if (m.type() === 'error')
+        consoleErrors.push(m.text())
+    })
+    page.on('pageerror', e => consoleErrors.push(e.message))
+    const answerSubmissions = watchAnswerSubmissions(page)
+
+    await openFixtureChat(page)
+    consoleErrors.length = 0
+
+    await sendChatMessage(page, 'ask me delivery')
+
+    const formCard = page.locator('wippy-form')
+    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+
+    const deliveryDate = formCard.getByLabel('Delivery date')
+    const submit = formCard.getByRole('button', { name: /^submit$/i })
+    const status = formCard.getByRole('status')
+
+    // Everything but the date is valid (the parcel count starts at 1).
+    await formCard.getByLabel('Full name').fill(DELIVERY_VALUES.fullName)
+    await formCard.getByLabel('Email address').fill(DELIVERY_VALUES.email)
+    await formCard.getByLabel('Phone number').fill(DELIVERY_VALUES.phone)
+    await formCard.getByRole('checkbox', { name: /agree to be contacted about this delivery/i }).click()
+
+    // A day that does not exist, typed one key at a time: the box keeps every
+    // key, the submit names the date, and the text is still in the box after
+    // the error appears, after the box is left, and after a second submit.
+    await typeDateKeyByKey(deliveryDate, '2026-02-30')
+    await submit.click()
+    await expect(deliveryDate).toHaveAccessibleDescription(/valid date as YYYY-MM-DD/i)
+    await expect(deliveryDate).toHaveAttribute('aria-invalid', 'true')
+    await expect(deliveryDate).toBeFocused()
+    await expect(deliveryDate).toHaveValue('2026-02-30')
+    await expect(status).toHaveText('1 question needs attention.')
+    expect(answerSubmissions).toHaveLength(0)
+
+    await deliveryDate.press('Tab')
+    await expect(deliveryDate).not.toBeFocused()
+    await expect(deliveryDate).toHaveValue('2026-02-30')
+    await submit.click()
+    await expect(deliveryDate).toHaveValue('2026-02-30')
+    expect(answerSubmissions).toHaveLength(0)
+
+    // Text that is no date at all.
+    await retypeDate(deliveryDate, 'next tuesday')
+    await submit.click()
+    await expect(deliveryDate).toHaveAccessibleDescription(/valid date as YYYY-MM-DD/i)
+    await expect(deliveryDate).toHaveValue('next tuesday')
+
+    // A real date outside the allowed range, on each side.
+    await retypeDate(deliveryDate, '2025-12-31')
+    await submit.click()
+    await expect(deliveryDate).toHaveAccessibleDescription(/2026-01-01 or later/)
+    await expect(deliveryDate).toHaveValue('2025-12-31')
+    await retypeDate(deliveryDate, '2028-01-01')
+    await submit.click()
+    await expect(deliveryDate).toHaveAccessibleDescription(/2027-12-31 or earlier/)
+    await expect(deliveryDate).toHaveValue('2028-01-01')
+    expect(answerSubmissions).toHaveLength(0)
+
+    // Corrected: the error and the status text go as soon as the question is fixed.
+    await retypeDate(deliveryDate, '2026-12-24')
+    await expect(status).toHaveText('')
+    await expect(deliveryDate).not.toHaveAttribute('aria-invalid', 'true')
+    await submit.click()
+    await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
+    await expect.poll(() => answerSubmissions.length).toBe(1)
+
+    const acknowledgement = `Thanks, noted: full_name=${DELIVERY_VALUES.fullName}; email=${DELIVERY_VALUES.email}; phone=${DELIVERY_VALUES.phone}; delivery_date=2026-12-24; parcel_count=1; consent=yes`
+    await expect(page.getByText(acknowledgement, { exact: true })).toBeVisible({ timeout: 10_000 })
+
+    expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+
+  test('ask me delivery -> the date box can be edited in the middle of the text without the caret jumping to the end', async ({ page }) => {
+    await openFixtureChat(page)
+    await sendChatMessage(page, 'ask me delivery')
+
+    const formCard = page.locator('wippy-form')
+    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const deliveryDate = formCard.getByLabel('Delivery date')
+
+    await typeDateKeyByKey(deliveryDate, '2026-06-15')
+    // Caret to just after "2026-", delete the month, and type another one.
+    for (let i = 0; i < 5; i++)
+      await deliveryDate.press('ArrowLeft')
+    await deliveryDate.press('Delete')
+    await deliveryDate.press('Delete')
+    await expect(deliveryDate).toHaveValue('2026--15')
+    await deliveryDate.pressSequentially('0')
+    await expect(deliveryDate).toHaveValue('2026-0-15')
+    await deliveryDate.pressSequentially('8')
+    await expect(deliveryDate).toHaveValue('2026-08-15')
+  })
+
+  test('ask me delivery -> the calendar picks a date by mouse and by keyboard, and its panel is readable in both themes', async ({ page }) => {
+    await openFixtureChat(page)
+    await sendChatMessage(page, 'ask me delivery')
+
+    const formCard = page.locator('wippy-form')
+    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+    const deliveryDate = formCard.getByLabel('Delivery date')
+    const calendarButton = formCard.getByRole('button', { name: /choose date/i })
+    const calendar = formCard.getByRole('dialog', { name: /choose date/i })
+
+    // Typed text anchors the calendar on a known month.
+    await typeDateKeyByKey(deliveryDate, '2026-06-15')
+
+    // By mouse: the button opens it, a day picks it, the box shows it.
+    await calendarButton.click()
+    await expect(calendar).toBeVisible()
+    await calendar.getByText('20', { exact: true }).click()
+    await expect(deliveryDate).toHaveValue('2026-06-20')
+    await expect(calendar).toBeHidden()
+
+    // By keyboard: ArrowDown opens it, a second ArrowDown moves into the days,
+    // the arrows move by day, Enter picks and gives focus back to the box.
+    await deliveryDate.focus()
+    await deliveryDate.press('ArrowDown')
+    await expect(calendar).toBeVisible()
+    await page.keyboard.press('ArrowDown')
+    // Focus reaches a day a moment later; wait for it before moving on. Which
+    // day it enters on is PrimeVue's choice (the first cell of the grid, which
+    // can be a greyed day of May), so the test moves one day on, which is
+    // always a June day, and expects the box to show that day.
+    const focusedDay = calendar.locator(':focus')
+    await expect(focusedDay).toHaveCount(1)
+    // PrimeVue moves focus once more when the panel has finished opening.
+    await page.waitForTimeout(400)
+    const entryDay = (await focusedDay.innerText()).trim()
+    await page.keyboard.press('ArrowRight')
+    // `.not.toHaveText` would pass while focus is between two days, so poll for the new day.
+    await expect.poll(async () => (await focusedDay.innerText().catch(() => entryDay)).trim()).not.toBe(entryDay)
+    const pickedDay = (await focusedDay.innerText()).trim()
+    await page.keyboard.press('Enter')
+    await expect(deliveryDate).toHaveValue(`2026-06-${pickedDay.padStart(2, '0')}`)
+    await expect(calendar).toBeHidden()
+    await expect(deliveryDate).toBeFocused()
+
+    // Escape closes it and keeps what the box holds.
+    const keyboardPick = await deliveryDate.inputValue()
+    await deliveryDate.press('ArrowDown')
+    await expect(calendar).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(calendar).toBeHidden()
+    await expect(deliveryDate).toHaveValue(keyboardPick)
+
+    // The calendar's own colours follow the form's forced theme (it opens in the
+    // theme plugin's overlay layer, outside the themed container, so it needs
+    // the container's class to read in the Dark theme).
+    for (const mode of ['dark', 'light'] as const) {
+      await formCard.evaluate((host, m) => {
+        const root = host.shadowRoot!.querySelector('[data-wippy-theme-root]') as HTMLElement
+        for (const el of [host as HTMLElement, root]) {
+          el.classList.remove('w-theme-dark', 'w-theme-light')
+          el.classList.add(`w-theme-${m}`)
+        }
+      }, mode)
+      await calendarButton.click()
+      await expect(calendar).toBeVisible()
+      await expect(calendar).toHaveClass(new RegExp(`w-theme-${mode}`))
+      const luminance = await calendar.evaluate((el) => {
+        // Chromium reports a colour as rgb (0 to 255) or as color(srgb) (0 to 1).
+        const background = getComputedStyle(el).backgroundColor
+        const scale = background.startsWith('color(') ? 1 : 255
+        const [r, g, b] = background.match(/[\d.]+/g)!.slice(0, 3).map(Number)
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) / scale
+      })
+      if (mode === 'dark')
+        expect(luminance).toBeLessThan(0.3)
+      else
+        expect(luminance).toBeGreaterThan(0.7)
+      await page.keyboard.press('Escape')
+      await expect(calendar).toBeHidden()
+    }
+  })
+
   test('ask me preferences -> unticked checkboxes are saved as no, a skipped note stays skipped, and both survive a reload', async ({ page }) => {
     const consoleErrors: string[] = []
     page.on('console', (m) => {
@@ -345,7 +545,16 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
     const smsUpdates = formCard.getByRole('checkbox', { name: /send me sms updates/i })
     const emailUpdates = formCard.getByRole('checkbox', { name: /send me email updates/i })
     const leaveAtDoor = formCard.getByRole('checkbox', { name: /leave the parcel at the door/i })
+    // Sent with nothing chosen: the group is in error, and the error is on the
+    // radios themselves (`aria-invalid`), where a screen reader lands. The
+    // status line says so and is emptied once a choice is made.
+    await formCard.getByRole('button', { name: /^submit$/i }).click()
+    await expect(formCard.getByRole('radio', { name: 'Courier' })).toHaveAttribute('aria-invalid', 'true')
+    await expect(formCard.getByRole('radio', { name: 'Pickup point' })).toHaveAttribute('aria-invalid', 'true')
+    await expect(formCard.getByRole('status')).toHaveText('1 question needs attention.')
     await formCard.getByRole('radio', { name: 'Courier' }).click()
+    await expect(formCard.getByRole('radio', { name: 'Courier' })).not.toHaveAttribute('aria-invalid', 'true')
+    await expect(formCard.getByRole('status')).toHaveText('')
     await smsUpdates.click()
     await expect(smsUpdates).toBeChecked()
     await expect(emailUpdates).not.toBeChecked()
