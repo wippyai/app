@@ -114,8 +114,8 @@ function Resolve-WippyBinary {
 
 function Invoke-WippyLint {
     $wippyBin = Resolve-WippyBinary
-    Write-Host "==> $wippyBin lint --level error" -ForegroundColor Cyan
-    & $wippyBin lint --level error
+    Write-Host "==> $wippyBin lint --level error --ns app,app.*" -ForegroundColor Cyan
+    & $wippyBin lint --level error --ns 'app,app.*'
     if ($LASTEXITCODE -ne 0) { throw "wippy lint failed (exit $LASTEXITCODE)" }
 }
 
@@ -126,7 +126,7 @@ function Show-Help {
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
-    Write-Host "  verify             build + lint + wippy lint --level error"
+    Write-Host "  verify             build + lint + wippy lint --level error for app, app.*"
     Write-Host "  clean-build        Wipe node_modules + reinstall + rebuild"
     Write-Host "  dev                npm run dev in frontend/applications/main"
     Write-Host "  run                build, then ./wippy.exe run -c"

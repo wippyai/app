@@ -122,7 +122,10 @@ async function openChat(agent: DemoAgent) {
       </div>
     </div>
 
-    <p v-if="errorMessage" class="text-xs text-danger">
+    <p
+      v-if="errorMessage"
+      class="text-xs text-danger"
+    >
       {{ errorMessage }}
     </p>
   </div>

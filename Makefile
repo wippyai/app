@@ -55,15 +55,16 @@ lint:
 	cd frontend/web-components/counter-persist && npm run lint
 
 # Full local verification: frontend build + lint across every app/web
-# component, then the same backend Lua lint the GitLab CI "Lint" stage runs
-# (.gitlab-ci.yml: `wippy install` + `wippy lint --level error` — `wippy
-# install` is a fresh-environment bootstrap step, not re-run here; a local
-# checkout already has `.wippy/` populated). Assumes `wippy` is resolvable
-# on PATH, matching CI; see make.ps1's Invoke-WippyLint for the Windows
-# adapter's WIPPY/local-binary fallback (a worktree has no vendored
-# wippy.exe).
+# component, then the backend Lua lint for this app's own namespaces
+# (`app`, `app.*`). The GitLab CI "Lint" stage lints the whole workspace,
+# vendored modules included; under wippy v0.3.43a that reports errors inside
+# the vendored keeper module (keeper.logger:client,
+# keeper.state.observer:registry_watcher), which this repo does not own.
+# Assumes `wippy` is resolvable on PATH, matching CI; see make.ps1's
+# Invoke-WippyLint for the Windows adapter's WIPPY/local-binary fallback (a
+# worktree has no vendored wippy.exe).
 verify: build lint
-	wippy lint --level error
+	wippy lint --level error --ns 'app,app.*'
 
 clean-build:
 	cd frontend/applications/main && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir
