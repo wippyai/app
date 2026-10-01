@@ -89,9 +89,13 @@ pnpm test:e2e:headed
   a form, the test answers it, and the form stays answered after a reload; and
   a form answered after the conversation has moved on gets the late-answer
   notice. Six tests cover the standard fields on the `ask me delivery` and
-  `ask me preferences` forms: browser-side checks, the server's
-  `pattern_mismatch` refusal, typed and picked dates, unticked checkboxes, and
-  the exact saved values after a reload. Most fail on a console error.
+  `ask me preferences` forms, which the fixture asks through `ask_user_fields`.
+  They check browser-side checks, the server's `pattern_mismatch` refusal,
+  typed and picked dates, unticked checkboxes, and the exact saved values after
+  a reload. One test uses the steering fixture agent, which has only
+  `ask_user`, and checks that the server refuses a form with standard fields on
+  `ask_user` with `unsupported_type` and that the agent gets the refusal. Most
+  tests fail on a console error.
 - `iframe-engine.spec.ts` checks the default iframe render engine. A page renders
   as a srcdoc iframe, the fragment gateway is never requested, and `$W` and
   state work. It is skipped when `WIPPY_ENGINE=fragment`.

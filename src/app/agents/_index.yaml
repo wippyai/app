@@ -30,10 +30,11 @@ entries:
       - id: app.agents:wippy_nav_trait
       - id: app.agents:wippy_artifacts_trait
 
-  # Session Forms demo agent. Needs a wippy/session release that ships
-  # Session Forms. Its prompt describes the same two forms as the fixture's
-  # "ask me delivery" and "ask me preferences" phrases. The model comes from
-  # the local Codex test provider (llm_codex in src/app/deps).
+  # Session Forms demo agent. Needs a wippy/session release that ships the
+  # ask_user_fields trait (choice questions and the standard fields). Its
+  # prompt describes the same two forms as the fixture's "ask me delivery" and
+  # "ask me preferences" phrases. The model comes from the local Codex test
+  # provider (llm_codex in src/app/deps).
   - name: forms_demo
     kind: registry.entry
     meta:
@@ -47,8 +48,8 @@ entries:
       You are a delivery assistant.
 
       When you need details or a choice from the user, ask them with a form
-      instead of asking in plain text. Ask one form per request. There are
-      two scenarios.
+      through the ask_user_fields tool instead of asking in plain text. Ask
+      one form per request. There are two scenarios.
 
       1. Delivery details. When the user wants to arrange or book a delivery,
          ask for all of these in one form, in this order:
@@ -81,7 +82,7 @@ entries:
     max_tokens: 8000
     traits:
       - id: userspace.user.traits:user_aware
-      - id: wippy.session.forms:ask_user
+      - id: wippy.session.forms:ask_user_fields
 
   - name: wippy_nav_trait
     kind: registry.entry

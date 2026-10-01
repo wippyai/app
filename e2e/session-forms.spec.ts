@@ -10,7 +10,10 @@ import { loginAsAdmin, pageIframeSelector } from './helpers/login'
  */
 
 const DEMO_PAGE_IFRAME_SELECTOR = pageIframeSelector('app.views:session-forms-demo')
+// The fixture agent has both forms traits (ask_user and ask_user_fields). The
+// steering fixture agent has only ask_user.
 const FIXTURE_REGISTRY_ID = 'app.session_forms_demo:fixture_agent'
+const STEERING_FIXTURE_REGISTRY_ID = 'app.session_forms_demo:steering_fixture_agent'
 const CHAT_INPUT_PLACEHOLDER = 'Type a message'
 // The first form needs a tool call, an artifact and a component load.
 const FORM_TIMEOUT = 15_000
@@ -22,15 +25,15 @@ const ANSWERED_MESSAGE = 'Answered a question about delivery.'
 const PROPOSE_ACTION_REPLY = 'I plan to book a courier pickup. I will only do it after you confirm.'
 const LATE_ANSWER_REPLY = 'This answer arrived after the conversation moved on. Please confirm again before I act on it.'
 
-/** Logs in and starts a new chat with the fixture agent from the Session Forms Demo page. */
-async function openFixtureChat(page: Page) {
+/** Logs in and starts a new chat with a fixture agent from the Session Forms Demo page. */
+async function openFixtureChat(page: Page, registryId = FIXTURE_REGISTRY_ID) {
   await loginAsAdmin(page)
   // The page has no sidebar entry, so open it by URL.
   await page.goto('/session-forms-demo')
 
   const demoFrame = page.frameLocator(DEMO_PAGE_IFRAME_SELECTOR)
   // The titles share a prefix, so match the card by registry id.
-  const fixtureCard = demoFrame.locator('.rounded-lg').filter({ hasText: FIXTURE_REGISTRY_ID })
+  const fixtureCard = demoFrame.locator('.rounded-lg').filter({ hasText: registryId })
   await expect(fixtureCard).toHaveCount(1, { timeout: 15_000 })
   await fixtureCard.getByRole('button', { name: /start chat/i }).click()
 
@@ -99,8 +102,8 @@ test.describe('Session Forms Fixture', () => {
 
 /*
  * Standard fields: the fixture's "ask me delivery" and "ask me preferences"
- * forms (see generate.lua's ASK_USER_DELIVERY_ARGUMENTS and
- * ASK_USER_PREFERENCES_ARGUMENTS).
+ * forms, which it asks through the ask_user_fields tool (see generate.lua's
+ * ASK_USER_DELIVERY_ARGUMENTS and ASK_USER_PREFERENCES_ARGUMENTS).
  *
  * The date box is typed into one key at a time (`typeDateKeyByKey`), because a
  * single `fill` never shows a box that rewrites itself between keys. The
@@ -574,6 +577,34 @@ test.describe('Session Forms V2 standard fields', () => {
     await expect(page.locator('wippy-form')).toHaveText(readOnly)
     await expect(page.getByText(PREFERENCES_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
     await expect(page.getByText(acknowledgement, { exact: true })).toBeVisible()
+
+    expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+})
+
+// These replies must match generate.lua. The fixture quotes a tool result
+// other than read_form on one line, so its reply shows what the agent was told.
+const REFUSED_BY_ASK_USER_REPLY = /^Tool result from ask_user: .*unsupported_type/
+const NO_FIELD_FORMS_REPLY = 'I can\'t create forms with these fields here.'
+
+test.describe('Session Forms tools: ask_user and ask_user_fields', () => {
+  test('steering fixture (ask_user only) -> a form with standard fields sent to ask_user is refused with unsupported_type, and the agent gets the refusal', async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page)
+
+    await openFixtureChat(page, STEERING_FIXTURE_REGISTRY_ID)
+    consoleErrors.length = 0
+
+    // The server refuses the delivery-details form on ask_user, so no form is
+    // created, and the agent's next reply quotes the refusal.
+    await sendChatMessage(page, 'ask me delivery via ask_user')
+    await expect(page.getByText(REFUSED_BY_ASK_USER_REPLY)).toBeVisible({ timeout: FORM_TIMEOUT })
+    await expect(page.locator('wippy-form')).toHaveCount(0)
+
+    // Without the ask_user_fields trait the agent is offered no tool for the
+    // same form, so the fixture says so and makes no call.
+    await sendChatMessage(page, 'ask me delivery')
+    await expect(page.getByText(NO_FIELD_FORMS_REPLY, { exact: true })).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('wippy-form')).toHaveCount(0)
 
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })

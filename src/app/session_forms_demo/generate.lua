@@ -13,7 +13,10 @@ type AnswersBlock = {
 }
 
 local FIXTURE_PROVIDER = "app.session_forms_demo:provider"
+-- ask_user takes choice questions only, and ask_user_fields also takes the
+-- standard fields. Each tool comes with its own trait.
 local ASK_USER_TOOL = "wippy.session.forms:ask_user_tool"
+local ASK_USER_FIELDS_TOOL = "wippy.session.forms:ask_user_fields_tool"
 local READ_FORM_TOOL = "wippy.session.forms:read_form_tool"
 local READ_FORM_TOOL_NAME = "read_form"
 -- Must match the element that wippy/session's forms/answer_text.lua writes,
@@ -22,13 +25,14 @@ local ANSWERS_OPEN = "<wippy-form-answers record='"
 local ANSWERS_CLOSE = "</wippy-form-answers>"
 local READ_FORM_PREFIX = "read form"
 local NO_FORMS_HERE_TEXT = "I can't create forms here."
+local NO_FIELD_FORMS_TEXT = "I can't create forms with these fields here."
 local PROPOSE_ACTION_TEXT = "I plan to book a courier pickup. I will only do it after you confirm."
 local WORK_SLOWLY_TEXT = "Done working."
 local LATE_ANSWER_TEXT = "This answer arrived after the conversation moved on. Please confirm again before I act on it."
 local CHECKPOINT_SUMMARY_TEXT = "Summary: deterministic Session Forms fixture checkpoint. Recent activity "
     .. "has been condensed for this test session; consult the session's own form and message records for "
     .. "exact details."
-local READ_FORM_RESULT_MAX_CHARS = 1000
+local TOOL_RESULT_MAX_CHARS = 1000
 local CHECKPOINT_TOKENS_TRIGGER = "checkpoint now"
 local LIST_FORMS_TRIGGER = "list forms"
 -- Must match the opening of HEADING in wippy/session's forms/form_index.lua.
@@ -367,18 +371,21 @@ local function is_checkpoint_summary_request(messages)
     return false
 end
 
+local function result_tool_name(message)
+    return message.name or message.tool_name or message.function_name
+end
+
 local function is_read_form_result(message)
     if type(message) ~= "table" or message.role ~= "function_result" then
         return false
     end
-    local name = message.name or message.tool_name or message.function_name
-    return name == READ_FORM_TOOL_NAME
+    return result_tool_name(message) == READ_FORM_TOOL_NAME
 end
 
-local function read_form_result_text(message)
+local function tool_result_text(message)
     local text = table.concat(content_texts(message.content), "\n")
-    if #text > READ_FORM_RESULT_MAX_CHARS then
-        text = string.sub(text, 1, READ_FORM_RESULT_MAX_CHARS)
+    if #text > TOOL_RESULT_MAX_CHARS then
+        text = string.sub(text, 1, TOOL_RESULT_MAX_CHARS)
     end
     return text
 end
@@ -556,10 +563,13 @@ local function handler(contract_args)
     for index = #messages, user_index + 1, -1 do
         local message = messages[index]
         if is_read_form_result(message) then
-            return finish("Form record: " .. read_form_result_text(message))
+            return finish("Form record: " .. tool_result_text(message))
         end
+        -- Any other result, such as a form the server refused, is quoted on
+        -- one line, so a test can read what the agent was told.
         if type(message) == "table" and message.role == "function_result" then
-            return finish("Unexpected tool result: " .. tostring(message.name))
+            local text = (string.gsub(tool_result_text(message), "%s*\n%s*", " "))
+            return finish("Tool result from " .. tostring(result_tool_name(message)) .. ": " .. text)
         end
     end
 
@@ -578,10 +588,12 @@ local function handler(contract_args)
         return finish(content, tool_calls, tokens)
     end
 
-    local function ask_form(arguments)
-        local call = tool_call(messages, contract_args.tools, ASK_USER_TOOL, arguments)
+    -- Asks for a form through the given tool, or replies with missing_text
+    -- when the agent does not offer that tool.
+    local function ask_form(tool_id: string, arguments, missing_text: string)
+        local call = tool_call(messages, contract_args.tools, tool_id, arguments)
         if not call then
-            return reply(NO_FORMS_HERE_TEXT)
+            return reply(missing_text)
         end
         return reply("", { call })
     end
@@ -614,21 +626,28 @@ local function handler(contract_args)
         return reply("Thanks, noted: " .. answers_json)
     end
 
-    -- The longer "ask me" phrases come before "ask me", which they contain.
+    -- A longer phrase comes before any shorter phrase that it contains.
+    -- "ask me delivery via ask_user" sends the delivery form to ask_user,
+    -- which takes choice questions only, so the server refuses it with
+    -- unsupported_type and the result reply above quotes the refusal.
+    if string.find(lower, "ask me delivery via ask_user", 1, true) then
+        return ask_form(ASK_USER_TOOL, ASK_USER_DELIVERY_ARGUMENTS, NO_FORMS_HERE_TEXT)
+    end
+
     if string.find(lower, "ask me delivery", 1, true) then
-        return ask_form(ASK_USER_DELIVERY_ARGUMENTS)
+        return ask_form(ASK_USER_FIELDS_TOOL, ASK_USER_DELIVERY_ARGUMENTS, NO_FIELD_FORMS_TEXT)
     end
 
     if string.find(lower, "ask me preferences", 1, true) then
-        return ask_form(ASK_USER_PREFERENCES_ARGUMENTS)
+        return ask_form(ASK_USER_FIELDS_TOOL, ASK_USER_PREFERENCES_ARGUMENTS, NO_FIELD_FORMS_TEXT)
     end
 
     if string.find(lower, "ask me many", 1, true) then
-        return ask_form(ASK_USER_MANY_ARGUMENTS)
+        return ask_form(ASK_USER_TOOL, ASK_USER_MANY_ARGUMENTS, NO_FORMS_HERE_TEXT)
     end
 
     if string.find(lower, "ask me", 1, true) then
-        return ask_form(ASK_USER_ARGUMENTS)
+        return ask_form(ASK_USER_TOOL, ASK_USER_ARGUMENTS, NO_FORMS_HERE_TEXT)
     end
 
     if string.find(lower, "propose action", 1, true) then

@@ -64,7 +64,7 @@ entries:
       name: session-forms-deterministic
       type: llm.model
       title: Session Forms Deterministic
-      comment: Deterministic model that exercises the ask_user form flow without a real LLM
+      comment: Deterministic model that exercises the ask_user and ask_user_fields form flows without a real LLM
       capabilities:
         - generate
         - tool_use
@@ -80,6 +80,8 @@ entries:
   # The checkpoint options apply to the agent that sets them, so other agents
   # keep the default checkpoint behavior. They set a 5000 token threshold and
   # use the fixture model for the summary.
+  # The agent has both forms traits because it exercises both tools, and a
+  # real agent should have only one of them.
   - name: fixture_agent
     kind: registry.entry
     meta:
@@ -99,6 +101,7 @@ entries:
     max_tokens: 4096
     traits:
       - id: wippy.session.forms:ask_user
+      - id: wippy.session.forms:ask_user_fields
     agent_options:
       checkpoint:
         function_id: wippy.session.funcs:checkpoint
@@ -106,7 +109,9 @@ entries:
         model: session-forms-deterministic
 
   # fixture_agent plus the Session steering trait, so the user can type while a
-  # turn runs and tests can check steering together with form answers.
+  # turn runs and tests can check steering together with form answers. It has
+  # only the ask_user trait, so "ask me delivery via ask_user" shows the server
+  # refusing a form with standard fields on ask_user.
   - name: steering_fixture_agent
     kind: registry.entry
     meta:
@@ -133,9 +138,9 @@ entries:
         token_threshold: 5000
         model: session-forms-deterministic
 
-  # fixture_agent without the forms trait, so the model is offered no ask_user
-  # tool. "ask me" then replies that it can't create forms, and form answers
-  # are still handled.
+  # fixture_agent without a forms trait, so the model is offered no form tool.
+  # "ask me" then replies that it can't create forms, and form answers are
+  # still handled.
   - name: plain_fixture_agent
     kind: registry.entry
     meta:
