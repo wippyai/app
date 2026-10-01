@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useApi, useHost } from '../composables/useWippy'
 
 // Minimal shape of GET /api/v1/agents/list (see the Host's
@@ -57,6 +57,26 @@ const host = useHost()
 
 const pendingTitle = ref<string | null>(null)
 const errorMessage = ref<string | null>(null)
+// Titles the server actually lists. The fixture agents exist only when the
+// app runs with the Session Forms dev fixtures on, so a card is shown only
+// for an agent the server returns (null until the first response).
+const listedTitles = ref<Set<string> | null>(null)
+
+const visibleAgents = computed(() => {
+  const titles = listedTitles.value
+  return titles ? AGENTS.filter(agent => titles.has(agent.title)) : []
+})
+
+onMounted(async () => {
+  try {
+    const response = await api.get<AgentListResponse>('/api/v1/agents/list')
+    listedTitles.value = new Set(response.data.agents.map(item => item.title))
+  }
+  catch (err) {
+    listedTitles.value = new Set()
+    errorMessage.value = err instanceof Error ? err.message : 'Failed to load the agents list.'
+  }
+})
 
 async function openChat(agent: DemoAgent) {
   errorMessage.value = null
@@ -88,15 +108,16 @@ async function openChat(agent: DemoAgent) {
         Session forms
       </h2>
       <p class="text-xs text-surface-500 mt-1">
-        Four agents ask the same delivery-preference question: one talks to a
-        real model, the others are scripted fixtures that never leave this
-        server.
+        The agents here ask a delivery-preference question with a form. Forms
+        demo talks to a real model. When the app runs with the Session Forms
+        dev fixtures on, three scripted fixture agents that never leave this
+        server are listed as well.
       </p>
     </header>
 
     <div class="flex flex-col gap-3">
       <div
-        v-for="agent in AGENTS"
+        v-for="agent in visibleAgents"
         :key="agent.registryId"
         class="border border-surface-200 dark:border-surface-700 rounded-lg p-3 flex items-start justify-between gap-3"
       >
