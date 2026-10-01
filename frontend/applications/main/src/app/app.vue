@@ -46,8 +46,15 @@ function cycleTheme() {
   setTheme(themeOptions[(idx + 1) % themeOptions.length].mode)
 }
 
-instance.on('action:navigate', (data: any) => {
-  const path = data?.data?.path || data?.path
+// The relay nests the process.send payload under `.data`; accept either shape.
+interface NavigatePayload {
+  path?: string
+  data?: { path?: string }
+}
+
+instance.on('action:navigate', (raw: unknown) => {
+  const payload = raw as NavigatePayload | null | undefined
+  const path = payload?.data?.path || payload?.path
   if (path) router.push(path)
 })
 
@@ -128,7 +135,7 @@ onMounted(() => {
   fetchMe()
   fetchWippyAgent()
   themeMode.value = host.getThemeMode()
-  instance.on('@theme', (mode: any) => {
+  instance.on('@theme', (mode) => {
     themeMode.value = mode
   })
 })
