@@ -2,12 +2,11 @@ import type { FrameLocator, Page } from '@playwright/test'
 
 /**
  * CSS selector for an outer wippy host iframe, for a build that wraps the
- * whole Web Host in `<iframe src="...iframe.html">`. Facade 0.6.41 (current)
- * instead mounts the Host as a top-level ESM module directly into the
- * page's own `#app` — no wrapper iframe at all; only child `view.page`
- * content gets its own (srcdoc) iframe (see managed-layout.spec.ts's
- * "Topology" note, and `getHostFrame` below, which detects which shape is
- * live instead of assuming one).
+ * whole Web Host in `<iframe src="...iframe.html">`. The current facade
+ * mounts the Host as a top-level ESM module in the page's own `#app`, so only
+ * child `view.page` content gets its own (srcdoc) iframe. `getHostFrame`
+ * detects which shape is live (see also the Topology note in
+ * managed-layout.spec.ts).
  */
 export const HOST_IFRAME_SELECTOR = 'iframe[src*="iframe.html"]'
 
@@ -43,8 +42,8 @@ export async function getHostFrame(page: Page): Promise<Page | FrameLocator> {
 
 /**
  * Chain into the iframe-demo page's own srcdoc frame. Callers must navigate
- * to its route first (`page.goto('/demo')`) — it has no sidebar entry point
- * to click in the current build (see `navigateHostTo`).
+ * to its route first (`page.goto('/demo')`), because it has no sidebar entry
+ * point to click in the current build (see `navigateHostTo`).
  */
 export async function getDemoFrame(page: Page): Promise<FrameLocator> {
   const host = await getHostFrame(page)
@@ -56,8 +55,8 @@ export async function getDemoFrame(page: Page): Promise<FrameLocator> {
  * Returns once the main app shell + iframe-host is visible at `/home`.
  *
  * `.env` is loaded by `playwright.config.ts` via `import 'dotenv/config'`. If
- * the env vars are missing we throw rather than silently substituting a
- * default — the silent fallback masked broken auth setups in early runs.
+ * the env vars are missing this throws instead of using a default, so a broken
+ * auth setup fails at once.
  */
 export async function loginAsAdmin(page: Page) {
   const email = process.env.USERSPACE_USER_DEFAULT_ADMIN_EMAIL
@@ -81,7 +80,7 @@ export async function loginAsAdmin(page: Page) {
 /**
  * Click a Host chrome nav item by its accessible name, in whichever scope
  * the Host actually renders into (see `getHostFrame`). Sidebar entries may
- * render as links OR buttons depending on host build — `Locator.or()`
+ * render as links or buttons depending on the host build, and `Locator.or()`
  * handles either without a count-then-branch race.
  *
  * Only useful for pages the Host's own sidebar links to. The current build

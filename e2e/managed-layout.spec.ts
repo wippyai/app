@@ -40,6 +40,7 @@
  */
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+import { collectConsoleErrors } from './helpers/console'
 import { loginAsAdmin } from './helpers/login'
 
 const SHELL = '.managed-layout-shell'
@@ -135,13 +136,8 @@ test.describe('managed layout — real facade flow', () => {
 
   test('boots clean — no console errors, no failed requests', async ({ page }) => {
     // The smoke invariants, asserted rather than eyeballed.
-    let errors: string[] = []
-    let failed: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error')
-        errors.push(m.text())
-    })
-    page.on('pageerror', e => errors.push(e.message))
+    const errors = collectConsoleErrors(page)
+    const failed: string[] = []
     page.on('response', (r) => {
       if (r.status() >= 400)
         failed.push(`${r.status()} ${r.url()}`)
@@ -156,8 +152,8 @@ test.describe('managed layout — real facade flow', () => {
     // unauthenticated path — noisy, but it happens before any host code
     // runs and says nothing about managed layout. The host module is
     // imported after this point, so nothing about its boot is lost.
-    errors = []
-    failed = []
+    errors.length = 0
+    failed.length = 0
 
     await expect(page.locator(SHELL)).toBeVisible({ timeout: 30_000 })
     await expect(page.locator('[data-wippy-panel-mount="main"] iframe')).toBeVisible({ timeout: 30_000 })
