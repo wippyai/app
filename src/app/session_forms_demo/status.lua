@@ -1,5 +1,4 @@
--- DEV FIXTURE — status handler for the deterministic Session Forms demo
--- provider. See generate.lua for the fixture's request behavior.
+-- Status handler for the scripted Session Forms demo provider (see generate.lua).
 local function handler()
     return {
         success = true,

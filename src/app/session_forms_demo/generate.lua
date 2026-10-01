@@ -1,60 +1,9 @@
--- DEV FIXTURE — deterministic local LLM driver for the Session Forms demo.
---
--- Backs `app.session_forms_demo:fixture_agent` (model
--- `session-forms-deterministic`) and `app.session_forms_demo:plain_fixture_agent`
--- (same model, no forms trait). Makes the "Session forms" demo page
--- reproducible offline / in tests: no external model call, no network I/O,
--- same behavior every run. Never wire this provider to a production-facing
--- agent.
---
--- Behavior (the answer text it reads is built by wippy/session's
--- forms/answer_text.lua):
---   * a checkpoint-summarizer request (recognized by funcs/checkpoint.lua's
---     own system prompt, regardless of which agent's turn triggered it) ->
---     a fixed "Summary: ..." reply that never copies form ids or answer
---     values — the point of the checkpoint tests is that the Session keeps
---     form identity itself, not the summarizer.
---   * the latest message is the result of our own read_form tool call ->
---     "Form record: <tool result text>" (bounded to 1000 chars).
---   * the newest user input is a form answer (the record in a
---     <wippy-form-answers> element's record attribute) marked "late": true
---     -> a fixed notice that the answer arrived late.
---   * the newest user input is any other form answer -> "Thanks, noted:
---     <value>." for a single-field form, or "Thanks, noted: <answers JSON>"
---     for a multi-field form, read from the record.
---   * latest user text contains "ask me many" -> one tool call to
---     wippy.session.forms:ask_user_tool with a fixed 4-question "Order
---     details" form.
---   * latest user text contains "ask me" (incl. "ask me many") -> one tool
---     call to wippy.session.forms:ask_user_tool with a fixed single-choice
---     "Delivery preference" form, UNLESS the request offers no ask_user
---     tool (no forms trait, e.g. plain_fixture_agent), in which case ->
---     "I can't create forms here."
---   * latest user text contains "propose action" -> a fixed "I plan to..."
---     reply that promises to wait for confirmation.
---   * latest user text contains "work slowly" -> sleeps ~25s (cooperative,
---     does not block other processes), then replies "Done working."
---   * latest user text starts with "read form " -> one tool call to
---     wippy.session.forms:read_form_tool (alias read_form) with
---     { form_id = "<uuid>" }.
---   * a form answer (late or not) that contains "work slowly" gets its usual
---     reply after the same ~25s delay (a test hook for stopping the runtime
---     between admission and reply).
---   * latest user text contains "list forms" -> whether this prompt holds a
---     checkpoint summary, plus the Session's form index block, if any.
---   * anything else -> "Say 'ask me' to get a form."
---
--- Additionally, whenever the latest user text contains "checkpoint now",
--- the reported prompt_tokens is pushed above the fixture agent's checkpoint
--- threshold (see _index.yaml's agent_options.checkpoint on fixture_agent)
--- so the Session schedules a checkpoint — the dispatch above still decides
--- the reply content.
+-- Dev fixture: a scripted model for the Session Forms demo and e2e tests. It
+-- makes no network calls and replies the same way every run. Do not wire it to
+-- a production agent. The README lists the phrases it reacts to.
 local json = require("json")
 local time = require("time")
 
--- The parsed answer record (see parse_answers_block): `answers` the answered
--- questions reduced by simple_value and keyed by field id, `order` the field
--- ids in the server's order, `late` the record's late flag.
 type AnswersBlock = {
     answers: {[string]: any},
     order: {string},
@@ -65,8 +14,8 @@ local FIXTURE_PROVIDER = "app.session_forms_demo:provider"
 local ASK_USER_TOOL = "wippy.session.forms:ask_user_tool"
 local READ_FORM_TOOL = "wippy.session.forms:read_form_tool"
 local READ_FORM_TOOL_NAME = "read_form"
--- The element that carries the answer record in its single-quoted record
--- attribute (wippy/session's forms/answer_text.lua).
+-- Must match the element that wippy/session's forms/answer_text.lua writes,
+-- with the record in a single-quoted attribute.
 local ANSWERS_OPEN = "<wippy-form-answers record='"
 local ANSWERS_CLOSE = "</wippy-form-answers>"
 local READ_FORM_PREFIX = "read form"
@@ -80,23 +29,20 @@ local CHECKPOINT_SUMMARY_TEXT = "Summary: deterministic Session Forms fixture ch
 local READ_FORM_RESULT_MAX_CHARS = 1000
 local CHECKPOINT_TOKENS_TRIGGER = "checkpoint now"
 local LIST_FORMS_TRIGGER = "list forms"
--- Opening of wippy/session's forms/form_index.lua HEADING.
+-- Must match the opening of HEADING in wippy/session's forms/form_index.lua.
 local FORM_INDEX_HEADING = "Session forms (index;"
+-- Above the token_threshold of 5000 on the fixture agents in _index.yaml.
 local CHECKPOINT_ELEVATED_PROMPT_TOKENS = 6000
+-- How long "work slowly" waits before it replies, long enough for a test to
+-- stop the runtime first.
+local SLOW_DELAY = "25s"
 
--- Markers unique to funcs/checkpoint.lua's own system prompt (PROMPTS.initial
--- / PROMPTS.update) — distinguishes a checkpoint-summarizer generate() call
--- (issued by the Session itself, with its own prompt, bypassing the calling
--- agent's system prompt entirely) from a normal agent turn.
+-- Must match phrases in the system prompts in wippy/session's
+-- funcs/checkpoint.lua (PROMPTS.initial and PROMPTS.update).
 local CHECKPOINT_INITIAL_MARKER = "Create comprehensive checkpoint using ALL available tokens"
 local CHECKPOINT_UPDATE_MARKER = "Merge previous checkpoint with new events"
 
--- Fixed form: title "Delivery preference", one
--- required single-choice field `delivery` with options Courier / Pickup
--- point / Locker. Shape matches wippy.session.forms:ask_user_tool's
--- input_schema directly (title/fields are top-level tool arguments, not
--- nested under a "definition" key — see src/forms/ask_user.lua, which
--- passes its whole `params` straight to definition.normalize()).
+-- "ask me": one required single-choice question.
 local ASK_USER_ARGUMENTS = {
     title = "Delivery preference",
     answered_message = "Answered a question about delivery.",
@@ -111,13 +57,8 @@ local ASK_USER_ARGUMENTS = {
     },
 }
 
--- Fixed multi-question form for "ask me many": exercises rich options
--- (value/label/description), a multi-select field with allow_other, an
--- optional single-choice field with Unicode labels, and a required
--- single-choice field with allow_other. Shape follows definition.lua's
--- rules (src/forms/definition.lua): each field is "choice" type with a
--- non-empty options list; `required`/`multiple`/`allow_other` default to
--- false when omitted.
+-- "ask me many": object options, multiple, allow_other, Unicode labels, and a
+-- required question with allow_other.
 local ASK_USER_MANY_ARGUMENTS = {
     title = "Order details",
     answered_message = "Answered questions about my order.",
@@ -299,10 +240,8 @@ local function tool_call(messages, tools, registry_id, arguments)
     }
 end
 
--- Recognizes a checkpoint-summarizer request: funcs/checkpoint.lua builds
--- its OWN prompt (via prompt.new():add_system(...)) for this call, so the
--- calling agent's own system prompt never appears here — only one of these
--- two fixed headers does.
+-- A checkpoint summary request carries one of two fixed system prompts from
+-- wippy/session's funcs/checkpoint.lua, never the agent's own prompt.
 local function is_checkpoint_summary_request(messages)
     for _, message in ipairs(messages or {}) do
         if message.role == "system" then
@@ -359,8 +298,7 @@ local function simple_value(answer: any): any
     return list
 end
 
--- Decodes the record the server wrote between the tags (spec section 13 /
--- src/forms/answer_text.lua).
+-- Decodes the record that wippy/session's forms/answer_text.lua writes.
 local function parse_answers_block(json_text: string): (AnswersBlock?, string?)
     local decoded, decode_err = json.decode(json_text)
     if type(decoded) ~= "table" or type(decoded.answers) ~= "table" then
@@ -448,6 +386,11 @@ local function prompt_forms_report(messages)
     return checkpoint_line .. "\n" .. index_text
 end
 
+-- Sleeps without blocking other processes.
+local function work_slowly()
+    time.sleep(SLOW_DELAY)
+end
+
 local function handler(contract_args)
     local messages = contract_args.messages or {}
 
@@ -470,7 +413,7 @@ local function handler(contract_args)
 
     local user_text, record_json = latest_input(messages)
     local lower = string.lower(user_text)
-    local tokens = nil
+    local tokens: any? = nil
     if string.find(lower, CHECKPOINT_TOKENS_TRIGGER, 1, true) then
         tokens = {
             prompt_tokens = CHECKPOINT_ELEVATED_PROMPT_TOKENS,
@@ -479,71 +422,74 @@ local function handler(contract_args)
         }
     end
 
-    -- Test hook: an answer that contains "work slowly" (for example as an
-    -- Other text) replies after the same delay as a typed "work slowly", so a
-    -- test can stop the runtime after the answer is admitted but before the
-    -- reply exists.
+    local function reply(content: string, tool_calls: {any}?): any
+        return finish(content, tool_calls, tokens)
+    end
+
+    local function ask_form(arguments)
+        local call = tool_call(messages, contract_args.tools, ASK_USER_TOOL, arguments)
+        if not call then
+            return reply(NO_FORMS_HERE_TEXT)
+        end
+        return reply("", { call })
+    end
+
+    -- An answer that contains "work slowly" (for example as an Other text)
+    -- gets the same delay as the typed phrase, so a test can stop the runtime
+    -- after the answer is admitted and before the reply exists.
     if record_json then
         if string.find(string.lower(record_json), "work slowly", 1, true) then
-            time.sleep("25s")
+            work_slowly()
         end
         local parsed, err = parse_answers_block(record_json)
         if not parsed then
-            return finish(err, nil, tokens)
+            return reply(err)
         end
         if parsed.late then
-            return finish(LATE_ANSWER_TEXT, nil, tokens)
+            return reply(LATE_ANSWER_TEXT)
         end
         if answers_key_count(parsed.answers) == 1 then
             local value, value_err = first_answer_value(parsed)
             if not value then
-                return finish(value_err, nil, tokens)
+                return reply(value_err)
             end
-            return finish("Thanks, noted: " .. value .. ".", nil, tokens)
+            return reply("Thanks, noted: " .. value .. ".")
         end
         local answers_json = extract_answers_json(parsed) or "{}"
-        return finish("Thanks, noted: " .. answers_json, nil, tokens)
+        return reply("Thanks, noted: " .. answers_json)
     end
 
     if string.find(lower, "ask me many", 1, true) then
-        local call = tool_call(messages, contract_args.tools, ASK_USER_TOOL, ASK_USER_MANY_ARGUMENTS)
-        if not call then
-            return finish(NO_FORMS_HERE_TEXT, nil, tokens)
-        end
-        return finish("", { call }, tokens)
+        return ask_form(ASK_USER_MANY_ARGUMENTS)
     end
 
     if string.find(lower, "ask me", 1, true) then
-        local call = tool_call(messages, contract_args.tools, ASK_USER_TOOL, ASK_USER_ARGUMENTS)
-        if not call then
-            return finish(NO_FORMS_HERE_TEXT, nil, tokens)
-        end
-        return finish("", { call }, tokens)
+        return ask_form(ASK_USER_ARGUMENTS)
     end
 
     if string.find(lower, "propose action", 1, true) then
-        return finish(PROPOSE_ACTION_TEXT, nil, tokens)
+        return reply(PROPOSE_ACTION_TEXT)
     end
 
     if string.find(lower, "work slowly", 1, true) then
-        time.sleep("25s")
-        return finish(WORK_SLOWLY_TEXT, nil, tokens)
+        work_slowly()
+        return reply(WORK_SLOWLY_TEXT)
     end
 
     if string.find(lower, LIST_FORMS_TRIGGER, 1, true) then
-        return finish(prompt_forms_report(messages), nil, tokens)
+        return reply(prompt_forms_report(messages))
     end
 
     local form_id = read_form_id(user_text)
     if form_id then
         local call, err = tool_call(messages, contract_args.tools, READ_FORM_TOOL, { form_id = form_id })
         if not call then
-            return finish(err, nil, tokens)
+            return reply(err)
         end
-        return finish("", { call }, tokens)
+        return reply("", { call })
     end
 
-    return finish("Say 'ask me' to get a form.", nil, tokens)
+    return reply("Say 'ask me' to get a form.")
 end
 
 return { handler = handler }
