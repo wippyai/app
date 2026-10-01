@@ -33,22 +33,22 @@ const AGENTS: DemoAgent[] = [
   {
     title: 'Forms demo',
     registryId: 'app.agents:forms_demo',
-    description: 'Real agent, routed through the configured model. Asks a delivery-preference question with a form, then confirms your choice in one sentence.',
+    description: 'Real agent, routed through the configured model. Two scenarios: say "I want to book a delivery" and it asks for delivery details (name, email, phone, delivery date, parcel count, notes, consent to be contacted); say "set my delivery preferences" and it asks for a delivery method, three checkboxes and a short note. It then confirms your answers in one sentence.',
   },
   {
     title: 'Session Forms Fixture',
     registryId: 'app.session_forms_demo:fixture_agent',
-    description: 'Deterministic dev fixture with no external model call. Say "ask me" to get the same form, or answer it to get a scripted confirmation. Useful for offline demos and tests.',
+    description: 'Deterministic dev fixture with no external model call. Say "ask me" for a single delivery question, "ask me many" for a four-question order form, "ask me delivery" for the delivery-details form (text, email, date, number, notes and consent fields), or "ask me preferences" for a delivery method with three checkboxes and a short note. Answer a form to get a scripted confirmation that lists the saved values. Useful for offline demos and tests.',
   },
   {
     title: 'Session Forms Steering Fixture',
     registryId: 'app.session_forms_demo:steering_fixture_agent',
-    description: 'Same deterministic fixture with Session steering: you can keep typing while a turn runs. Useful for testing steering and form answers together.',
+    description: 'Same deterministic fixture and triggers ("ask me", "ask me many", "ask me delivery", "ask me preferences") with Session steering: you can keep typing while a turn runs. Useful for testing steering and form answers together.',
   },
   {
     title: 'Session Forms Plain Fixture',
     registryId: 'app.session_forms_demo:plain_fixture_agent',
-    description: 'Same deterministic fixture, without the forms trait. Say "ask me" and it will tell you it can\'t create forms here — useful for testing agents that don\'t offer forms.',
+    description: 'Same deterministic fixture, without the forms trait. Say "ask me" (or "ask me delivery", "ask me preferences") and it will tell you it can\'t create forms here — useful for testing agents that don\'t offer forms.',
   },
 ]
 
@@ -88,9 +88,10 @@ async function openChat(agent: DemoAgent) {
         Session forms
       </h2>
       <p class="text-xs text-surface-500 mt-1">
-        Four agents ask the same delivery-preference question: one talks to a
-        real model, the others are scripted fixtures that never leave this
-        server.
+        Four agents ask delivery questions with forms: one talks to a real
+        model, the others are scripted fixtures that never leave this server.
+        The forms cover choice questions and the standard fields (text, email,
+        date, number, textarea and checkbox).
       </p>
     </header>
 
