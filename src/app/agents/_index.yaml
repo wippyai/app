@@ -30,11 +30,8 @@ entries:
       - id: app.agents:wippy_nav_trait
       - id: app.agents:wippy_artifacts_trait
 
-  # Session Forms demo agent. It asks the user a delivery question with a
-  # form and uses the same model as the Ask Wippy agent above. The
-  # `wippy.session.forms:ask_user` trait comes from wippy/session (a Session
-  # version that ships Session Forms); with an older Session this entry does
-  # not resolve.
+  # Session Forms demo agent. Needs a wippy/session release that ships
+  # Session Forms.
   - name: forms_demo
     kind: registry.entry
     meta:

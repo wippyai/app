@@ -97,9 +97,11 @@ wippy run -c                                   # server
 
 ## Session Forms demo
 
-The **Session Forms Demo** page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks a delivery-preference question with a form. The agent uses the `wippy.session.forms:ask_user` trait from the `wippy/session` module and the same model as Ask Wippy.
+The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks a delivery-preference question with a form. The agent uses the `wippy.session.forms:ask_user` trait from the `wippy/session` module and the same model as Ask Wippy.
 
-Test fixtures are off by default. `.wippy.yaml` removes the `app.session_forms_demo` namespace (three scripted fixture agents, a deterministic model and provider, and a dev-only artifact endpoint) unless the `session-forms-fixtures` profile is selected:
+### Dev fixtures
+
+The page can also start three scripted fixture agents. They make no model calls, so the e2e tests can rely on fixed replies. They belong to the `app.session_forms_demo` namespace, together with a deterministic model and provider and a test-only endpoint that edits an artifact. `.wippy.yaml` removes the namespace unless the `session-forms-fixtures` profile is selected, so a release has none of it.
 
 ```bash
 wippy run -c --profile session-forms-fixtures
@@ -107,7 +109,19 @@ wippy run -c --profile session-forms-fixtures
 make run-dev
 ```
 
-Passing `--config` replaces the default `.wippy.yaml`. When you pass your own config file, add `--config .wippy.yaml` before it so the fixtures stay off.
+`SESSION_FORMS_DEV_FIXTURES=true` also enables the test-only endpoint, which answers 404 otherwise and is open to admin users only. Passing `--config` replaces the default `.wippy.yaml`, so when you pass your own config file, add `--config .wippy.yaml` before it so the fixtures stay off.
+
+The fixture agents reply to these phrases, and anything else gets "Say 'ask me' to get a form." The plain fixture agent has no forms trait, so it answers "ask me" with "I can't create forms here." A form answer gets "Thanks, noted:" followed by the answer, or a late-answer notice when the form was answered after the conversation moved on.
+
+| Phrase | Reply |
+|---|---|
+| `ask me` | Asks a single-question delivery form. |
+| `ask me many` | Asks a four-question order form. |
+| `propose action` | Replies with a plan that waits for confirmation. |
+| `work slowly` | Replies after 25 seconds. |
+| `read form <id>` | Calls `read_form` for that form id. |
+| `list forms` | Reports whether the prompt holds a checkpoint summary, and the form index. |
+| `checkpoint now` | Reports enough prompt tokens for the Session to write a checkpoint. |
 
 ## Frontend & theming
 

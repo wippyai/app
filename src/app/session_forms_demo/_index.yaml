@@ -1,44 +1,16 @@
-# Development fixture for Session Forms tests, not for production.
-#
-# The whole namespace is removed from the registry by `.wippy.yaml` unless the
-# `session-forms-fixtures` profile is selected, so a release has none of these
-# entries (no fixture agents, provider, model or endpoint). `wippy run
-# --profile session-forms-fixtures` selects it; scripts/run-dev.mjs does so
-# when SESSION_FORMS_DEV_FIXTURES=true. Passing `--config` replaces the
-# default `.wippy.yaml`, so name it explicitly (`--config .wippy.yaml`) when
-# you also pass your own config file, or the gate is off.
-#
-# Gives the visible tests (M01, M14) a way to trigger a REAL server-side
-# artifact mutation through the same Session persistence path the agent
-# uses (wippy.session.persist:artifact_repo / :artifact_events), so the Host
-# can be observed refreshing off a genuine content_version bump + published
-# event — not a client-side fake.
-#
-# Gated two ways, both required:
-#   1. app.env:session_forms_dev_fixtures must be exactly "true" (checked in
-#      the handler; anything else answers 404, see env/_index.yaml).
-#   2. Caller must be in the app.security:admin group — enforced declaratively
-#      by endpoint_firewall via the deny-policy idiom already used for
-#      app.security:user in src/app/security/_index.yaml (user.forbid_registry):
-#      a broad user-group allow ('*'/'*') is already in place app-wide, so this
-#      namespace adds a narrow deny on this one endpoint's own resource id for
-#      app.security:user, leaving app.security:admin's existing admin.all_access
-#      allow (resources '*', actions '*') as the only policy that still matches.
+# Session Forms dev fixtures. This namespace holds scripted agents, a
+# deterministic model and an admin-only endpoint that edits an artifact.
+# .wippy.yaml removes it unless the session-forms-fixtures profile is selected
+# (see README.md), and the endpoint also needs SESSION_FORMS_DEV_FIXTURES=true.
 version: "1.0"
 namespace: app.session_forms_demo
 
 entries:
-  # --- P2 package D: deterministic local provider + fixture agent ---------
-  # Dev fixture only. Backs the "Session forms" demo page's second button
-  # (app.session_forms_demo:fixture_agent) with a scripted, offline LLM
-  # driver — no external calls, same behavior every run. Never wire
-  # app.session_forms_demo:provider/model to a production-facing agent.
-  # See generate.lua for the exact request/response behavior.
   - name: generate
     kind: function.lua
     meta:
       type: llm_function
-      comment: Deterministic Session Forms demo generator — dev fixture, no external calls
+      comment: Deterministic Session Forms demo generator
     source: file://generate.lua
     modules:
       - json
@@ -50,7 +22,7 @@ entries:
     kind: function.lua
     meta:
       type: llm_function
-      comment: Deterministic Session Forms demo provider status — dev fixture
+      comment: Deterministic Session Forms demo provider status
     source: file://status.lua
     modules: []
     imports: {}
@@ -60,7 +32,7 @@ entries:
     kind: contract.binding
     meta:
       name: Session Forms demo driver
-      comment: Local deterministic provider used by the Session Forms demo fixture agent — dev fixture, no external calls
+      comment: Local deterministic provider used by the Session Forms demo fixture agents
       tags:
         - session-forms
         - fixture
@@ -78,7 +50,7 @@ entries:
       name: session-forms-demo
       type: llm.provider
       title: Session Forms Demo
-      comment: Deterministic local provider for the Session Forms demo fixture agent — dev fixture, no external calls
+      comment: Deterministic local provider for the Session Forms demo fixture agents
       tags:
         - session-forms
         - fixture
@@ -92,7 +64,7 @@ entries:
       name: session-forms-deterministic
       type: llm.model
       title: Session Forms Deterministic
-      comment: Deterministic model that exercises the ask_user form flow without a real LLM — dev fixture
+      comment: Deterministic model that exercises the ask_user form flow without a real LLM
       capabilities:
         - generate
         - tool_use
@@ -105,26 +77,16 @@ entries:
       - id: app.session_forms_demo:provider
         provider_model: session-forms-deterministic
 
-  # Trait `wippy.session.forms:ask_user` is owned by wippy/session and
-  # needs a Session version that ships session forms; with an older one
-  # this entry fails to resolve at lint time.
-  #
-  # agent_options.checkpoint scopes a small checkpoint threshold (and the
-  # deterministic fixture model for the summarizer itself) to THIS agent
-  # only — see src/process/session_handlers.lua's
-  # checkpoint_options_from_agent / resolve_checkpoint_config in the Session
-  # source, which reads agent_options.checkpoint.{function_id,token_threshold}
-  # off the loaded agent and passes the whole table through as `options` to
-  # the checkpoint function (wippy.session.funcs:checkpoint reads
-  # options.model there). Not an app-wide env override, so no other agent's
-  # checkpoint behavior changes.
+  # The checkpoint options apply to the agent that sets them, so other agents
+  # keep the default checkpoint behavior. They set a 5000 token threshold and
+  # use the fixture model for the summary.
   - name: fixture_agent
     kind: registry.entry
     meta:
       name: session-forms-fixture-agent
       type: agent.gen1
       title: Session Forms Fixture
-      comment: Deterministic fixture agent for the Session Forms demo — dev fixture, no external calls
+      comment: Deterministic fixture agent for the Session Forms demo
       icon: tabler:flask
       group: Test fixtures
       class:
@@ -143,17 +105,15 @@ entries:
         token_threshold: 5000
         model: session-forms-deterministic
 
-  # fixture_agent plus Session steering (wippy.session.traits:steering): the
-  # user can type while a turn runs, so visible tests can check steering and
-  # form answers together (answers are never steered; they keep acceptance
-  # order and stay pending until admitted).
+  # fixture_agent plus the Session steering trait, so the user can type while a
+  # turn runs and tests can check steering together with form answers.
   - name: steering_fixture_agent
     kind: registry.entry
     meta:
       name: session-forms-steering-fixture-agent
       type: agent.gen1
       title: Session Forms Steering Fixture
-      comment: Deterministic fixture agent with forms and steering — dev fixture, no external calls
+      comment: Deterministic fixture agent with forms and steering
       icon: tabler:message-plus
       group: Test fixtures
       class:
@@ -173,20 +133,16 @@ entries:
         token_threshold: 5000
         model: session-forms-deterministic
 
-  # Same deterministic provider/model as fixture_agent, but WITHOUT the
-  # forms trait — no ask_user_tool (or read_form_tool) is ever offered to
-  # the model. Exercises generate.lua's "no ask_user tool in the request"
-  # branch: "ask me" replies "I can't create forms here." instead of
-  # issuing a tool call. Still answers form answer rows (the
-  # <wippy-form-answers> element's record) normally, since that dispatch only
-  # looks at the user text, not the tools list.
+  # fixture_agent without the forms trait, so the model is offered no ask_user
+  # tool. "ask me" then replies that it can't create forms, and form answers
+  # are still handled.
   - name: plain_fixture_agent
     kind: registry.entry
     meta:
       name: session-forms-plain-fixture-agent
       type: agent.gen1
       title: Session Forms Plain Fixture
-      comment: Deterministic fixture agent without the forms trait — dev fixture, no external calls
+      comment: Deterministic fixture agent without the forms trait
       icon: tabler:flask-off
       group: Test fixtures
       class:
@@ -201,7 +157,7 @@ entries:
   - name: touch_artifact
     kind: function.lua
     meta:
-      comment: Dev fixture — appends a touch line to an owned artifact's content via artifact_repo, CAS-guarded by content_version
+      comment: Appends a line to the content of an artifact the caller owns, and fails if the artifact changed since it was read
     source: file://touch_artifact.lua
     modules:
       - http
@@ -219,20 +175,16 @@ entries:
     kind: http.endpoint
     meta:
       router: app:api
-      comment: Dev fixture endpoint — see namespace comment. Requires SESSION_FORMS_DEV_FIXTURES=true and the app.security:admin group.
+      comment: Test-only endpoint that edits an artifact. Requires SESSION_FORMS_DEV_FIXTURES=true and the app.security:admin group.
     method: POST
     func: touch_artifact
     path: /session-forms-dev/artifacts/{id}/touch
 
-  # Admin-only gate for touch_artifact.endpoint. Mirrors the deny-policy idiom
-  # already used by app.security:user.forbid_registry: app.security:user's
-  # app-wide allow ('*'/'*', see src/app/security/_index.yaml) is narrowed back
-  # down for this one resource, so only app.security:admin (whose blanket
-  # admin.all_access allow is untouched) can reach it. Not a new mechanism.
+  # Denies app.security:user so only admins can reach the endpoint.
   - name: touch_artifact.deny_user
     kind: security.policy
     meta:
-      comment: Denies app.security:user callers access to the dev fixture endpoint; app.security:admin is unaffected
+      comment: Denies app.security:user callers access to the touch endpoint; app.security:admin is unaffected
     groups:
       - app.security:user
     policy:

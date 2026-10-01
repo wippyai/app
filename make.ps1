@@ -78,13 +78,7 @@ function Invoke-Lint {
     Push-Location $Dir
     try {
         Write-Host "==> lint $Dir" -ForegroundColor Cyan
-        # Mirrors the Makefile's `lint: export ESLINT_USE_FLAT_CONFIG :=
-        # false` - every app here lints via a classic `.eslintrc.cjs` +
-        # `--ext`, but ESLint's flat-config search walks up past this repo's
-        # own root. A worktree nested under the gen-2-chat Web Host checkout
-        # (which has its own root eslint.config.mjs) would otherwise have
-        # that unrelated flat config silently picked up, breaking `--ext`
-        # for every app. $env: here is process-scoped to this make.ps1 run.
+        # Lint in eslintrc mode, as the Makefile does (see the comment there).
         $env:ESLINT_USE_FLAT_CONFIG = 'false'
         npm run lint
         if ($LASTEXITCODE -ne 0) { throw "npm run lint failed in $Dir (exit $LASTEXITCODE)" }
@@ -100,12 +94,8 @@ function Invoke-BuildAll {
     }
 }
 
-# Resolves the wippy runtime binary the same way scripts/run-dev.mjs does:
-# an explicit $env:WIPPY path first, then a vendored ./wippy.exe (present on
-# a real checkout, git-ignored and normally absent in a bare worktree), then
-# bare `wippy` on PATH (what the GitLab CI "Lint" stage relies on after its
-# own `wippy install`). Mirrors run-dev.mjs's resolveWippyBinary() so both
-# entrypoints agree on where the binary comes from.
+# Same lookup as resolveWippyBinary() in scripts/run-dev.mjs: $env:WIPPY, then
+# ./wippy.exe, then wippy on PATH.
 function Resolve-WippyBinary {
     if ($env:WIPPY) { return $env:WIPPY }
     if (Test-Path './wippy.exe') { return './wippy.exe' }
@@ -114,9 +104,7 @@ function Resolve-WippyBinary {
 
 function Invoke-WippyLint {
     $wippyBin = Resolve-WippyBinary
-    # Mirrors the Makefile's two lint runs. .wippy.yaml removes the
-    # app.session_forms_demo namespace from a release registry, so the second
-    # run selects the fixtures profile to check the fixture Lua too.
+    # Two runs, as in the Makefile. See the comment there.
     foreach ($profileArgs in @(@(), @('--profile', 'session-forms-fixtures'))) {
         Write-Host "==> $wippyBin lint --level error --ns app,app.* $profileArgs" -ForegroundColor Cyan
         & $wippyBin lint --level error --ns 'app,app.*' @profileArgs
@@ -174,8 +162,7 @@ try {
             break
         }
         '^verify$' {
-            # Mirrors the Makefile's `verify: build lint` + `wippy lint
-            # --level error` recipe one-for-one.
+            # Same steps as the Makefile's verify target.
             Invoke-BuildAll
             foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
             Invoke-WippyLint

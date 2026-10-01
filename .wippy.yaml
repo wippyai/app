@@ -1,16 +1,8 @@
 version: "1.0"
 
-# Session Forms dev fixtures (src/app/session_forms_demo) are not part of a
-# release. The whole namespace is removed from the registry unless the
-# `session-forms-fixtures` profile is selected. With the namespace removed,
-# the three fixture agents, the deterministic provider and model, and the
-# artifact touch endpoint do not exist: they are not listed and cannot be
-# started.
-#
-# Select the profile with `wippy run --profile session-forms-fixtures`, or set
-# SESSION_FORMS_DEV_FIXTURES=true and use scripts/run-dev.mjs (make run-dev),
-# which adds the profile for you. The same environment variable also arms the
-# touch endpoint inside the namespace (app.env:session_forms_dev_fixtures).
+# The Session Forms dev fixtures (src/app/session_forms_demo) are removed from
+# the registry unless the session-forms-fixtures profile is selected, so a
+# release has no fixture agents, provider, model or endpoint. See README.md.
 disable:
   namespaces:
     - app.session_forms_demo
