@@ -33,6 +33,13 @@ export async function createMainApp() {
 
 export async function mountApp(elementId: string = '#app') {
   const app = await createMainApp()
+  // A streamed fragment can resolve its proxy before its final DOM is ready.
+  // Mount after parsing so the stream cannot replace the mounted app root.
+  if (document.readyState === 'loading') {
+    await new Promise<void>((resolve) => {
+      document.addEventListener('DOMContentLoaded', () => resolve(), { once: true })
+    })
+  }
   app.mount(elementId)
   return app
 }

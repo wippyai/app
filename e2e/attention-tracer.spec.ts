@@ -141,6 +141,41 @@ async function bootTracer(page: Page) {
 }
 
 test.describe(`Attention tracer: ${layout}/${engine}`, () => {
+  test('keeps nested navigation in sync through tab clicks, browser history and reload', async ({ page }) => {
+    await loginAsAdmin(page)
+    await page.goto('/home/nested-nav')
+    const findNested = async (selector: string) => {
+      const owner = await findVisibleSelector(page, 'w-artifact[nav-owner]', 'nested navigation owner')
+      if (engine === 'fragment')
+        return owner.locator(selector)
+      const handle = await owner.locator('iframe').elementHandle()
+      const frame = await handle?.contentFrame()
+      await handle?.dispose()
+      if (!frame)
+        throw new Error('Nested navigation owner has no execution frame')
+      return frame.locator(selector)
+    }
+    await expect(await findNested('h2:has-text("Theme Colors Chart")')).toBeVisible()
+    await (await findNested('a[href$="/counter"]')).click()
+    await expect(page).toHaveURL(/\/home\/nested-nav\/counter$/)
+    await expect(await findNested('h2:has-text("Counter with Persistence")')).toBeVisible()
+    await (await findNested('a[href$="/mermaid"]')).click()
+    await expect(page).toHaveURL(/\/home\/nested-nav\/mermaid$/)
+    await expect(await findNested('h2:has-text("Mermaid Diagram")')).toBeVisible()
+    await page.goBack()
+    await expect(page).toHaveURL(/\/home\/nested-nav\/counter$/)
+    await expect(await findNested('h2:has-text("Counter with Persistence")')).toBeVisible()
+    await page.goBack()
+    await expect(page).toHaveURL(/\/home\/nested-nav$/)
+    await expect(await findNested('h2:has-text("Theme Colors Chart")')).toBeVisible()
+    await page.goForward()
+    await expect(page).toHaveURL(/\/home\/nested-nav\/counter$/)
+    await expect(await findNested('h2:has-text("Counter with Persistence")')).toBeVisible()
+    await page.reload()
+    await expect(page).toHaveURL(/\/home\/nested-nav\/counter$/)
+    await expect(await findNested('h2:has-text("Counter with Persistence")')).toBeVisible()
+  })
+
   test('loads the complete nested fixture through real package routes', async ({ page }) => {
     const {
       leftBridge,

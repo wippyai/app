@@ -49,6 +49,12 @@ export async function createMainApp() {
 
 export async function mountApp(elementId: string = '#app') {
   const app = await createMainApp()
+  // The fragment stream must finish installing the mount root first.
+  if (document.readyState === 'loading') {
+    await new Promise<void>((resolve) => {
+      document.addEventListener('DOMContentLoaded', () => resolve(), { once: true })
+    })
+  }
   app.mount(elementId)
   return app
 }
