@@ -155,21 +155,21 @@ test.describe('Session Forms Fixture (EE2-2461)', () => {
 })
 
 /*
- * V2 standard fields (EE2-2462, task P5-05): the fixture's "ask me delivery"
- * and "ask me preferences" forms (see generate.lua's
- * ASK_USER_DELIVERY_ARGUMENTS / ASK_USER_PREFERENCES_ARGUMENTS).
+ * Standard fields (EE2-2462): the fixture's "ask me delivery" and "ask me
+ * preferences" forms (see generate.lua's ASK_USER_DELIVERY_ARGUMENTS and
+ * ASK_USER_PREFERENCES_ARGUMENTS).
  *
- * Written against the V2 contract (decisions.md D32 and spec section 8 and 16)
- * and run against the V2 Session server and the V2 <wippy-form> renderer.
  * The date box is typed into one key at a time (`typeDateKeyByKey`), because a
  * single `fill` never shows a box that rewrites itself between keys. The
  * locators rely on:
  *  - each control is reachable by its field label (`getByLabel`), a checkbox
  *    by role + label, a radio by role + option label;
  *  - the Submit button is named "Submit" (the fixtures set no `submit_label`);
- *  - a client-side validation error is connected to its control through
- *    `aria-describedby`, the first invalid control gets focus after a
- *    user-initiated submit (spec section 16), and nothing is sent;
+ *  - a validation error is connected to its control through
+ *    `aria-describedby` and `aria-invalid`, and the first invalid control gets
+ *    focus after a user-initiated submit. A browser-side error sends nothing.
+ *    A `pattern` is only checked by the server, so a mismatch is a request
+ *    that comes back as a 422 with `pattern_mismatch`;
  *  - the answered read-only view prints each field's label followed by its
  *    value: text as typed, a number as its digits, a date as its stored ISO
  *    text, a checkbox as Yes/No, an unanswered field as "Skipped";
@@ -177,9 +177,9 @@ test.describe('Session Forms Fixture (EE2-2461)', () => {
  *    "active" and then "answered" on the <wippy-form> host, like the card.
  *
  * The fixture's acknowledgement reply prints every answered field as
- * `<id>=<value>` (strings verbatim, numbers as stored, booleans as yes/no, an
- * unanswered field left out), so comparing it to the typed values is the
- * check that the SAVED values equal what was entered.
+ * `<id>=<value>` (strings verbatim, numbers as their digits, booleans as
+ * yes/no, an unanswered field left out), so comparing it to the typed values
+ * is the check that the SAVED values equal what was entered.
  */
 const DELIVERY_ANSWERED_MESSAGE = 'Sent my delivery details.'
 const PREFERENCES_ANSWERED_MESSAGE = 'Answered questions about my delivery preferences.'
@@ -197,6 +197,9 @@ const DELIVERY_VALUES = {
   parcelCount: '7',
   notes: 'Leave it with the neighbour',
 }
+
+/** Text that is no phone number: the browser lets it through, the server's `pattern` refuses it. */
+const NOT_A_PHONE_NUMBER = 'abc'
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -219,8 +222,7 @@ function readOnlyValues(pairs: ReadonlyArray<readonly [label: string, value: str
  * Types a date into the date box one key at a time, with real key events, and
  * checks after every key that the box holds exactly what was typed so far. A
  * date box that rewrites itself from its last accepted date loses each key as
- * it is typed (EE2-2462 test round, finding F1), which `fill` (one input
- * event, like a paste) never shows.
+ * it is typed, which `fill` (one input event, like a paste) never shows.
  */
 async function typeDateKeyByKey(control: Locator, text: string) {
   await control.click()
@@ -235,10 +237,36 @@ async function typeDateKeyByKey(control: Locator, text: string) {
 /** Selects what is in a box and types over it, key by key. */
 async function retypeDate(control: Locator, text: string) {
   await control.click()
-  await control.press('Control+A')
+  await control.press('ControlOrMeta+A')
   await control.press('Backspace')
   await expect(control).toHaveValue('')
   await typeDateKeyByKey(control, text)
+}
+
+/**
+ * Resolves once nothing inside `locator` has changed in the DOM (nodes or
+ * attributes) for `quietFrames` animation frames in a row, which is the sign
+ * that a component has finished the renders it queued.
+ */
+async function waitForQuietDom(locator: Locator, quietFrames = 4) {
+  await locator.evaluate((element, frames) => new Promise<void>((resolve) => {
+    let quiet = 0
+    const observer = new MutationObserver(() => {
+      quiet = 0
+    })
+    observer.observe(element, { subtree: true, childList: true, attributes: true })
+    const onFrame = () => {
+      quiet += 1
+      if (quiet >= frames) {
+        observer.disconnect()
+        resolve()
+      }
+      else {
+        requestAnimationFrame(onFrame)
+      }
+    }
+    requestAnimationFrame(onFrame)
+  }), quietFrames)
 }
 
 /** Counts answer submissions (POST /artifact/:id/state) the page makes. */
@@ -340,6 +368,71 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
     expect(answerSubmissions).toHaveLength(1)
 
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+
+  test('ask me delivery -> a phone number that breaks the pattern is sent, refused by the server with a 422 under Phone, kept as typed, and the corrected number is saved', async ({ page }) => {
+    const consoleErrors: string[] = []
+    page.on('console', (m) => {
+      if (m.type() === 'error')
+        consoleErrors.push(m.text())
+    })
+    page.on('pageerror', e => consoleErrors.push(e.message))
+    const answerSubmissions = watchAnswerSubmissions(page)
+
+    await openFixtureChat(page)
+    consoleErrors.length = 0
+
+    await sendChatMessage(page, 'ask me delivery')
+
+    const formCard = page.locator('wippy-form')
+    await expect(formCard).toHaveAttribute('card-state', 'active', { timeout: 15_000 })
+
+    const phone = formCard.getByLabel('Phone number')
+    const phoneField = formCard.locator('.w-form__field').filter({ has: page.getByLabel('Phone number') })
+    const submit = formCard.getByRole('button', { name: /^submit$/i })
+    const status = formCard.getByRole('status')
+
+    // Everything but the phone number is valid. The browser never checks a
+    // `pattern` (see the form's "Checks before sending"), so "abc" goes out.
+    await formCard.getByLabel('Full name').fill(DELIVERY_VALUES.fullName)
+    await formCard.getByLabel('Email address').fill(DELIVERY_VALUES.email)
+    await phone.fill(NOT_A_PHONE_NUMBER)
+    await typeDateKeyByKey(formCard.getByLabel('Delivery date'), DELIVERY_VALUES.deliveryDate)
+    await formCard.getByRole('checkbox', { name: /agree to be contacted about this delivery/i }).click()
+
+    const refusal = page.waitForResponse(response => response.request().method() === 'POST' && SUBMIT_ANSWER_URL.test(response.url()))
+    await submit.click()
+    const response = await refusal
+    expect(response.status()).toBe(422)
+    const refused = await response.json() as { errors: Record<string, Array<{ code: string, message: string }>> }
+    expect(refused.errors.phone.map(error => error.code)).toEqual(['pattern_mismatch'])
+    expect(answerSubmissions).toHaveLength(1)
+
+    // The server's error is shown under Phone, connected to the box, the box
+    // keeps what was typed and gets focus, and the form is still open.
+    await expect(phoneField.getByText(refused.errors.phone[0].message, { exact: true })).toBeVisible()
+    await expect(phone).toHaveAccessibleDescription(refused.errors.phone[0].message)
+    await expect(phone).toHaveAttribute('aria-invalid', 'true')
+    await expect(phone).toHaveValue(NOT_A_PHONE_NUMBER)
+    await expect(phone).toBeFocused()
+    await expect(status).toHaveText('1 question needs attention.')
+    await expect(formCard).toHaveAttribute('card-state', 'active')
+    await expect(page.getByText(DELIVERY_ANSWERED_MESSAGE, { exact: true })).toHaveCount(0)
+
+    // Corrected: the error goes, and the number that is sent is the saved one.
+    await phone.fill(DELIVERY_VALUES.phone)
+    await expect(phone).not.toHaveAttribute('aria-invalid', 'true')
+    await expect(phoneField.getByText(refused.errors.phone[0].message, { exact: true })).toHaveCount(0)
+    await submit.click()
+    await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
+    await expect.poll(() => answerSubmissions.length).toBe(2)
+
+    const acknowledgement = `Thanks, noted: full_name=${DELIVERY_VALUES.fullName}; email=${DELIVERY_VALUES.email}; phone=${DELIVERY_VALUES.phone}; delivery_date=${DELIVERY_VALUES.deliveryDate}; parcel_count=1; consent=yes`
+    await expect(page.getByText(acknowledgement, { exact: true })).toBeVisible({ timeout: 10_000 })
+
+    // The browser logs the refused request itself as a console error. It is
+    // the only error expected here.
+    expect(consoleErrors.filter(message => !/status of 422/.test(message)), `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
   test('ask me delivery -> a typed date that is not a valid date stays in the box with its error until it is corrected, and the corrected date is saved', async ({ page }) => {
@@ -466,14 +559,17 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
     await deliveryDate.press('ArrowDown')
     await expect(calendar).toBeVisible()
     await page.keyboard.press('ArrowDown')
-    // Focus reaches a day a moment later; wait for it before moving on. Which
-    // day it enters on is PrimeVue's choice (the first cell of the grid, which
-    // can be a greyed day of May), so the test moves one day on, which is
-    // always a June day, and expects the box to show that day.
-    const focusedDay = calendar.locator(':focus')
+    // Focus can pass over the panel's previous-month button before it reaches a
+    // day, so wait until a day cell itself has focus, not any element of the
+    // panel. Which day it enters on is PrimeVue's choice (the first cell of the
+    // grid, which can be a greyed day of May), so the test moves one day on,
+    // which is always a June day, and expects the box to show that day.
+    const focusedDay = calendar.locator('td span:focus')
     await expect(focusedDay).toHaveCount(1)
-    // PrimeVue moves focus once more when the panel has finished opening.
-    await page.waitForTimeout(400)
+    // The picker re-renders and re-focuses cells for a moment after focus
+    // enters the days. An Enter that lands in that window can lose the focus
+    // the picker hands back to the box, so wait for the panel to go quiet.
+    await waitForQuietDom(calendar)
     const entryDay = (await focusedDay.innerText()).trim()
     await page.keyboard.press('ArrowRight')
     // `.not.toHaveText` would pass while focus is between two days, so poll for the new day.
@@ -575,7 +671,7 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
       ['Send me SMS updates', 'Yes'],
       ['Send me email updates', 'No'],
       ['Leave the parcel at the door', 'No'],
-      ['Anything else we should know?', /Skipped|—/],
+      ['Anything else we should know?', 'Skipped'],
     ])
     await page.reload()
 

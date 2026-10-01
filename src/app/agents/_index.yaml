@@ -30,15 +30,13 @@ entries:
       - id: app.agents:wippy_nav_trait
       - id: app.agents:wippy_artifacts_trait
 
-  # Session Forms demo (P2 package D; V2 scenarios P5-05). Real agent — routes
-  # through the normal LLM providers, not a fixture. Its prompt spells out the
-  # two V2 scenarios (delivery details, preferences) so a model builds the
-  # same forms as the fixture's "ask me delivery" / "ask me preferences". Its
-  # model binding is deliberate; the release decision is tracked elsewhere.
-  # Requires the Session-owned
-  # `wippy.session.forms:ask_user` trait to exist in the registry; if the
-  # Session package hasn't shipped it yet, this entry fails to resolve (see
-  # lint output).
+  # Session Forms demo (EE2-2462). A real agent that routes through the normal
+  # LLM providers and is not a fixture. Its prompt spells out two scenarios
+  # (delivery details, preferences) so a model builds the same forms as the
+  # fixture's "ask me delivery" and "ask me preferences" triggers. The model
+  # binding below is set on purpose. The entry needs the
+  # `wippy.session.forms:ask_user` trait of wippy/session, and fails to resolve
+  # (see lint output) when the installed Session module does not have it.
   - name: forms_demo
     kind: registry.entry
     meta:
@@ -59,7 +57,7 @@ entries:
          ask for all of these in one form, in this order:
          - full name: type text, required, max_length 100
          - email address: type email, required
-         - phone number: type text, optional, pattern \+?[0-9 ]{6,20}
+         - phone number: type text, optional, pattern [+]?[0-9 ]{6,20}
          - delivery date: type date, required, min 2026-01-01, max 2027-12-31
          - number of parcels: type number, required, integer true, min 1,
            max 20, default 1

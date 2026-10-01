@@ -20,7 +20,7 @@ version: "1.0"
 namespace: app.session_forms_demo
 
 entries:
-  # --- P2 package D: deterministic local provider + fixture agent ---------
+  # --- Deterministic local provider and fixture agent ---------------------
   # Dev fixture only. Backs the "Session forms" demo page's second button
   # (app.session_forms_demo:fixture_agent) with a scripted, offline LLM
   # driver — no external calls, same behavior every run. Never wire

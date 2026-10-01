@@ -22,9 +22,11 @@
 --   * the newest user input is a form answer of a version 2 form (one with a
 --     text, textarea, number, email, date or checkbox field) -> "Thanks,
 --     noted: <id>=<value>; <id>=<value>; ..." with every answered field in
---     the server's order and each value exactly as the record stores it:
---     strings verbatim, numbers as stored, booleans as yes/no. Unanswered
---     fields are left out.
+--     the server's order. A string is printed verbatim and a boolean as
+--     yes/no. A number is printed after JSON decoding: a whole number as its
+--     digits, any other number in the shortest form the JSON encoder gives, so
+--     the raw number text of the record is not echoed. Unanswered fields are
+--     left out.
 --   * the newest user input is any other form answer -> "Thanks, noted:
 --     <value>." for a single-field form, or "Thanks, noted: <answers JSON>"
 --     for a multi-field form, read from the record.
@@ -189,7 +191,7 @@ local ASK_USER_MANY_ARGUMENTS = {
 }
 
 -- Version 2 fixture form for "ask me delivery": one field of each standard
--- type with the per-type keys of the frozen V2 contract (decisions D32):
+-- type, each with the keys that type takes:
 --   text      min_length / max_length / pattern (full match, RE2 subset)
 --   email     no extra keys
 --   date      min / max, fixed ISO dates (never relative: a model, and this
@@ -220,7 +222,9 @@ local ASK_USER_DELIVERY_ARGUMENTS = {
             id = "phone",
             type = "text",
             label = "Phone number",
-            pattern = [[\+?[0-9 ]{6,20}]],
+            -- No backslash: models often mis-escape `\+` in JSON, so the plus is
+            -- a one-character class.
+            pattern = "[+]?[0-9 ]{6,20}",
         },
         {
             id = "delivery_date",
@@ -489,8 +493,8 @@ local function simple_value(answer: any): any
     return list
 end
 
--- Decodes the record the server wrote between the tags (spec section 13 /
--- src/forms/answer_text.lua).
+-- Decodes the record the server wrote between the tags (wippy/session's
+-- forms/answer_text.lua).
 local function parse_answers_block(json_text: string): (AnswersBlock?, string?)
     local decoded, decode_err = json.decode(json_text)
     if type(decoded) ~= "table" or type(decoded.answers) ~= "table" then
@@ -522,9 +526,10 @@ local function answers_key_count(answers: {[string]: any}): number
     return count
 end
 
--- One answered value as the fixture prints it: a string exactly as stored, a
--- number as stored (a whole number without a fraction), a boolean as yes/no,
--- an Other answer as its text, a list as its items joined by ", ".
+-- One answered value as the fixture prints it: a string verbatim, a number
+-- after JSON decoding (a whole number as its digits, any other number as the
+-- JSON encoder writes it), a boolean as yes/no, an Other answer as its text,
+-- a list as its items joined by ", ".
 local function value_text(value: any): string
     local kind = type(value)
     if kind == "string" then return tostring(value) end
@@ -555,9 +560,9 @@ local function first_answer_value(parsed: AnswersBlock): (string?, string?)
 end
 
 -- Reply for a version 2 form: every answered field as `<id>=<value>` in the
--- server's order, separated by "; ", with the values exactly as stored (see
--- value_text). Fields left unanswered do not appear, so a skipped optional
--- note is absent while an unticked checkbox reads `no`.
+-- server's order, separated by "; ", with the values as value_text prints
+-- them. Fields left unanswered do not appear, so a skipped optional note is
+-- absent while an unticked checkbox reads `no`.
 local function fields_reply(parsed: AnswersBlock): string
     local parts: {string} = {}
     for _, id in ipairs(parsed.order) do
