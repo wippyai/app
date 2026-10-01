@@ -30,11 +30,11 @@ entries:
       - id: app.agents:wippy_nav_trait
       - id: app.agents:wippy_artifacts_trait
 
-  # Session Forms demo (P2 package D). Real agent — routes through the normal
-  # LLM providers, not a fixture. Requires the Session-owned
-  # `wippy.session.forms:ask_user` trait to exist in the registry; if the
-  # Session package hasn't shipped it yet, this entry fails to resolve (see
-  # lint output).
+  # Session Forms demo agent. It asks the user a delivery question with a
+  # form and uses the same model as the Ask Wippy agent above. The
+  # `wippy.session.forms:ask_user` trait comes from wippy/session (a Session
+  # version that ships Session Forms); with an older Session this entry does
+  # not resolve.
   - name: forms_demo
     kind: registry.entry
     meta:
@@ -50,7 +50,7 @@ entries:
       When you need the user to choose how a parcel should be delivered,
       ask them with a form instead of asking in plain text. Once they answer,
       confirm their choice back to them in one sentence.
-    model: gpt-6-luna
+    model: claude-sonnet-4-6
     temperature: 0.5
     max_tokens: 8000
     traits:
