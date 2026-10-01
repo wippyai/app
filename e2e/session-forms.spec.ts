@@ -243,32 +243,6 @@ async function retypeDate(control: Locator, text: string) {
   await typeDateKeyByKey(control, text)
 }
 
-/**
- * Resolves once nothing inside `locator` has changed in the DOM (nodes or
- * attributes) for `quietFrames` animation frames in a row, which is the sign
- * that a component has finished the renders it queued.
- */
-async function waitForQuietDom(locator: Locator, quietFrames = 4) {
-  await locator.evaluate((element, frames) => new Promise<void>((resolve) => {
-    let quiet = 0
-    const observer = new MutationObserver(() => {
-      quiet = 0
-    })
-    observer.observe(element, { subtree: true, childList: true, attributes: true })
-    const onFrame = () => {
-      quiet += 1
-      if (quiet >= frames) {
-        observer.disconnect()
-        resolve()
-      }
-      else {
-        requestAnimationFrame(onFrame)
-      }
-    }
-    requestAnimationFrame(onFrame)
-  }), quietFrames)
-}
-
 /** Counts answer submissions (POST /artifact/:id/state) the page makes. */
 function watchAnswerSubmissions(page: Page): string[] {
   const urls: string[] = []
@@ -566,10 +540,6 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
     // which is always a June day, and expects the box to show that day.
     const focusedDay = calendar.locator('td span:focus')
     await expect(focusedDay).toHaveCount(1)
-    // The picker re-renders and re-focuses cells for a moment after focus
-    // enters the days. An Enter that lands in that window can lose the focus
-    // the picker hands back to the box, so wait for the panel to go quiet.
-    await waitForQuietDom(calendar)
     const entryDay = (await focusedDay.innerText()).trim()
     await page.keyboard.press('ArrowRight')
     // `.not.toHaveText` would pass while focus is between two days, so poll for the new day.
@@ -579,6 +549,26 @@ test.describe('Session Forms V2 standard fields (EE2-2462)', () => {
     await expect(deliveryDate).toHaveValue(`2026-06-${pickedDay.padStart(2, '0')}`)
     await expect(calendar).toBeHidden()
     await expect(deliveryDate).toBeFocused()
+
+    // The same pick again and again, with no wait between focus entering the
+    // days and Enter. The picker re-renders and re-focuses its day cells for a
+    // moment after a pick (a delayed focus that its own "focus is already in the
+    // calendar" check misses inside a shadow root), and it used to take focus from
+    // the box in about one run in four, so that the calendar closed with focus
+    // dropped to the page. The box must hold focus in every round once the
+    // calendar is gone.
+    for (let round = 1; round <= 5; round++) {
+      await deliveryDate.focus()
+      await deliveryDate.press('ArrowDown')
+      await expect(calendar, `round ${round}: the calendar opens`).toBeVisible()
+      await page.keyboard.press('ArrowDown')
+      await expect(focusedDay, `round ${round}: focus is on a day`).toHaveCount(1)
+      await page.keyboard.press('ArrowRight')
+      await page.keyboard.press('Enter')
+      await expect(calendar, `round ${round}: the calendar closes`).toBeHidden()
+      await expect(deliveryDate, `round ${round}: focus is on the date box`).toBeFocused()
+      await expect(deliveryDate).toHaveValue(/^2026-06-\d{2}$/)
+    }
 
     // Escape closes it and keeps what the box holds.
     const keyboardPick = await deliveryDate.inputValue()
