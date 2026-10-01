@@ -19,17 +19,32 @@
 --   * the newest user input is a form answer (the record in a
 --     <wippy-form-answers> element's record attribute) marked "late": true
 --     -> a fixed notice that the answer arrived late.
+--   * the newest user input is a form answer of a version 2 form (one with a
+--     text, textarea, number, email, date or checkbox field) -> "Thanks,
+--     noted: <id>=<value>; <id>=<value>; ..." with every answered field in
+--     the server's order and each value exactly as the record stores it:
+--     strings verbatim, numbers as stored, booleans as yes/no. Unanswered
+--     fields are left out.
 --   * the newest user input is any other form answer -> "Thanks, noted:
 --     <value>." for a single-field form, or "Thanks, noted: <answers JSON>"
 --     for a multi-field form, read from the record.
+--   * latest user text contains "ask me delivery" -> one tool call to
+--     wippy.session.forms:ask_user_tool with a fixed seven-field "Delivery
+--     details" form (text, email, text with a pattern, date with fixed
+--     bounds, integer number with a default, textarea, required checkbox).
+--   * latest user text contains "ask me preferences" -> one tool call with a
+--     fixed "Preferences" form that mixes one single-choice question with
+--     three optional checkboxes and an optional short text note.
 --   * latest user text contains "ask me many" -> one tool call to
 --     wippy.session.forms:ask_user_tool with a fixed 4-question "Order
 --     details" form.
---   * latest user text contains "ask me" (incl. "ask me many") -> one tool
---     call to wippy.session.forms:ask_user_tool with a fixed single-choice
---     "Delivery preference" form, UNLESS the request offers no ask_user
---     tool (no forms trait, e.g. plain_fixture_agent), in which case ->
---     "I can't create forms here."
+--   * latest user text contains "ask me" (incl. "ask me many", "ask me
+--     delivery" and "ask me preferences" when the request offers a tool) ->
+--     one tool call to wippy.session.forms:ask_user_tool with a fixed
+--     single-choice "Delivery preference" form. The three longer triggers
+--     are matched first. When the request offers no ask_user tool (no forms
+--     trait, e.g. plain_fixture_agent) every "ask me" trigger -> "I can't
+--     create forms here."
 --   * latest user text contains "propose action" -> a fixed "I plan to..."
 --     reply that promises to wait for confirmation.
 --   * latest user text contains "work slowly" -> sleeps ~25s (cooperative,
@@ -54,11 +69,13 @@ local time = require("time")
 
 -- The parsed answer record (see parse_answers_block): `answers` the answered
 -- questions reduced by simple_value and keyed by field id, `order` the field
--- ids in the server's order, `late` the record's late flag.
+-- ids in the server's order, `late` the record's late flag, `version` the
+-- record's form_version (2 when the form has a field that is not a choice).
 type AnswersBlock = {
     answers: {[string]: any},
     order: {string},
     late: boolean,
+    version: number,
 }
 
 local FIXTURE_PROVIDER = "app.session_forms_demo:provider"
@@ -70,6 +87,8 @@ local READ_FORM_TOOL_NAME = "read_form"
 local ANSWERS_OPEN = "<wippy-form-answers record='"
 local ANSWERS_CLOSE = "</wippy-form-answers>"
 local READ_FORM_PREFIX = "read form"
+local ASK_DELIVERY_TRIGGER = "ask me delivery"
+local ASK_PREFERENCES_TRIGGER = "ask me preferences"
 local NO_FORMS_HERE_TEXT = "I can't create forms here."
 local PROPOSE_ACTION_TEXT = "I plan to book a courier pickup. I will only do it after you confirm."
 local WORK_SLOWLY_TEXT = "Done working."
@@ -165,6 +184,113 @@ local ASK_USER_MANY_ARGUMENTS = {
                 { value = "email", label = "Email" },
                 { value = "phone", label = "Phone" },
             },
+        },
+    },
+}
+
+-- Version 2 fixture form for "ask me delivery": one field of each standard
+-- type with the per-type keys of the frozen V2 contract (decisions D32):
+--   text      min_length / max_length / pattern (full match, RE2 subset)
+--   email     no extra keys
+--   date      min / max, fixed ISO dates (never relative: a model, and this
+--             fixture, do not know today's date)
+--   number    min / max / step / integer, plus `default` (prefill only)
+--   textarea  max_length
+--   checkbox  required means the box must be ticked
+-- Each field id is also the key printed by the acknowledgement reply
+-- (fields_reply below), so a test can compare saved values.
+local ASK_USER_DELIVERY_ARGUMENTS = {
+    title = "Delivery details",
+    answered_message = "Sent my delivery details.",
+    fields = {
+        {
+            id = "full_name",
+            type = "text",
+            label = "Full name",
+            required = true,
+            max_length = 100,
+        },
+        {
+            id = "email",
+            type = "email",
+            label = "Email address",
+            required = true,
+        },
+        {
+            id = "phone",
+            type = "text",
+            label = "Phone number",
+            pattern = [[\+?[0-9 ]{6,20}]],
+        },
+        {
+            id = "delivery_date",
+            type = "date",
+            label = "Delivery date",
+            required = true,
+            min = "2026-01-01",
+            max = "2027-12-31",
+        },
+        {
+            id = "parcel_count",
+            type = "number",
+            label = "Number of parcels",
+            required = true,
+            integer = true,
+            min = 1,
+            max = 20,
+            default = 1,
+        },
+        {
+            id = "notes",
+            type = "textarea",
+            label = "Delivery notes",
+            max_length = 1000,
+        },
+        {
+            id = "consent",
+            type = "checkbox",
+            label = "I agree to be contacted about this delivery",
+            required = true,
+        },
+    },
+}
+
+-- Version 2 fixture form for "ask me preferences": mixes one required
+-- single-choice question (a version 1 field) with three optional checkboxes
+-- and an optional short text note (version 2 fields), so the form is rendered
+-- by the fields form and an optional checkbox left unticked is a saved
+-- `false`, not a skipped question.
+local ASK_USER_PREFERENCES_ARGUMENTS = {
+    title = "Preferences",
+    answered_message = "Answered questions about my delivery preferences.",
+    fields = {
+        {
+            id = "delivery",
+            type = "choice",
+            label = "How should the parcel be delivered?",
+            required = true,
+            options = { "Courier", "Pickup point", "Locker" },
+        },
+        {
+            id = "sms_updates",
+            type = "checkbox",
+            label = "Send me SMS updates",
+        },
+        {
+            id = "email_updates",
+            type = "checkbox",
+            label = "Send me email updates",
+        },
+        {
+            id = "leave_at_door",
+            type = "checkbox",
+            label = "Leave the parcel at the door",
+        },
+        {
+            id = "note",
+            type = "text",
+            label = "Anything else we should know?",
+            max_length = 200,
         },
     },
 }
@@ -346,10 +472,14 @@ local function read_form_id(user_text)
 end
 
 -- One answer from the server's record, reduced to what the fixture echoes:
--- the option value, "value (note: …)", {other = …}, or a list of those; nil
--- for a question left unanswered.
+-- a scalar answer of a text, textarea, email, date, number or checkbox field
+-- (string, number or boolean, passed through unchanged: `false` is a real
+-- answer), or for a choice question the option value, "value (note: …)",
+-- {other = …}, or a list of those; nil for a question left unanswered.
 local function simple_value(answer: any): any
-    if type(answer) ~= "table" then return nil end
+    local kind = type(answer)
+    if kind == "string" or kind == "number" or kind == "boolean" then return answer end
+    if kind ~= "table" then return nil end
     if answer.other ~= nil then return { other = answer.other } end
     if answer.value ~= nil then
         return type(answer.note) == "string" and (answer.value .. " (note: " .. answer.note .. ")") or answer.value
@@ -373,10 +503,15 @@ local function parse_answers_block(json_text: string): (AnswersBlock?, string?)
     for id in string.gmatch(json_text, '"([%w_]+)":{"question"') do table.insert(order, id) end
     local answers: {[string]: any} = {}
     for id, entry in pairs(decoded.answers) do
-        local value = type(entry) == "table" and simple_value(entry.answer) or nil
+        -- Not `cond and simple_value(...) or nil`: that turns a saved `false`
+        -- (an unticked checkbox) into nil, an unanswered question.
+        local value = nil
+        if type(entry) == "table" then value = simple_value(entry.answer) end
         if value ~= nil then answers[id] = value end
     end
-    return { answers = answers, order = order, late = decoded.late == true }, nil
+    local version = 1
+    if type(decoded.form_version) == "number" then version = decoded.form_version end
+    return { answers = answers, order = order, late = decoded.late == true, version = version }, nil
 end
 
 local function answers_key_count(answers: {[string]: any}): number
@@ -385,6 +520,26 @@ local function answers_key_count(answers: {[string]: any}): number
         count = count + 1
     end
     return count
+end
+
+-- One answered value as the fixture prints it: a string exactly as stored, a
+-- number as stored (a whole number without a fraction), a boolean as yes/no,
+-- an Other answer as its text, a list as its items joined by ", ".
+local function value_text(value: any): string
+    local kind = type(value)
+    if kind == "string" then return tostring(value) end
+    if kind == "boolean" then return value and "yes" or "no" end
+    if kind == "number" then
+        if value == math.floor(value) and math.abs(value) < 1e15 then
+            return string.format("%d", value)
+        end
+        return tostring((json.encode(value)))
+    end
+    if kind ~= "table" then return tostring(value) end
+    if type(value.other) == "string" then return value.other end
+    local parts: {string} = {}
+    for _, part in ipairs(value) do table.insert(parts, value_text(part)) end
+    return table.concat(parts, ", ")
 end
 
 -- The first answered question's value as text, in the server's order.
@@ -396,14 +551,25 @@ local function first_answer_value(parsed: AnswersBlock): (string?, string?)
     if value == nil then
         return nil, "SESSION_FORMS_FIXTURE_ANSWERS_EMPTY"
     end
-    local function item_text(item: any): string
-        if type(item) ~= "table" then return tostring(item) end
-        if type(item.other) == "string" then return item.other end
-        local parts = {}
-        for _, part in ipairs(item) do table.insert(parts, item_text(part)) end
-        return table.concat(parts, ", ")
+    return value_text(value)
+end
+
+-- Reply for a version 2 form: every answered field as `<id>=<value>` in the
+-- server's order, separated by "; ", with the values exactly as stored (see
+-- value_text). Fields left unanswered do not appear, so a skipped optional
+-- note is absent while an unticked checkbox reads `no`.
+local function fields_reply(parsed: AnswersBlock): string
+    local parts: {string} = {}
+    for _, id in ipairs(parsed.order) do
+        local value = parsed.answers[id]
+        if value ~= nil then
+            table.insert(parts, id .. "=" .. value_text(value))
+        end
     end
-    return item_text(value)
+    if #parts == 0 then
+        return "Thanks, noted: no answers."
+    end
+    return "Thanks, noted: " .. table.concat(parts, "; ")
 end
 
 -- Compact `{"id":value,...}` of the answered questions in the server's order
@@ -494,6 +660,9 @@ local function handler(contract_args)
         if parsed.late then
             return finish(LATE_ANSWER_TEXT, nil, tokens)
         end
+        if parsed.version >= 2 then
+            return finish(fields_reply(parsed), nil, tokens)
+        end
         if answers_key_count(parsed.answers) == 1 then
             local value, value_err = first_answer_value(parsed)
             if not value then
@@ -503,6 +672,24 @@ local function handler(contract_args)
         end
         local answers_json = extract_answers_json(parsed) or "{}"
         return finish("Thanks, noted: " .. answers_json, nil, tokens)
+    end
+
+    -- The two version 2 triggers come before the generic "ask me" below, which
+    -- they contain.
+    if string.find(lower, ASK_DELIVERY_TRIGGER, 1, true) then
+        local call = tool_call(messages, contract_args.tools, ASK_USER_TOOL, ASK_USER_DELIVERY_ARGUMENTS)
+        if not call then
+            return finish(NO_FORMS_HERE_TEXT, nil, tokens)
+        end
+        return finish("", { call }, tokens)
+    end
+
+    if string.find(lower, ASK_PREFERENCES_TRIGGER, 1, true) then
+        local call = tool_call(messages, contract_args.tools, ASK_USER_TOOL, ASK_USER_PREFERENCES_ARGUMENTS)
+        if not call then
+            return finish(NO_FORMS_HERE_TEXT, nil, tokens)
+        end
+        return finish("", { call }, tokens)
     end
 
     if string.find(lower, "ask me many", 1, true) then

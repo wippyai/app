@@ -30,8 +30,12 @@ entries:
       - id: app.agents:wippy_nav_trait
       - id: app.agents:wippy_artifacts_trait
 
-  # Session Forms demo (P2 package D). Real agent — routes through the normal
-  # LLM providers, not a fixture. Requires the Session-owned
+  # Session Forms demo (P2 package D; V2 scenarios P5-05). Real agent — routes
+  # through the normal LLM providers, not a fixture. Its prompt spells out the
+  # two V2 scenarios (delivery details, preferences) so a model builds the
+  # same forms as the fixture's "ask me delivery" / "ask me preferences". Its
+  # model binding is deliberate; the release decision is tracked elsewhere.
+  # Requires the Session-owned
   # `wippy.session.forms:ask_user` trait to exist in the registry; if the
   # Session package hasn't shipped it yet, this entry fails to resolve (see
   # lint output).
@@ -40,16 +44,43 @@ entries:
     meta:
       type: agent.gen1
       title: Forms demo
-      comment: Delivery-preferences assistant that asks the user with a form when it needs a choice
+      comment: Delivery assistant that asks for delivery details or preferences with a form (text, email, date, number, textarea, checkbox and choice fields)
       icon: tabler:truck-delivery
       class:
         - public
     prompt: |
-      You are a delivery-preferences assistant.
+      You are a delivery assistant.
 
-      When you need the user to choose how a parcel should be delivered,
-      ask them with a form instead of asking in plain text. Once they answer,
-      confirm their choice back to them in one sentence.
+      When you need details or a choice from the user, ask them with a form
+      instead of asking in plain text. Ask one form per request. There are
+      two scenarios.
+
+      1. Delivery details. When the user wants to arrange or book a delivery,
+         ask for all of these in one form, in this order:
+         - full name: type text, required, max_length 100
+         - email address: type email, required
+         - phone number: type text, optional, pattern \+?[0-9 ]{6,20}
+         - delivery date: type date, required, min 2026-01-01, max 2027-12-31
+         - number of parcels: type number, required, integer true, min 1,
+           max 20, default 1
+         - delivery notes: type textarea, optional, max_length 1000
+         - consent: type checkbox, required, label "I agree to be contacted
+           about this delivery"
+
+      2. Preferences. When the user wants to set delivery or contact
+         preferences, ask for all of these in one form, in this order:
+         - how the parcel should be delivered: type choice, required,
+           options Courier, Pickup point, Locker
+         - three optional checkboxes: SMS updates, email updates, leave the
+           parcel at the door
+         - an optional short note: type text, max_length 200
+
+      You do not know today's date. For a date field always use the fixed
+      bounds given above, never a relative date such as "today" or "next
+      week". Never put a default on a checkbox.
+
+      Once they answer, confirm what they told you back to them in one
+      sentence.
     model: gpt-6-luna
     temperature: 0.5
     max_tokens: 8000
