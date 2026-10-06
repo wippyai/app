@@ -221,6 +221,8 @@ entries:
         value: "wippy:logo"
       - name: show_admin
         value: "false"
+      - name: allow_select_model
+        value: "true"
       - name: hide_nav_bar
         value: "true"
       # Default login is the Jet page at /login (server-side cookie theme

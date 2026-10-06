@@ -8,7 +8,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [string]$Target = 'help'
+    [string]$Target = 'help',
+    [switch]$SkipInstall,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$RuntimeArguments = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,8 +64,13 @@ function Invoke-Recipe {
             if (Test-Path 'node_modules') { Remove-Item -Recurse -Force 'node_modules' }
             if (Test-Path 'package-lock.json') { Remove-Item -Force 'package-lock.json' }
         }
-        npm install
-        if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
+        if ($Clean -or -not $SkipInstall) {
+            npm install
+            if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
+        }
+        else {
+            Write-Host 'Using installed dependencies for local package smoke'
+        }
         npm run build -- --outDir "../../../$Out" --emptyOutDir
         if ($LASTEXITCODE -ne 0) { throw "npm run build failed in $Dir (exit $LASTEXITCODE)" }
     }
@@ -106,12 +114,18 @@ function Show-Help {
     Write-Host "make - Windows mirror of the Makefile (via make.bat -> make.ps1)`n"
     Write-Host "Targets:"
     Write-Host "  build              Build every app and web component"
+    Write-Host "  build -SkipInstall Build against installed local release packages"
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
+    Write-Host "  test-attention     Run Attention acceptance in Chromium"
+    Write-Host "  test-attention-touch Run Attention touch acceptance in Chromium"
+    Write-Host "  test-attention-helpers Run Attention codec and helper checks"
     Write-Host "  clean-build        Wipe node_modules + reinstall + rebuild"
     Write-Host "  dev                npm run dev in frontend/applications/main"
     Write-Host "  run                build, then ./wippy.exe run -c"
+    Write-Host "  prepare-e2e        Prepare an isolated app with test agents"
+    Write-Host "  run-e2e            build, prepare-e2e, then run the isolated app"
     Write-Host "  help               Show this message`n"
     Write-Host "Apps:           $($apps.name -join ', ')"
     Write-Host "Web components: $($wcs.name -join ', ')"
@@ -149,6 +163,21 @@ try {
             foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
             break
         }
+        '^test-attention$' {
+            npm run test:e2e:attention -- --project=chromium --max-failures=1 --output=.local/test-results/attention-tmp
+            if ($LASTEXITCODE -ne 0) { throw "Attention tests failed (exit $LASTEXITCODE)" }
+            break
+        }
+        '^test-attention-touch$' {
+            npm run test:e2e:attention -- --project=chromium-touch --max-failures=1 --output=.local/test-results/attention-tmp
+            if ($LASTEXITCODE -ne 0) { throw "Attention touch tests failed (exit $LASTEXITCODE)" }
+            break
+        }
+        '^test-attention-helpers$' {
+            npm run test:e2e -- attention-context-helpers.spec.ts --project=chromium --max-failures=1 --output=.local/test-results/attention-helpers-tmp
+            if ($LASTEXITCODE -ne 0) { throw "Attention helper tests failed (exit $LASTEXITCODE)" }
+            break
+        }
         '^clean-build$' {
             # Same set as `build` (every app + web component), wiped clean first so a
             # @wippy-fe/* version bump resolves against fresh node_modules + lockfile.
@@ -168,6 +197,26 @@ try {
         '^run$' {
             Invoke-BuildAll
             & "$PSScriptRoot/wippy.exe" run -c
+            if ($LASTEXITCODE -ne 0) { throw "Wippy run failed (exit $LASTEXITCODE)" }
+            break
+        }
+        '^prepare-e2e$' {
+            node "$PSScriptRoot/e2e/prepare-runtime.mjs"
+            if ($LASTEXITCODE -ne 0) { throw "Test runtime preparation failed (exit $LASTEXITCODE)" }
+            break
+        }
+        '^run-e2e$' {
+            Invoke-BuildAll
+            node "$PSScriptRoot/e2e/prepare-runtime.mjs"
+            if ($LASTEXITCODE -ne 0) { throw "Test runtime preparation failed (exit $LASTEXITCODE)" }
+            Push-Location "$PSScriptRoot/.local/e2e-runtime-tmp"
+            try {
+                & wippy run -c @RuntimeArguments
+                if ($LASTEXITCODE -ne 0) { throw "Wippy test runtime failed (exit $LASTEXITCODE)" }
+            }
+            finally {
+                Pop-Location
+            }
             break
         }
         default {

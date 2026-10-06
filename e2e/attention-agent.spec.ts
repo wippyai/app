@@ -1,6 +1,8 @@
 import { Buffer } from 'node:buffer'
 import { expect, test, type Page } from '@playwright/test'
 import {
+  addComposerUpload,
+  ATTENTION_E2E_AGENT_WITHOUT_ATTENTION,
   attentionAttachment,
   attentionOverlayCount,
   attentionProtocolDiagnostics,
@@ -9,47 +11,56 @@ import {
   bootAttentionTracer,
   cancelStagedContextForTest,
   canonicalContextValue,
-  capturedCommandResponses,
+  capturedCorrelatedReplies,
   capturedAttentionSendLifecycle,
   capturedCompositionFailures,
   capturedHttpStageMetrics,
   capturedIncomingPackets,
   capturedPayloadMetrics,
+  capturedUiActionRequests,
   capturedWireMessages,
   disconnectAttentionSockets,
   enablePointingContext,
   findVisible,
   findVisibleRole,
+  findVisibleTestId,
   findVisibleUploadQueue,
+  injectSessionSocketEnvelope,
   installAttentionWireTap,
   denyAttentionCaptureProvider,
   moveToSiblingBoundary,
   navigateAttentionHost,
   openPersistedSession,
   pointerCandidates,
-  requestDispatchStatus,
+  prepareCssPagination,
   resolvedContextAttachments,
   removeFirstUpload,
   sendChatMessage,
   sendRawSessionMessage,
   sendStagedSessionMessage,
+  sessionAttentionContext,
   sessionMessages,
   sha256Attachment,
   stageContextAttachmentsForTest,
   startDeterministicAttentionChat,
   terminalResultsForAction,
+  turnFunctionCalls,
   verifyContextStagingCapability,
   waitForAgentText,
   waitForAttentionSocketReplacement,
   waitForPersistedMessage,
+  waitForReadReport,
   waitForSessionComposerReady,
-  waitForTerminalDispatch,
+  waitForAssistantReply,
+  waitForUiActionRequest,
   waitForUiActionResult,
 } from './helpers/attention'
 
 const cell = attentionRuntimeCell()
 const describeCell = `${cell.layout}/${cell.engine}/${cell.mode}${cell.visualCapture ? '/visual' : ''}`
 const FIXTURE_JSON_NUMERIC_TOLERANCE = 0.5
+// A valid 1x1 PNG for ordinary composer uploads.
+const ONE_PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
 const PATH_IDENTITY_FIELDS = [
   'kind',
   'mount_id',
@@ -238,8 +249,12 @@ async function expectCompletedWithoutAttentionDebugChat(
   page: Page,
   command: Awaited<ReturnType<typeof sendChatMessage>>,
 ): Promise<void> {
-  const terminal = await waitForTerminalDispatch(page, command.session_id, command.persistedMessageId)
-  expect(terminal.dispatch?.state).toBe('completed')
+  await waitForPersistedMessage(page, command.session_id, message => message.type === 'assistant'
+    && message.metadata?.source_id === command.persistedMessageId)
+  expect((await capturedIncomingPackets(page)).filter(packet => packet.request_id === command.request_id
+    && packet.type === 'received')).toHaveLength(1)
+  expect((await capturedIncomingPackets(page)).filter(packet => packet.request_id === command.request_id
+    && packet.type === 'command_response')).toHaveLength(0)
   await expectNoAttentionDebugChat(page, command.session_id)
 }
 
@@ -435,17 +450,16 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     }))
     expect(command.data.runtime_context?.attention?.agent_actions_enabled).toBe(true)
     expect(Buffer.byteLength(JSON.stringify(resolvedContextAttachments(command)), 'utf8')).toBeLessThanOrEqual(32 * 1024)
-    expect(command.data.context_attachments).toBeUndefined()
-    expect(command.data.context_attachments_ref).toBeDefined()
+    expect(command.data.context_attachments).toHaveLength(1)
+    expect(command.data.context_attachments_ref).toBeUndefined()
     const metrics = (await capturedPayloadMetrics(page)).filter(metric => metric.requestId === command.request_id)
     expect(metrics).toHaveLength(1)
-    expect(metrics[0].attachmentArrayBytes).toBe(0)
-    expect(metrics[0].commandBytes).toBeLessThan(4096)
+    expect(metrics[0].attachmentArrayBytes).toBeGreaterThan(0)
+    expect(metrics[0].commandBytes).toBeLessThanOrEqual(32768)
     const stages = capturedHttpStageMetrics(page).filter(metric => metric.method === 'POST' && metric.requestId === command.request_id)
-    expect(stages).toHaveLength(1)
-    expect(stages[0].requestBytes).toBe(command.data.context_attachments_ref!.content_bytes)
-    expect(stages[0].attention).toHaveLength(1)
-    expect(stages[0].attention[0]).toEqual(expect.objectContaining({
+    expect(stages).toHaveLength(0)
+    expect(metrics[0].attention).toHaveLength(1)
+    expect(metrics[0].attention[0]).toEqual(expect.objectContaining({
       snapshotJsonBytes: Buffer.byteLength(attentionAttachment(command).content, 'utf8'),
       candidateCount: snapshot.candidates.length,
       recentEventCount: snapshot.recent_events.length,
@@ -474,7 +488,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     expect(persistedAttachment).toEqual(attentionAttachment(command))
   })
 
-  test('records the current Host panel after a real Send click moves focus out of the nested document', async ({ page }) => {
+  test('preserves meaningful nested focus and pointer context across keyboard submission', async ({ page }) => {
     test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
     const fixture = await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
@@ -486,18 +500,18 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
         await fixture.leftTarget.focus()
         await expect(fixture.leftTarget).toBeFocused()
       },
-      submit: async () => {
-        await page.locator('.chat-input__send-button').click()
-      },
     })
     const snapshot = attentionSnapshot(command)
-    expect(snapshot.focus).toEqual(expect.objectContaining({
+    expect(snapshot.focus, JSON.stringify({ capture: snapshot.capture, omissions: snapshot.omissions, protocol: await attentionProtocolDiagnostics(page) }).slice(0, 12_000)).toEqual(expect.objectContaining({
       focused_at: expect.any(String),
       path: expect.any(Array),
       sequence: expect.any(Number),
     }))
-    expect(snapshot.focus!.path.map(segment => segment.kind)).toEqual(['host', 'panel'])
-    expect(JSON.stringify(snapshot.focus!.summary)).not.toContain('left nested target')
+    expectCompleteNestedPath(snapshot.focus!.path)
+    expect(JSON.stringify(snapshot.focus!.summary)).toContain('left nested target')
+    expect(pointerCandidates(snapshot).some(candidate => (
+      JSON.stringify(candidate.summary).includes('right nested target')
+    ))).toBe(true)
 
     const persisted = await waitForPersistedMessage(
       page,
@@ -595,61 +609,9 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     expect(projectedRight.top).toBeCloseTo(rightCandidate.action_ref!.rect.y, 3)
     expect(projectedRight.width).toBeCloseTo(Math.max(1, rightCandidate.action_ref!.rect.width), 3)
 
-    const acceptedRoot = command.command_response.dispatch
-    expect(acceptedRoot).toBeDefined()
-    expect(acceptedRoot!.message_id).toBe(command.persistedMessageId)
-    const pendingFunction = await (async () => {
-      try {
-        return await waitForPersistedMessage(page, command.session_id, message => message.type === 'private_function'
-          && message.metadata?.call_id === 'attention-e2e-confirm-1' && message.metadata.status === 'pending')
-      }
-      catch (error) {
-        const [history, incoming] = await Promise.all([
-          sessionMessages(page, command.session_id),
-          capturedIncomingPackets(page),
-        ])
-        const rootDispatchId = acceptedRoot?.dispatch_id
-        const relevantHistory = history
-          .filter(message => message.type === 'private_function' || message.message_id === command.persistedMessageId)
-          .slice(-16)
-          .map(message => ({
-            call_id: message.metadata?.call_id,
-            message_id: message.message_id,
-            observed_at: new Date().toISOString(),
-            session_id: message.session_id,
-            status: message.metadata?.status,
-            type: message.type,
-          }))
-        const relevantIncoming = incoming
-          .filter(packet => packet.call_id === 'attention-e2e-confirm-1'
-            || packet.root_message_id === command.persistedMessageId
-            || packet.dispatch?.dispatch_id === rootDispatchId)
-          .slice(-32)
-          .map(packet => ({
-            call_id: packet.call_id,
-            dispatch_id: packet.dispatch?.dispatch_id,
-            dispatch_state: packet.dispatch?.state,
-            message_id: packet.message_id,
-            received_at: packet.received_at,
-            root_message_id: packet.root_message_id,
-            session_id: packet.session_id,
-            status: packet.status,
-            type: packet.type,
-          }))
-        throw new Error(`${error instanceof Error ? error.message : String(error)}; sanitized pending-function lifecycle: ${JSON.stringify({
-          expected_call_id: 'attention-e2e-confirm-1',
-          function_call_observed: relevantIncoming.some(packet => packet.type === 'function_call'),
-          function_success_observed: relevantIncoming.some(packet => packet.type === 'function_success'),
-          history: relevantHistory,
-          incoming: relevantIncoming,
-          root_dispatch_id: rootDispatchId,
-          root_message_id: command.persistedMessageId,
-          session_id: command.session_id,
-          terminal_dispatch_observed: relevantIncoming.some(packet => packet.type === 'dispatch_status'
-            && ['completed', 'interrupted', 'cancelled'].includes(packet.dispatch_state ?? '')),
-        })}`)
-      }
-    })()
+    expect(command.receipt.type).toBe('received')
+    const pendingFunction = await waitForPersistedMessage(page, command.session_id, message => message.type === 'private_function'
+      && message.metadata?.call_id === 'attention-e2e-confirm-1' && message.metadata.status === 'pending')
     expect(pendingFunction.message_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     expect(pendingFunction.message_id).not.toBe(pendingFunction.metadata!.call_id)
     expect((await capturedIncomingPackets(page)).filter(packet => packet.call_id === pendingFunction.metadata!.call_id
@@ -664,51 +626,11 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const result = await waitForUiActionResult(page, command.session_id, 'confirmed')
     expect(result.data.selected_target?.target_id).toBe(rightCandidate.target_id)
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
-    const terminal = await waitForTerminalDispatch(page, command.session_id, command.persistedMessageId)
-    if (terminal.dispatch?.state !== 'completed') {
-      const [history, incoming] = await Promise.all([
-        sessionMessages(page, command.session_id),
-        capturedIncomingPackets(page),
-      ])
-      throw new Error(`sanitized terminal dispatch failure: ${JSON.stringify({
-        dispatch: terminal.dispatch,
-        history: history.slice(-16).map(message => ({
-          call_id: message.metadata?.call_id,
-          message_id: message.message_id,
-          session_id: message.session_id,
-          source_id: message.metadata?.source_id,
-          status: message.metadata?.status,
-          type: message.type,
-        })),
-        incoming: incoming
-          .filter(packet => packet.root_message_id === command.persistedMessageId || packet.dispatch?.dispatch_id === acceptedRoot!.dispatch_id)
-          .slice(-24)
-          .map(packet => ({
-            dispatch_id: packet.dispatch?.dispatch_id,
-            dispatch_state: packet.dispatch?.state,
-            message_id: packet.message_id,
-            root_message_id: packet.root_message_id,
-            status: packet.status,
-            type: packet.type,
-          })),
-        root_message_id: command.persistedMessageId,
-        session_id: command.session_id,
-      })}`)
-    }
-    expect(terminal.dispatch).toEqual(expect.objectContaining({
-      dispatch_id: acceptedRoot!.dispatch_id,
-      message_id: command.persistedMessageId,
-      response_id: acceptedRoot!.response_id,
-      state: 'completed',
-      terminal_code: 'DISPATCH_COMPLETED',
-    }))
+    await waitForAssistantReply(page, command.session_id, command.persistedMessageId)
     expect((await Promise.all(page.frames().map(frame => frame.locator(`[data-message-part="tool"][data-message-id="${pendingFunction.message_id}"]`).count())))
       .reduce((total, count) => total + count, 0)).toBe(0)
     const lifecycle = (await capturedIncomingPackets(page)).filter(packet => packet.call_id === pendingFunction.metadata!.call_id)
     expect(lifecycle.filter(packet => ['function_call', 'function_success', 'function_error'].includes(packet.type))).toHaveLength(0)
-    expect((await capturedIncomingPackets(page)).filter(packet => packet.type === 'dispatch_status'
-      && packet.topic === `session:${command.session_id}` && packet.dispatch?.message_id === command.persistedMessageId
-      && ['completed', 'interrupted', 'cancelled'].includes(packet.dispatch.state))).toHaveLength(1)
     const history = await sessionMessages(page, command.session_id)
     const functions = history.filter(message => message.type === 'private_function' && message.metadata?.call_id === pendingFunction.metadata!.call_id)
     expect(functions).toHaveLength(1)
@@ -877,7 +799,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
-  test('invalidates a live target when viewport geometry changes', async ({ page }) => {
+  test('refreshes the same canonical target when its rendered geometry changes', async ({ page }) => {
     test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
     const fixture = await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
@@ -885,12 +807,70 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     await moveToSiblingBoundary(page, fixture)
 
     const command = await sendChatMessage(page, composer, 'Please confirm the boundary — is that it?')
-    await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'Attention confirmation overlay', 30_000)
-    const viewport = page.viewportSize() ?? { height: 720, width: 1280 }
-    await page.setViewportSize({ height: viewport.height + 1, width: viewport.width })
+    const overlay = await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'Attention confirmation overlay', 30_000)
+    const intended = attentionSnapshot(command).candidates.find(candidate => JSON.stringify(candidate.summary).includes('left nested target'))!
+    expect(intended).toBeDefined()
+    await fixture.leftTarget.evaluate((element) => {
+      element.style.transform = 'translateX(24px)'
+    })
+    const moved = await fixture.leftTarget.boundingBox()
+    expect(moved).not.toBeNull()
+    expect(intended.rect).toBeDefined()
+    expect(Math.abs(moved!.x - intended.rect!.x)).toBeGreaterThan(20)
+    const projectedTarget = overlay.getByRole('button', { name: 'Attention target left', exact: true })
+    await projectedTarget.focus()
+    await page.keyboard.press('Enter')
+    await expect(projectedTarget).toHaveAttribute('aria-pressed', 'true')
+    await (await findVisibleRole(page, 'button', 'Yes, that’s it')).click()
+
+    const result = await waitForUiActionResult(page, command.session_id, 'confirmed')
+    expect(result.data.selected_target?.target_id).toBe(intended.target_id)
+    expect(Math.abs(result.data.selected_target!.rect.x - moved!.x)).toBeLessThan(FIXTURE_JSON_NUMERIC_TOLERANCE)
+    expect(Math.abs(result.data.selected_target!.rect.y - moved!.y)).toBeLessThan(FIXTURE_JSON_NUMERIC_TOLERANCE)
+    expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
+    await expectCompletedWithoutAttentionDebugChat(page, command)
+  })
+
+  test('returns stale when the offered target is remounted before the user answers', async ({ page }) => {
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
+    const fixture = await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page)
+    await enablePointingContext(page)
+    await moveToSiblingBoundary(page, fixture)
+
+    const command = await sendChatMessage(page, composer, 'Please confirm the boundary — is that it?')
+    const overlay = await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'Attention confirmation overlay', 30_000)
+    const offered = attentionSnapshot(command).candidates.find(candidate => JSON.stringify(candidate.summary).includes('left nested target'))!
+    expect(offered?.action_ref).toBeDefined()
+    // Re-rendering the fixture bridge replaces its nested artifact. The left
+    // target comes back as a new element under a new mount, so the offered
+    // immutable reference can no longer resolve.
+    await fixture.leftTarget.evaluate((element) => {
+      (element as HTMLElement).dataset.attentionE2eBeforeRemount = 'true'
+    })
+    const bridge = await findVisibleTestId(page, 'attention-bridge-left')
+    await bridge.evaluate(element => element.setAttribute('side', 'left'))
+    await expect.poll(async () => {
+      try {
+        const remounted = await findVisibleTestId(page, 'attention-target-left', 1_000)
+        return await remounted.evaluate(element => (element as HTMLElement).dataset.attentionE2eBeforeRemount === undefined)
+      }
+      catch {
+        return false
+      }
+    }, { timeout: 20_000, message: 'left target rendered again as a new element' }).toBe(true)
+
+    const projectedTarget = overlay.getByRole('button', { name: 'Attention target left', exact: true })
+    await projectedTarget.focus()
+    await page.keyboard.press('Enter')
 
     const result = await waitForUiActionResult(page, command.session_id, 'stale')
+    expect(result.data.selected_target).toBeUndefined()
     expect(await terminalResultsForAction(page, result.data.in_reply_to_action_id)).toHaveLength(1)
+    expect((await capturedWireMessages(page)).filter(message => message.type === 'session_ui_action_result'
+      && message.data.in_reply_to_action_id === result.data.in_reply_to_action_id
+      && message.data.status === 'confirmed')).toHaveLength(0)
+    await expect.poll(() => attentionOverlayCount(page).catch(() => 0)).toBe(0)
     await expectCompletedWithoutAttentionDebugChat(page, command)
   })
 
@@ -967,14 +947,9 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       && message.metadata?.status === 'success'
     ))
     expect(completedFunctions).toHaveLength(1)
-    const terminal = await requestDispatchStatus(page, command.session_id, command.command_response.dispatch!.dispatch_id)
-    expect(terminal).toEqual(expect.objectContaining({
-      dispatch_id: command.command_response.dispatch?.dispatch_id,
-      message_id: command.persistedMessageId,
-      response_id: command.command_response.dispatch?.response_id,
-      state: 'completed',
-      terminal_code: 'DISPATCH_COMPLETED',
-    }))
+    await waitForSessionComposerReady(page, command.session_id)
+    await waitForAssistantReply(page, command.session_id, command.persistedMessageId)
+    expect((await sessionMessages(page, command.session_id)).filter(message => message.message_id === command.persistedMessageId)).toHaveLength(1)
     await expectNoAttentionDebugChat(page, command.session_id)
 
     const reconnected = await sendChatMessage(page, reopenedComposer, 'Verify the session WebSocket after reconnect')
@@ -1011,6 +986,8 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       expect(await terminalResultsForAction(page, denied.data.in_reply_to_action_id)).toHaveLength(1)
       expect(await attentionOverlayCount(page)).toBe(0)
       await expect(page.locator('.chat-input__upload-list, .message-input__files')).toHaveCount(0)
+      await expectCompletedWithoutAttentionDebugChat(page, command)
+      await waitForSessionComposerReady(page, command.session_id)
     }
     finally {
       await restoreProvider()
@@ -1034,12 +1011,12 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const fixture = await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
     await enablePointingContext(page)
-    await fixture.leftTarget.hover()
+    await fixture.rightTarget.hover()
 
     const command = await sendChatMessage(page, composer, 'prepare screenshot of this area')
     expect(resolvedContextAttachments(command)).toHaveLength(1)
     const snapshot = attentionSnapshot(command)
-    const intended = pointerCandidates(snapshot).find(candidate => JSON.stringify(candidate.summary).includes('left nested target'))
+    const intended = pointerCandidates(snapshot).find(candidate => JSON.stringify(candidate.summary).includes('right nested target'))
     expect(intended).toBeDefined()
     const overlay = await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'visual capture overlay', 30_000)
     const selectedArea = overlay.getByRole('button', { name: 'Selected area', exact: true })
@@ -1072,10 +1049,31 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     expect((await capturedWireMessages(page))
       .filter(message => message.type === 'session_message')).toHaveLength(sentMessagesBeforeRemoval)
 
+    await expectCompletedWithoutAttentionDebugChat(page, command)
+    await waitForSessionComposerReady(page, command.session_id)
     await enablePointingContext(page)
-    await fixture.leftTarget.hover()
+    await fixture.rightTarget.hover()
     const recapture = await sendChatMessage(page, composer, 'prepare screenshot of this area again')
     const recaptureOverlay = await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'second visual capture overlay', 30_000)
+    // The excluded conversation can cover the lower part of a tall iframe
+    // target. Select an unobstructed region through the ordinary capture UI.
+    const targetBox = await fixture.rightTarget.boundingBox()
+    expect(targetBox).not.toBeNull()
+    await recaptureOverlay.getByRole('button', { name: 'Adjust area', exact: true }).click()
+    const panelBox = await recaptureOverlay.locator('.wippy-attention-overlay__panel').boundingBox()
+    expect(panelBox).not.toBeNull()
+    const region = {
+      x: targetBox!.x + 8,
+      y: Math.max(targetBox!.y + 8, panelBox!.y + panelBox!.height + 8),
+      width: Math.min(targetBox!.width - 16, 88),
+      height: 88,
+    }
+    expect(region.y + region.height).toBeLessThan(targetBox!.y + targetBox!.height)
+    await page.mouse.move(region.x, region.y)
+    await page.mouse.down()
+    await page.mouse.move(region.x + region.width, region.y + region.height, { steps: 4 })
+    await page.mouse.up()
+    await expect.poll(() => recaptureOverlay.locator('[data-wippy-attention-capture-region]').boundingBox()).toEqual(region)
     await recaptureOverlay.getByRole('button', { name: 'Add image to message', exact: true }).click()
     const prepared = await waitForUiActionResult(
       page,
@@ -1085,26 +1083,43 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       result.data.in_reply_to_action_id,
     )
     expect(prepared.data.prepared_file?.uuid).toMatch(/^[\w-]+$/)
+    expect(prepared.data.prepared_file?.scope).toBe('region')
     const recaptureQueue = await findVisibleUploadQueue(page)
     await expect(recaptureQueue).toContainText(prepared.data.prepared_file!.name!)
+    await expectCompletedWithoutAttentionDebugChat(page, recapture)
+    await waitForSessionComposerReady(page, recapture.session_id)
     const sent = await sendChatMessage(page, composer, 'What am I pointing at with a successful screenshot?')
-    expect((resolvedContextAttachments(sent) ?? []).some(item => item.kind === 'wippy.attention.visual')).toBe(false)
+    // The approved capture reaches the model at Send through one
+    // wippy.attention.visual attachment that references the queued upload.
+    // The upload itself is only listed to the model, never inlined.
+    const visual = (resolvedContextAttachments(sent) ?? []).filter(item => item.kind === 'wippy.attention.visual')
+    expect(visual).toHaveLength(1)
+    expect(JSON.parse(visual[0].content)).toEqual(expect.objectContaining({
+      schema: 'wippy.attention.visual.v1',
+      reference: { kind: 'upload', opaque_id: prepared.data.prepared_file!.uuid },
+      authorization: expect.objectContaining({ audience: 'agent-context', scope: 'session', session_id: sent.session_id }),
+      media: expect.objectContaining({
+        content_bytes: prepared.data.prepared_file!.byte_size,
+        content_hash: prepared.data.prepared_file!.sha256,
+        content_type: 'image/png',
+      }),
+    }))
     expect(sent.data.file_uuids).toContain(prepared.data.prepared_file!.uuid)
     const answer = await waitForAgentText(page, 'ATTENTION_E2E_VISUAL')
-    await expect(answer).toContainText('image/png')
+    // The provider received the dereferenced image bytes, base64 encoded.
+    await expect(answer).toContainText(`ATTENTION_E2E_VISUAL image/png ${4 * Math.ceil(prepared.data.prepared_file!.byte_size / 3)}`)
   })
 
   test('rejects one malformed attachment atomically and keeps normal chat usable', async ({ page }) => {
-    test.skip(cell.mode !== 'enabled' || cell.visualCapture, 'requires the standard enabled runtime cell')
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
     await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
     const seed = await sendChatMessage(page, composer, 'Seed the single malformed attachment regression')
-    const seedAck = (await capturedIncomingPackets(page)).find(packet => packet.type === 'command_response'
+    const seedAck = (await capturedIncomingPackets(page)).find(packet => packet.type === 'received'
       && packet.request_id === seed.request_id)
-    expect(seedAck, 'plain-message ACK must carry a real empty receipt array').toEqual(expect.objectContaining({
-      attachmentReceiptCount: 0,
-      attachmentsShape: 'array',
-      dispatch: expect.objectContaining({ message_id: seed.persistedMessageId }),
+    expect(seedAck, 'plain-message receipt preserves the existing contract without unused attachment fields').toEqual(expect.objectContaining({
+      attachmentsShape: 'missing',
+      message_id: seed.persistedMessageId,
     }))
     await waitForPersistedMessage(page, seed.session_id, message => message.type === 'assistant' && message.data.includes('ATTENTION_E2E_CONTEXT_MISSING'))
     await waitForSessionComposerReady(page, seed.session_id)
@@ -1118,7 +1133,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     })
     const rejectedText = 'ATTENTION_INVALID_single-malformed-atomic-rejection'
     const rejected = await sendRawSessionMessage(page, seed.session_id, rejectedText, [malformed])
-    expect(rejected.commandResponse).toEqual(expect.objectContaining({
+    expect(rejected.reply).toEqual(expect.objectContaining({
       code: 'invalid_context_attachments',
       detail_code: 'invalid-json',
       request_id: rejected.requestId,
@@ -1126,13 +1141,13 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       topic: `session:${seed.session_id}`,
       success: false,
     }))
-    expect(rejected.commandResponse.message_id).toBeUndefined()
+    expect(rejected.reply.message_id).toBeUndefined()
     const assertSingleRejection = async () => {
       expect((await capturedWireMessages(page)).filter(message => message.type === 'session_message'
         && message.request_id === rejected.requestId)).toHaveLength(1)
-      const responses = (await capturedCommandResponses(page)).filter(response => response.request_id === rejected.requestId)
+      const responses = (await capturedCorrelatedReplies(page)).filter(response => response.request_id === rejected.requestId)
       expect(responses).toHaveLength(1)
-      expect(responses[0]).toEqual(rejected.commandResponse)
+      expect(responses[0]).toEqual(rejected.reply)
       expect((await sessionMessages(page, seed.session_id)).filter(message => message.data === rejectedText)).toHaveLength(0)
     }
     await assertSingleRejection()
@@ -1150,7 +1165,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
   })
 
   test('retries a context message idempotently and rejects conflicting reuse', async ({ page }) => {
-    test.skip(cell.mode !== 'enabled' || cell.visualCapture, 'requires the standard enabled runtime cell')
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
     await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
     const seed = await sendChatMessage(page, composer, 'Seed the explicit context idempotency regression')
@@ -1166,16 +1181,15 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     })
     const text = 'ATTENTION_EXPLICIT_IDEMPOTENT_MESSAGE'
     const first = await sendRawSessionMessage(page, seed.session_id, text, [context])
-    expect(first.commandResponse.success).toBe(true)
+    expect(first.reply.success).toBe(true)
     expect(first.persistedMessageId).toEqual(expect.any(String))
     const retry = await sendRawSessionMessage(page, seed.session_id, text, [context], { requestId: first.requestId })
-    expect(retry.commandResponse).toEqual(expect.objectContaining({ success: true, message_id: first.persistedMessageId }))
+    expect(retry.reply).toEqual(expect.objectContaining({ success: true, message_id: first.persistedMessageId }))
     const conflictText = 'ATTENTION_IDEMPOTENCY_CONFLICT_MUST_NOT_OVERWRITE'
     const conflict = await sendRawSessionMessage(page, seed.session_id, conflictText, [context], { requestId: first.requestId })
-    expect(conflict.commandResponse).toEqual(expect.objectContaining({ code: 'request_conflict', success: false }))
-    expect(conflict.commandResponse.message_id).toBeUndefined()
-    const terminal = await waitForTerminalDispatch(page, seed.session_id, first.persistedMessageId!)
-    expect(terminal.dispatch?.state).toBe('completed')
+    expect(conflict.reply).toEqual(expect.objectContaining({ code: 'request_conflict', success: false }))
+    expect(conflict.reply.message_id).toBeUndefined()
+    await waitForAssistantReply(page, seed.session_id, first.persistedMessageId!)
     const history = await sessionMessages(page, seed.session_id)
     expect(history.filter(message => message.data === conflictText)).toHaveLength(0)
     const persisted = history.filter(message => message.message_id === first.persistedMessageId)
@@ -1187,7 +1201,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
 
   for (const arrayBytes of [8, 16, 24, 32].map(kib => kib * 1024)) {
     test(`accepts a valid ${arrayBytes}-byte attachment array without crossing the documented quota`, async ({ page }) => {
-      test.skip(cell.mode !== 'enabled' || cell.visualCapture, 'requires the standard enabled runtime cell')
+      test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
       await bootAttentionTracer(page, cell)
       const composer = await startDeterministicAttentionChat(page)
       const seed = await sendChatMessage(page, composer, 'Seed the synthetic valid attachment quota boundary')
@@ -1208,11 +1222,11 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       attachment = await sha256Attachment(page, { ...metadata, content: JSON.stringify({ note: 'x'.repeat(fillerBytes) }) })
       expect(Buffer.byteLength(JSON.stringify([attachment]), 'utf8')).toBe(arrayBytes)
       const sent = await sendStagedSessionMessage(page, seed.session_id, `ATTENTION_VALID_QUOTA_${arrayBytes}`, [attachment], { runtimeContext: seed.data.runtime_context })
-      expect(sent.commandResponse).toEqual(expect.objectContaining({
+      expect(sent.reply).toEqual(expect.objectContaining({
         success: true,
         request_id: sent.requestId,
         socket_id: sent.socketId,
-        topic: `session:${seed.session_id}`,
+        topic: `session:${seed.session_id}:message:${sent.persistedMessageId}`,
       }))
       const persisted = await waitForPersistedMessage(page, seed.session_id, message => message.message_id === sent.persistedMessageId)
       expect(persisted.metadata?.context_attachments).toEqual([attachment])
@@ -1226,13 +1240,13 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       const wire = (await capturedWireMessages(page)).find(message => message.type === 'session_message' && message.request_id === sent.requestId)
       expect(wire?.data).not.toHaveProperty('context_attachments')
       expect(wire?.data).toHaveProperty('context_attachments_ref.content_bytes', arrayBytes)
-      expect((await capturedCommandResponses(page)).filter(response => response.request_id === sent.requestId)).toHaveLength(1)
+      expect((await capturedCorrelatedReplies(page)).filter(response => response.request_id === sent.requestId)).toHaveLength(1)
       await waitForSessionComposerReady(page, seed.session_id)
     })
   }
 
   test('rejects one logically oversized HTTP attachment without a message and leaves the session usable', async ({ page }) => {
-    test.skip(cell.mode !== 'enabled' || cell.visualCapture, 'requires the standard enabled runtime cell')
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
     await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
     const seed = await sendChatMessage(page, composer, 'Seed the synthetic oversized attachment rejection')
@@ -1265,13 +1279,13 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       && !previousAssistantIds.has(message.message_id) && message.data.includes('ATTENTION_E2E_CONTEXT_MISSING'))
     expect((await sessionMessages(page, seed.session_id)).filter(message => message.data === rejectedText)).toHaveLength(0)
     expect((await capturedPayloadMetrics(page)).filter(metric => metric.requestId === rejected.requestId)).toHaveLength(0)
-    expect((await capturedCommandResponses(page)).filter(response => response.request_id === rejected.requestId)).toHaveLength(0)
+    expect((await capturedCorrelatedReplies(page)).filter(response => response.request_id === rejected.requestId)).toHaveLength(0)
     expect(capturedHttpStageMetrics(page).filter(metric => metric.method === 'POST' && metric.requestId === rejected.requestId)).toHaveLength(1)
     await waitForSessionComposerReady(page, seed.session_id)
   })
 
   test('rejects deliberate oversized raw WebSocket abuse with native close code 1009', async ({ page }) => {
-    test.skip(cell.mode !== 'enabled' || cell.visualCapture, 'requires the standard enabled runtime cell')
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
     await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
     const seed = await sendChatMessage(page, composer, 'Seed the native WebSocket frame limit probe')
@@ -1293,7 +1307,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
   })
 
   test('rejects invalid attachments, isolates forged visual references, and preserves forward-compatible envelopes', async ({ page }) => {
-    test.skip(cell.mode !== 'enabled' || cell.visualCapture, 'requires the standard enabled runtime cell')
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
     const fixture = await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
     await enablePointingContext(page)
@@ -1301,7 +1315,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     const seed = await sendChatMessage(page, composer, 'Create the valid Attention attachment seed')
     await waitForPersistedMessage(page, seed.session_id, message => message.message_id === seed.persistedMessageId)
     await waitForAgentText(page, 'ATTENTION_E2E_TARGET')
-    await waitForTerminalDispatch(page, seed.session_id, seed.persistedMessageId)
+    await waitForAssistantReply(page, seed.session_id, seed.persistedMessageId)
     const validAttention = attentionAttachment(seed)
     const now = new Date()
     const future = new Date(now.getTime() + 300_000).toISOString()
@@ -1383,6 +1397,14 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       content: JSON.stringify({ schema: 'wippy.attention.v2' }),
       created_at: now.toISOString(),
     })
+    const malformedCurrentV4 = await sha256Attachment(page, {
+      attachment_id: crypto.randomUUID(),
+      kind: 'wippy.attention',
+      version: 4,
+      content_type: 'application/json',
+      content: JSON.stringify({ schema: 'wippy.attention.v4' }),
+      created_at: now.toISOString(),
+    })
     const invalidCases = [
       { attachments: [corruptedHash], detailCode: 'content-hash-mismatch', label: 'corrupted-content-hash' },
       { attachments: excessive, detailCode: 'too-many-attachments', label: 'excessive-count' },
@@ -1391,6 +1413,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       { attachments: [unauthorized], detailCode: 'visual-session-mismatch', label: 'unauthorized' },
       { attachments: [unknownWithBearer], detailCode: 'forbidden-live-field', label: 'unknown-bearer' },
       { attachments: [malformedCurrentV2], detailCode: 'invalid-attention-payload', label: 'malformed-current-v2' },
+      { attachments: [malformedCurrentV4], detailCode: 'invalid-attention-payload', label: 'malformed-current-v4' },
     ]
     const invalidTexts: string[] = []
     const invalidRequestIds: string[] = []
@@ -1498,7 +1521,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       'ATTENTION_UNKNOWN_FORWARD_COMPAT_BARRIER',
       [inertUnknown],
     )
-    expect(barrier.commandResponse).toEqual(expect.objectContaining({
+    expect(barrier.reply).toEqual(expect.objectContaining({
       message_id: expect.any(String),
       request_id: barrier.requestId,
       success: true,
@@ -1509,14 +1532,17 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       message => message.message_id === barrier.persistedMessageId && message.type === 'user',
     )
     expect(persistedBarrier.metadata?.context_attachments).toEqual([inertUnknown])
-    await waitForTerminalDispatch(page, seed.session_id, barrier.persistedMessageId!)
+    // The deterministic provider reports what reached the model: the unknown
+    // kind is preserved in history but adds no prompt part and no content.
+    const barrierAnswer = await waitForAssistantReply(page, seed.session_id, barrier.persistedMessageId!)
+    expect(barrierAnswer.data).toBe('ATTENTION_E2E_PROMPT_INERT parts=1 leaked=false')
 
     const knownKindNewerVersion = await sha256Attachment(page, {
       attachment_id: crypto.randomUUID(),
       kind: 'wippy.attention',
-      version: 4,
+      version: 99,
       content_type: 'application/json',
-      content: JSON.stringify({ schema: 'wippy.attention.v4' }),
+      content: JSON.stringify({ schema: 'wippy.attention.v99' }),
       created_at: now.toISOString(),
     })
     const newerVersion = await sendRawSessionMessage(
@@ -1525,7 +1551,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       'ATTENTION_KNOWN_KIND_NEWER_VERSION_BARRIER',
       [knownKindNewerVersion],
     )
-    expect(newerVersion.commandResponse).toEqual(expect.objectContaining({
+    expect(newerVersion.reply).toEqual(expect.objectContaining({
       message_id: expect.any(String),
       request_id: newerVersion.requestId,
       success: true,
@@ -1535,7 +1561,8 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       seed.session_id,
       message => message.message_id === newerVersion.persistedMessageId && message.type === 'user',
     )
-    await waitForTerminalDispatch(page, seed.session_id, newerVersion.persistedMessageId!)
+    const newerVersionAnswer = await waitForAssistantReply(page, seed.session_id, newerVersion.persistedMessageId!)
+    expect(newerVersionAnswer.data).toBe('ATTENTION_E2E_PROMPT_INERT parts=1 leaked=false')
     const finalBarrier = await sendRawSessionMessage(
       page,
       seed.session_id,
@@ -1547,7 +1574,7 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
       seed.session_id,
       message => message.message_id === finalBarrier.persistedMessageId && message.type === 'user',
     )
-    await waitForTerminalDispatch(page, seed.session_id, finalBarrier.persistedMessageId!)
+    await waitForAssistantReply(page, seed.session_id, finalBarrier.persistedMessageId!)
     const history = await sessionMessages(page, seed.session_id)
     expect((await capturedPayloadMetrics(page)).filter(metric => invalidRequestIds.includes(metric.requestId ?? ''))).toHaveLength(0)
     expect(history.filter(message => invalidTexts.includes(message.data))).toHaveLength(0)
@@ -1555,10 +1582,335 @@ test.describe(`Attention agent acceptance: ${describeCell}`, () => {
     expect(persistedNewerVersion).toHaveLength(1)
     expect(persistedNewerVersion[0].metadata?.context_attachments).toEqual([knownKindNewerVersion])
   })
+
+  test('ignores a UI action addressed to another Host tab and completes it in the owning tab', async ({ page, browser }, testInfo) => {
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
+    await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page)
+    const command = await sendChatMessage(page, composer, 'Click the area I meant in the owning tab')
+    const ownerHost = command.data.runtime_context?.attention?.host_instance_id
+    expect(ownerHost).toEqual(expect.any(String))
+    await findVisible(page, root => root.locator('[data-wippy-attention-overlay]'), 'owning-tab selection overlay', 30_000)
+    const request = await waitForUiActionRequest(page, command.session_id, 'select')
+    expect(request.data.host_instance_id).toBe(ownerHost)
+
+    const otherContext = await browser.newContext({ baseURL: testInfo.project.use.baseURL })
+    try {
+      const other = await otherContext.newPage()
+      await installAttentionWireTap(other)
+      await bootAttentionTracer(other, cell)
+      // The second tab learns its own Host identity from a turn in its own
+      // session, then follows the owning session.
+      const otherComposer = await startDeterministicAttentionChat(other)
+      const otherSeed = await sendChatMessage(other, otherComposer, 'Seed the second Host tab identity')
+      const otherHost = otherSeed.data.runtime_context?.attention?.host_instance_id
+      expect(otherHost).toEqual(expect.any(String))
+      expect(otherHost).not.toBe(ownerHost)
+      await waitForAssistantReply(other, otherSeed.session_id, otherSeed.persistedMessageId)
+      await waitForSessionComposerReady(other, otherSeed.session_id)
+      await openPersistedSession(other, command.session_id)
+
+      // The owning tab's exact request reaches the second tab, as it would on
+      // a shared or misrouted socket. That tab must stay silent.
+      await injectSessionSocketEnvelope(other, request)
+      await other.waitForTimeout(1_500)
+      expect(await attentionOverlayCount(other)).toBe(0)
+      expect((await capturedWireMessages(other)).filter(message => message.type === 'session_ui_action_result')).toHaveLength(0)
+
+      // Positive control: the same request addressed to the second tab's own
+      // Host instance is admitted there, so the silence above is the routing check.
+      const controlActionId = crypto.randomUUID()
+      await injectSessionSocketEnvelope(other, {
+        ...request,
+        data: { ...request.data, action_id: controlActionId, host_instance_id: otherHost },
+      })
+      await findVisible(other, root => root.locator('[data-wippy-attention-overlay]'), 'second-tab control overlay', 20_000)
+      await other.keyboard.press('Escape')
+      const control = await waitForUiActionResult(other, command.session_id, 'cancelled')
+      expect(control.data.in_reply_to_action_id).toBe(controlActionId)
+      expect((await capturedWireMessages(other)).filter(message => message.type === 'session_ui_action_result'
+        && message.data.in_reply_to_action_id === request.data.action_id)).toHaveLength(0)
+    }
+    finally {
+      await otherContext.close()
+    }
+
+    // The owning tab still holds the real action and answers it exactly once.
+    expect(await attentionOverlayCount(page)).toBeGreaterThan(0)
+    await page.keyboard.press('Escape')
+    const result = await waitForUiActionResult(page, command.session_id, 'cancelled')
+    expect(result.data.in_reply_to_action_id).toBe(request.data.action_id)
+    expect(await terminalResultsForAction(page, request.data.action_id)).toHaveLength(1)
+    await expectCompletedWithoutAttentionDebugChat(page, command)
+  })
+
+  test('gives an agent without the Attention trait no read authority while normal chat keeps working', async ({ page }) => {
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
+    const fixture = await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page, ATTENTION_E2E_AGENT_WITHOUT_ATTENTION)
+    await fixture.rightTarget.hover()
+
+    const plain = await sendChatMessage(page, composer, 'Plain message for the agent without Attention')
+    // The Host still binds the turn; authority must come from the agent trait.
+    expect(plain.data.runtime_context?.attention?.host_instance_id).toEqual(expect.any(String))
+    expect((await waitForAssistantReply(page, plain.session_id, plain.persistedMessageId)).data).toBe('ATTENTION_E2E_CONTEXT_MISSING')
+
+    // The read tools are not offered to the model at all.
+    const offered = await sendChatMessage(page, await waitForSessionComposerReady(page, plain.session_id), 'ATTENTION_READ cursor')
+    expect((await waitForAssistantReply(page, plain.session_id, offered.persistedMessageId)).data)
+      .toBe('ATTENTION_E2E_TOOL_MISSING: wippy.agent.tools:attention_get_cursor')
+
+    // A call the model was never offered is refused by Session authority.
+    const forced = await sendChatMessage(page, await waitForSessionComposerReady(page, plain.session_id), 'ATTENTION_READ forced-cursor')
+    const report = await waitForReadReport(page, plain.session_id, forced.persistedMessageId)
+    expect(report.results).toHaveLength(1)
+    expect(JSON.stringify(report.results[0])).toContain('Attention tool is not enabled for the current effective agent')
+    const refused = (await sessionMessages(page, plain.session_id)).filter(message => ['function', 'private_function'].includes(message.type)
+      && message.metadata?.call_id?.startsWith('attention-e2e-read-'))
+    expect(refused).toHaveLength(1)
+    expect(refused[0].metadata?.status).toBe('error')
+    expect(await capturedUiActionRequests(page)).toHaveLength(0)
+    expect((await capturedWireMessages(page)).filter(message => message.type === 'session_ui_action_result')).toHaveLength(0)
+
+    const after = await sendChatMessage(page, await waitForSessionComposerReady(page, plain.session_id), 'Plain message after the refused read')
+    expect(after.session_id).toBe(plain.session_id)
+    expect((await waitForAssistantReply(page, plain.session_id, after.persistedMessageId)).data).toBe('ATTENTION_E2E_CONTEXT_MISSING')
+  })
+
+  test('keeps excluded content and the composer upload list out of snapshots and read results', async ({ page }) => {
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
+    const fixture = await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page)
+    // Positive controls: the private strings really render next to public text.
+    const excluded = await findVisibleTestId(page, 'attention-private-text-left')
+    await expect(excluded).toHaveText(/Private visual token left/)
+    await expect(await findVisibleTestId(page, 'attention-private-text-right')).toHaveText(/Private visual token right/)
+
+    await enablePointingContext(page)
+    // Point at the public button just above the excluded text, so the 20 px
+    // sample around the pointer covers both. The managed layout's voice orb
+    // can cover the button centre, so the point is measured each time.
+    const pointAboveExcludedText = async () => {
+      const box = await excluded.boundingBox()
+      expect(box).not.toBeNull()
+      await page.mouse.move(box!.x + box!.width / 2, box!.y - 6, { steps: 4 })
+    }
+    await fixture.leftTarget.hover()
+    await pointAboveExcludedText()
+    const pointed = await sendChatMessage(page, composer, 'What am I pointing at near the private token?')
+    const pointedSnapshot = attentionAttachment(pointed).content
+    expect(pointedSnapshot).not.toContain('Private visual token')
+    expect(attentionSnapshot(pointed).omissions ?? []).toContainEqual(expect.objectContaining({ reason: 'excluded' }))
+    expect(pointerCandidates(attentionSnapshot(pointed)).some(candidate => JSON.stringify(candidate.summary).includes('left nested target'))).toBe(true)
+    await waitForAssistantReply(page, pointed.session_id, pointed.persistedMessageId)
+    const sessionId = pointed.session_id
+    const runtimeContext = pointed.data.runtime_context
+
+    const sentUpload = `attention-sent-upload-${crypto.randomUUID().slice(0, 8)}.png`
+    await addComposerUpload(page, { name: sentUpload, mimeType: 'image/png', buffer: ONE_PIXEL_PNG })
+    const queue = await findVisibleUploadQueue(page)
+    await expect(queue).toContainText(sentUpload)
+    // The last meaningful pointer observation is the public target; the
+    // pointer then rests on the excluded upload list while the user sends.
+    await pointAboveExcludedText()
+    await queue.hover()
+    const overUpload = await sendChatMessage(page, await waitForSessionComposerReady(page, sessionId), 'What am I pointing at over the upload list?')
+    expect(attentionAttachment(overUpload).content).not.toContain(sentUpload)
+    expect(attentionAttachment(overUpload).content).not.toContain('Private visual token')
+    await waitForAssistantReply(page, sessionId, overUpload.persistedMessageId)
+    await waitForSessionComposerReady(page, sessionId)
+
+    // Read results. The searched text never appears in this chat: the probe
+    // carries it reversed and the queued file is never sent.
+    const queuedUpload = `attention-queued-upload-${crypto.randomUUID().slice(0, 8)}.png`
+    await addComposerUpload(page, { name: queuedUpload, mimeType: 'image/png', buffer: ONE_PIXEL_PNG })
+    await expect(await findVisibleUploadQueue(page)).toContainText(queuedUpload)
+    const reversed = (value: string) => [...value].reverse().join('')
+    const control = await sendRawSessionMessage(page, sessionId, `ATTENTION_READ semantic-text-reversed ${reversed('Safe text for the left nested target')}`, undefined, { runtimeContext })
+    const controlReport = await waitForReadReport(page, sessionId, control.persistedMessageId!)
+    expect(controlReport.results[0]).toEqual(expect.objectContaining({ schema: 'wippy.attention.model.v1', status: 'inspected' }))
+    expect(JSON.stringify(controlReport.results[0].nodes ?? [])).toContain('Safe text for the left nested target')
+    await waitForSessionComposerReady(page, sessionId)
+    // Second positive control: chat text in the Host document, next to the
+    // composer, is searchable, so an empty result below is the exclusion.
+    const hostControl = await sendRawSessionMessage(page, sessionId, 'ATTENTION_READ semantic-text over the upload list', undefined, { runtimeContext })
+    const hostReport = await waitForReadReport(page, sessionId, hostControl.persistedMessageId!)
+    expect(JSON.stringify(hostReport.results[0].nodes ?? [])).toContain('over the upload list')
+    await waitForSessionComposerReady(page, sessionId)
+    for (const needle of ['Private visual token', queuedUpload]) {
+      const probe = await sendRawSessionMessage(page, sessionId, `ATTENTION_READ semantic-text-reversed ${reversed(needle)}`, undefined, { runtimeContext })
+      const report = await waitForReadReport(page, sessionId, probe.persistedMessageId!)
+      expect(report.results[0], needle).toEqual(expect.objectContaining({ schema: 'wippy.attention.model.v1', status: 'inspected' }))
+      expect(report.results[0].nodes ?? [], needle).toHaveLength(0)
+      expect(JSON.stringify(report), needle).not.toContain(needle)
+      await waitForSessionComposerReady(page, sessionId)
+    }
+    // The reads never consumed the queued file.
+    await expect(await findVisibleUploadQueue(page)).toContainText(queuedUpload)
+  })
+
+  test('pages attention_find_css matches through a continuation', async ({ page }) => {
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
+    const fixture = await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page)
+    const root = await prepareCssPagination(page, fixture.leftTarget)
+    const command = await sendChatMessage(
+      page,
+      composer,
+      `ATTENTION_READ css-scoped ${JSON.stringify({ selector: 'button', root })}`,
+    )
+    await waitForReadReport(page, command.session_id, command.persistedMessageId)
+
+    const calls = await turnFunctionCalls(page, command.session_id, command.persistedMessageId)
+    const diagnostics = JSON.stringify(calls).slice(0, 12_000)
+    expect(calls.map(call => call.function_name), diagnostics).toEqual([
+      'attention_get_tree',
+      'attention_find_css',
+      'attention_find_css',
+    ])
+
+    const [tree, first, second] = calls.map(call => call.result)
+    const expandRef = (result: typeof tree, value: unknown) => {
+      const [nodeId, mountIndex] = value as [string, number]
+      const [hostInstanceId, mountId, generation] = result.mounts![mountIndex - 1]
+      return {
+        host_instance_id: hostInstanceId,
+        node_id: nodeId,
+        mount_id: mountId,
+        generation,
+      }
+    }
+
+    expect(calls[0].arguments, diagnostics).toEqual({ scope: root, limit: 1, depth: 0 })
+    expect(tree, diagnostics).toEqual(expect.objectContaining({
+      status: 'inspected',
+      root: [expect.any(String), expect.any(Number)],
+    }))
+    expect(expandRef(tree, tree.root), diagnostics).toEqual(root)
+    expect(tree.nodes, diagnostics).toHaveLength(1)
+    expect(tree.nodes![0][tree.columns!.indexOf('kind')], diagnostics).toBe('shadow-root')
+
+    expect(calls[1].arguments, diagnostics).toEqual({ selector: 'button', limit: 1, root })
+    expect(first, diagnostics).toEqual(expect.objectContaining({
+      status: 'inspected',
+      continuation: expect.any(String),
+    }))
+    expect(first.outcome, diagnostics).not.toBe('stale')
+    expect(first.nodes, diagnostics).toHaveLength(1)
+    expect(calls[2].arguments, diagnostics).toEqual({
+      ...calls[1].arguments,
+      continuation: first.continuation,
+    })
+    expect(second, diagnostics).toEqual(expect.objectContaining({ status: 'inspected' }))
+    expect(second.outcome, diagnostics).not.toBe('stale')
+    expect(second.nodes, diagnostics).toHaveLength(1)
+
+    for (const [index, result] of [first, second].entries()) {
+      const row = result.nodes![0]
+      const summary = row[result.columns!.indexOf('summary')]
+      expect(summary, diagnostics).toEqual(expect.objectContaining({
+        role: 'button',
+        name: ['CSS page one', 'CSS page two'][index],
+      }))
+      expect(
+        expandRef(result, row[result.columns!.indexOf('parent')]),
+        diagnostics,
+      ).toEqual(root)
+      const path = row[result.columns!.indexOf('path')] as number[]
+      expect(result.paths![path.at(-1)! - 1], diagnostics).toEqual(
+        expect.objectContaining({ kind: 'element', tag_name: 'button' }),
+      )
+    }
+    expect(
+      expandRef(second, second.nodes![0][second.columns!.indexOf('ref')]).node_id,
+      diagnostics,
+    ).not.toBe(
+      expandRef(first, first.nodes![0][first.columns!.indexOf('ref')]).node_id,
+    )
+  })
+
+  test('reads the current pointer target while automatic pointing context is off', async ({ page }) => {
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
+    const fixture = await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page)
+    await expect(await findVisibleRole(page, 'button', 'Attachments')).toHaveAttribute('aria-label', 'Attachments')
+    await fixture.rightTarget.hover()
+
+    const command = await sendChatMessage(page, composer, 'ATTENTION_READ cursor')
+    expect(resolvedContextAttachments(command) ?? []).toHaveLength(0)
+    const host = command.data.runtime_context?.attention?.host_instance_id
+    expect(host).toEqual(expect.any(String))
+    const report = await waitForReadReport(page, command.session_id, command.persistedMessageId)
+    const cursor = report.results[0]
+    const diagnostics = JSON.stringify(report).slice(0, 8_000)
+    expect(cursor, diagnostics).toEqual(expect.objectContaining({ schema: 'wippy.attention.model.v1', status: 'inspected', host }))
+    expect(cursor.event && cursor.event.candidate_ids?.length, diagnostics).toBeGreaterThan(0)
+    expect(JSON.stringify(cursor.nodes ?? []), diagnostics).toContain('Attention target right')
+  })
+
+  test('lets the agent turn automatic pointing context on and off for the session', async ({ page }) => {
+    test.skip(cell.mode !== 'enabled', 'requires the enabled Attention runtime cell')
+    const fixture = await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page)
+    const seed = await sendChatMessage(page, composer, 'Seed the session Attention control')
+    await waitForAssistantReply(page, seed.session_id, seed.persistedMessageId)
+    const initial = await sessionAttentionContext(page, seed.session_id)
+    expect(initial.enabled).toBe(false)
+    const attachments = await findVisibleRole(page, 'button', /^Attachments/)
+
+    // The tool turn has two assistant steps: the call, then the final answer.
+    const finalAnswer = (sourceId: string) => waitForPersistedMessage(page, seed.session_id, message => message.type === 'assistant'
+      && message.metadata?.source_id === sourceId && message.data.startsWith('Attention context is now'))
+    const enable = await sendChatMessage(page, await waitForSessionComposerReady(page, seed.session_id), 'Please enable attention context for this session')
+    expect((await finalAnswer(enable.persistedMessageId)).data)
+      .toBe(`Attention context is now enabled for this session at revision ${initial.revision + 1}.`)
+    expect(await sessionAttentionContext(page, seed.session_id)).toEqual({
+      enabled: true,
+      revision: initial.revision + 1,
+      updated_by: 'agent:app.attention_e2e:agent',
+    })
+    await expect(attachments).toHaveAttribute('aria-label', 'Attachments; pointing context selected')
+
+    // Pointing context is now on, and a Send with nothing pointed at is
+    // refused by design, so the user points at public content first.
+    await fixture.rightTarget.hover()
+    const disable = await sendChatMessage(page, await waitForSessionComposerReady(page, seed.session_id), 'Please disable attention context for this session')
+    expect((await finalAnswer(disable.persistedMessageId)).data)
+      .toBe(`Attention context is now disabled for this session at revision ${initial.revision + 2}.`)
+    await expect(attachments).toHaveAttribute('aria-label', 'Attachments')
+
+    // The setting is stored with the Session and survives a reload.
+    await page.reload()
+    await expect(page.locator('.wippy-host-app, .managed-layout-shell').first()).toBeVisible({ timeout: 30_000 })
+    expect(await sessionAttentionContext(page, seed.session_id)).toEqual({
+      enabled: false,
+      revision: initial.revision + 2,
+      updated_by: 'agent:app.attention_e2e:agent',
+    })
+  })
+
+  test('ends only the failed turn on a provider error and answers the next message', async ({ page }) => {
+    // Turn recovery does not depend on Attention, so every cell runs it.
+    await bootAttentionTracer(page, cell)
+    const composer = await startDeterministicAttentionChat(page)
+    const failed = await sendChatMessage(page, composer, 'ATTENTION_E2E_FORCE_PROVIDER_ERROR for this turn')
+    const notice = await waitForPersistedMessage(page, failed.session_id, message => message.type === 'system'
+      && message.metadata?.source_id === failed.persistedMessageId)
+    expect(notice.metadata?.system_action).toBe('turn_failed')
+    expect(notice.data).toContain('ATTENTION_E2E_FORCED_PROVIDER_ERROR')
+
+    const ready = await waitForSessionComposerReady(page, failed.session_id)
+    const next = await sendChatMessage(page, ready, 'Verify the session after the provider error')
+    expect(next.session_id).toBe(failed.session_id)
+    expect((await waitForAssistantReply(page, failed.session_id, next.persistedMessageId)).data).toBe('ATTENTION_E2E_CONTEXT_MISSING')
+    const history = await sessionMessages(page, failed.session_id)
+    expect(history.filter(message => message.type === 'assistant' && message.metadata?.source_id === failed.persistedMessageId
+      && message.data.length > 0)).toHaveLength(0)
+  })
 })
 
 test.describe(`Attention disabled acceptance: ${describeCell}`, () => {
-  test('sends no context and never installs an active overlay', async ({ page }) => {
+  test('sends no automatic context and never installs an active overlay', async ({ page }) => {
     test.skip(cell.mode !== 'disabled', 'requires a runtime launched with Attention disabled')
     await bootAttentionTracer(page, cell)
     const composer = await startDeterministicAttentionChat(page)
@@ -1567,7 +1919,7 @@ test.describe(`Attention disabled acceptance: ${describeCell}`, () => {
     await attachments.click()
     await expect.poll(async () => {
       try {
-        await findVisibleRole(page, 'menuitem', 'Include what I’m pointing at', 250)
+        await findVisibleRole(page, 'menuitem', 'Automatically attach pointing context', 250)
         return true
       }
       catch {
@@ -1580,7 +1932,15 @@ test.describe(`Attention disabled acceptance: ${describeCell}`, () => {
     expect(pointing.data.context_attachments).toBeUndefined()
     expect(pointing.data.context_attachments_ref).toBeUndefined()
     expect(capturedHttpStageMetrics(page).filter(metric => metric.method === 'POST')).toHaveLength(0)
-    expect(pointing.data.runtime_context).toBeUndefined()
+    // Read-only trait authority remains bound to this Host when optional
+    // attachment and overlay capabilities are disabled.
+    expect(pointing.data.runtime_context).toEqual({
+      attention: {
+        host_instance_id: expect.any(String),
+        agent_actions_enabled: false,
+      },
+    })
+    await waitForSessionComposerReady(page, pointing.session_id)
 
     await sendChatMessage(page, composer, 'Click the area I meant while Attention is disabled')
     await expect.poll(async () => {

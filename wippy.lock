@@ -23,6 +23,8 @@ modules:
     - name: wippy-swiss/mermaid
       version: 0.1.2
       hash: 43bf8a4d29276aabece9cae4fe3a28d0ce512c5cb4544698adbfa1fbef9576b4
+    - name: wippy-swiss/voice
+      version: 0.1.3
     - name: wippy/agent
       version: 0.4.15
       hash: cb2c5e2396fe60ae43f33507074e532f0c96bccda654fa90fc61d31856d2cf38
@@ -36,8 +38,7 @@ modules:
       version: 0.6.39
       hash: 8521220405ba7fb388dd434d3064d15dec3a80fbb9e0654b51603365888c721a
     - name: wippy/llm
-      version: 0.4.36
-      hash: a677d9a48c3104dba1390f404f2923b4fa07a1b8c671d4d477af2f1b5667e1b0
+      version: 0.5.3
     - name: wippy/migration
       version: 0.3.18
       hash: e00cad6706bb95f556aeab5318a04e55d3884c027b09f6340fc4e7d69c905a17

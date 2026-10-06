@@ -61,6 +61,8 @@ const targets = [
 
 <style scoped>
 .attention-tracer {
+  /* Keep fixed page controls inside this page in Web Fragment mode. */
+  contain: layout;
   display: flex;
   flex-direction: column;
   block-size: 100%;

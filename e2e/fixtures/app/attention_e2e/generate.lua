@@ -48,6 +48,29 @@ local function latest_user_text(messages)
     return table.concat(texts, "\n")
 end
 
+-- The newest text the user typed. After a failed turn the prompt builder merges
+-- the unanswered user text and the new text into one part, separated by a
+-- blank line, so one-shot triggers must look only at the newest paragraph.
+local function latest_user_last_text(messages)
+    local index = latest_user_index(messages)
+    if not index then
+        return ""
+    end
+    local last = ""
+    for _, text in ipairs(content_texts(messages[index].content)) do
+        if string.sub(text, 1, #CONTEXT_PREFIX) ~= CONTEXT_PREFIX then
+            last = text
+        end
+    end
+    local newest = last
+    for paragraph in string.gmatch(last .. "\n\n", "(.-)\n\n") do
+        if paragraph ~= "" then
+            newest = paragraph
+        end
+    end
+    return newest
+end
+
 local function latest_user_image(messages)
     for index = #messages, 1, -1 do
         local message = messages[index]
@@ -557,16 +580,7 @@ local function handle_attention_setting(messages, tools, enabled)
     return finish("", { call })
 end
 
-local function handle_visual_capture(messages, tools, snapshot)
-    local candidate, candidate_err = primary_candidate(snapshot)
-    if not candidate then
-        return fail(candidate_err)
-    end
-    local target = action_target(candidate)
-    if not target then
-        return fail("ATTENTION_E2E_ACTION_REF_MISSING")
-    end
-
+local function capture_target(messages, tools, target, format)
     local call, call_err = tool_call(
         messages,
         tools,
@@ -579,7 +593,7 @@ local function handle_visual_capture(messages, tools, snapshot)
                 scope = "target",
                 allow_adjustment = true,
                 allow_viewport_choice = true,
-                format = "image/png",
+                format = format,
             },
             allow_pointer = true,
             allow_keyboard = true,
@@ -591,9 +605,402 @@ local function handle_visual_capture(messages, tools, snapshot)
     return finish("", { call })
 end
 
+local function handle_visual_capture(messages, tools, snapshot, format)
+    local candidate, candidate_err = primary_candidate(snapshot)
+    if not candidate then
+        return fail(candidate_err)
+    end
+    local target = action_target(candidate)
+    if not target then
+        return fail("ATTENTION_E2E_ACTION_REF_MISSING")
+    end
+    return capture_target(messages, tools, target, format)
+end
+
+-- Explicit read probes. The test sends "ATTENTION_READ <mode> [argument]" and
+-- reads the persisted answer "ATTENTION_E2E_READ <json>". Each call is one read
+-- per batch, so a multi-step mode stays within the trait's per-turn budget.
+local READ_TOOLS = {
+    cursor = "attention_get_cursor",
+    focus = "attention_get_focus",
+    selection = "attention_get_selection",
+    ["semantic-text"] = "attention_find_semantic",
+    -- The needle arrives reversed so the user's own chat message never
+    -- contains the private text that the search must not find.
+    ["semantic-text-reversed"] = "attention_find_semantic",
+    ["semantic-name"] = "attention_find_semantic",
+    ["forced-cursor"] = "attention_get_cursor",
+}
+
+local function read_probe(messages)
+    local text = latest_user_last_text(messages)
+    local mode, argument = string.match(text, "^%s*ATTENTION_READ%s+([%w%-]+)%s*(.-)%s*$")
+    return mode, argument
+end
+
+local function turn_function_results(messages)
+    local user_index = latest_user_index(messages) or 0
+    local results = {}
+    for index = user_index + 1, #messages do
+        local message = messages[index]
+        if message.role == "function_result" then
+            local raw = table.concat(content_texts(message.content), "")
+            local decoded = json.decode(raw)
+            if type(decoded) == "table" then
+                table.insert(results, decoded)
+            else
+                table.insert(results, { raw = raw })
+            end
+        end
+    end
+    return results
+end
+
+-- Arguments of the latest call to one tool in this turn. A later prompt can
+-- withdraw an earlier read result, but never the model's own call arguments.
+local function previous_call_arguments(messages, name)
+    local user_index = latest_user_index(messages) or 0
+    local found = nil
+    for index = user_index + 1, #messages do
+        local call = messages[index].role == "function_call" and messages[index].function_call
+        if type(call) == "table" and type(call.name) == "string" and string.find(call.name, name, 1, true) then
+            local arguments = call.arguments
+            if type(arguments) == "string" then
+                arguments = json.decode(arguments)
+            end
+            if type(arguments) == "table" then
+                found = arguments
+            end
+        end
+    end
+    return found
+end
+
+local function read_call(messages, tools, name, arguments, forced)
+    local registry_id = "wippy.agent.tools:" .. name
+    if forced then
+        -- Deliberately emits a call the agent was not offered, so the Session
+        -- authority check, not the provider, has to refuse it.
+        return {
+            id = next_call_id(messages, "read"),
+            name = name,
+            registry_id = registry_id,
+            arguments = arguments,
+        }
+    end
+    return tool_call(messages, tools, registry_id, "read", arguments)
+end
+
+local function capture_tool_result(messages, name)
+    local start = (latest_user_index(messages) or 0) + 1
+    local found, result = nil, nil
+    for index = start, #messages do
+        local call = messages[index].role == "function_call" and messages[index].function_call
+        if type(call) == "table" and call.name == name then
+            if found or type(call.id) ~= "string" or call.id == "" then
+                return nil, nil, "ATTENTION_E2E_CAPTURE_CALL_INVALID"
+            end
+            found = call
+        end
+    end
+    if not found then
+        return nil, nil, nil
+    end
+    for index = start, #messages do
+        local message = messages[index]
+        if message.role == "function_result" and message.name == name and message.function_call_id == found.id then
+            if result then
+                return found, nil, "ATTENTION_E2E_CAPTURE_RESULT_INVALID"
+            end
+            result = json.decode(table.concat(content_texts(message.content), ""))
+            if type(result) ~= "table" then
+                return found, nil, "ATTENTION_E2E_CAPTURE_RESULT_INVALID"
+            end
+        end
+    end
+    if not result then
+        return found, nil, "ATTENTION_E2E_CAPTURE_RESULT_MISSING"
+    end
+    return found, result, nil
+end
+
+local function capture_node_ref(model, node)
+    local ref = type(node) == "table" and node[1]
+    local mount = type(ref) == "table" and type(model.mounts) == "table" and model.mounts[ref[2]]
+    if type(ref) ~= "table" or type(ref[1]) ~= "string" or ref[1] == ""
+        or type(mount) ~= "table" or type(mount[1]) ~= "string" or mount[1] == ""
+        or type(mount[2]) ~= "string" or mount[2] == ""
+        or type(mount[3]) ~= "number" or mount[3] < 1 or mount[3] % 1 ~= 0 then
+        return nil
+    end
+    return { node_id = ref[1], host_instance_id = mount[1], mount_id = mount[2], generation = mount[3] }
+end
+
+local function handle_fresh_visual_capture(messages, tools, format)
+    local capture_tool = find_tool(tools, "wippy.agent.tools:ui_action_capture_visual")
+    local cursor_tool = find_tool(tools, "wippy.agent.tools:attention_get_cursor")
+    local node_tool = find_tool(tools, "wippy.agent.tools:attention_get_node")
+    for _, name in ipairs({ "ui_action_capture_visual", "attention_get_cursor", "attention_get_node" }) do
+        if not find_tool(tools, "wippy.agent.tools:" .. name) then
+            return fail("ATTENTION_E2E_TOOL_MISSING: wippy.agent.tools:" .. name)
+        end
+    end
+    local capture_call, capture_result, capture_err = capture_tool_result(messages, capture_tool.name)
+    if capture_err then
+        return fail(capture_err)
+    end
+    if capture_call then
+        local terminal_statuses = { prepared = true, cancelled = true, denied = true, disconnected = true,
+            error = true, expired = true, stale = true, unavailable = true }
+        if not terminal_statuses[capture_result.status] then
+            return fail("ATTENTION_E2E_CAPTURE_RESULT_INVALID")
+        end
+        return nil, capture_result
+    end
+    local cursor_call, cursor, cursor_err = capture_tool_result(messages, cursor_tool.name)
+    if cursor_err then
+        return fail(cursor_err)
+    end
+    if not cursor_call then
+        local call, err = read_call(messages, tools, "attention_get_cursor", {})
+        return call and finish("", { call }) or fail(err)
+    end
+    local node_call, node_result, node_err = capture_tool_result(messages, node_tool.name)
+    if node_err then
+        return fail(node_err)
+    end
+    if not node_call then
+        local ids = type(cursor.event) == "table" and cursor.event.candidate_ids
+        if cursor.schema ~= "wippy.attention.model.v1" or cursor.status ~= "inspected"
+            or cursor.outcome ~= "ok" or type(ids) ~= "table" or #ids ~= 1
+            or type(cursor.nodes) ~= "table" then
+            return fail("ATTENTION_E2E_CAPTURE_CURSOR_INVALID")
+        end
+        local selected = nil
+        for _, node in ipairs(cursor.nodes) do
+            local ref = capture_node_ref(cursor, node)
+            if not ref then
+                return fail("ATTENTION_E2E_CAPTURE_CURSOR_INVALID")
+            end
+            if ref.node_id == ids[1] then
+                if selected then
+                    return fail("ATTENTION_E2E_CAPTURE_CURSOR_INVALID")
+                end
+                selected = ref
+            end
+        end
+        if not selected then
+            return fail("ATTENTION_E2E_CAPTURE_CURSOR_INVALID")
+        end
+        local call, err = read_call(messages, tools, "attention_get_node", { node_id = selected.node_id, scope = selected })
+        return call and finish("", { call }) or fail(err)
+    end
+    local arguments = type(node_call.arguments) == "string" and json.decode(node_call.arguments) or node_call.arguments
+    local scope = type(arguments) == "table" and arguments.scope
+    local returned = type(node_result.nodes) == "table" and #node_result.nodes == 1 and capture_node_ref(node_result, node_result.nodes[1])
+    local target = node_result.target_ref
+    local rect = type(target) == "table" and target.rect
+    if node_result.schema ~= "wippy.attention.model.v1" or node_result.status ~= "inspected" or node_result.outcome ~= "ok"
+        or type(scope) ~= "table" or not returned or arguments.node_id ~= scope.node_id
+        or returned.node_id ~= scope.node_id or returned.host_instance_id ~= scope.host_instance_id
+        or returned.mount_id ~= scope.mount_id or returned.generation ~= scope.generation
+        or type(target) ~= "table" or target.target_id ~= scope.node_id or target.host_instance_id ~= scope.host_instance_id
+        or type(target.snapshot_id) ~= "string" or type(target.mount_id) ~= "string"
+        or type(target.generation) ~= "number" or type(target.path_digest) ~= "string"
+        or type(rect) ~= "table" or type(rect.x) ~= "number" or type(rect.y) ~= "number"
+        or type(rect.width) ~= "number" or type(rect.height) ~= "number" then
+        return fail("ATTENTION_E2E_CAPTURE_NODE_INVALID")
+    end
+    return capture_target(messages, tools, target, format)
+end
+
+local function root_ref(tree)
+    local root = type(tree) == "table" and tree.root
+    local mounts = type(tree) == "table" and tree.mounts
+    if type(root) ~= "table" or type(mounts) ~= "table" then
+        return nil
+    end
+    local mount = mounts[tonumber(root[2]) or 0]
+    if type(mount) ~= "table" then
+        return nil
+    end
+    return {
+        host_instance_id = mount[1],
+        node_id = root[1],
+        mount_id = mount[2],
+        generation = mount[3],
+    }
+end
+
+local function handle_read_probe(messages, tools, mode, argument)
+    local results = turn_function_results(messages)
+    local function report()
+        return finish("ATTENTION_E2E_READ " .. json.encode({ mode = mode, results = results }))
+    end
+
+    local call, call_err
+    if mode == "css" or mode == "css-scoped" then
+        local selector = argument
+        local requested_root = nil
+        if mode == "css-scoped" then
+            local ok, payload = pcall(json.decode, argument)
+            if not ok or type(payload) ~= "table"
+                or type(payload.selector) ~= "string" or payload.selector == ""
+                or type(payload.root) ~= "table" then
+                return fail("ATTENTION_E2E_CSS_SCOPE_INVALID")
+            end
+            local root = payload.root
+            if type(root.host_instance_id) ~= "string" or root.host_instance_id == ""
+                or type(root.node_id) ~= "string" or root.node_id == ""
+                or type(root.mount_id) ~= "string" or root.mount_id == ""
+                or type(root.generation) ~= "number" then
+                return fail("ATTENTION_E2E_CSS_SCOPE_INVALID")
+            end
+            selector = payload.selector
+            requested_root = root
+        end
+
+        -- Resolve the requested root through the real tool before paging.
+        if #results == 0 then
+            call, call_err = read_call(messages, tools, "attention_get_tree", {
+                scope = requested_root,
+                limit = 1,
+                depth = 0,
+            })
+        elseif #results == 1 then
+            local root = root_ref(results[1])
+            if not root then
+                return fail("ATTENTION_E2E_CSS_ROOT_MISSING " .. json.encode(results[1]))
+            end
+            call, call_err = read_call(messages, tools, "attention_find_css", {
+                selector = selector,
+                root = root,
+                limit = 1,
+            })
+        elseif #results == 2 and type(results[2].continuation) == "string" then
+            local previous = previous_call_arguments(messages, "attention_find_css")
+            local root = previous and previous.root
+            if type(root) ~= "table" then
+                return fail("ATTENTION_E2E_CSS_ROOT_MISSING " .. json.encode(results))
+            end
+            call, call_err = read_call(messages, tools, "attention_find_css", {
+                selector = selector,
+                root = root,
+                limit = 1,
+                continuation = results[2].continuation,
+            })
+        else
+            return report()
+        end
+    else
+        if #results > 0 then
+            return report()
+        end
+        local name = READ_TOOLS[mode]
+        if not name then
+            return fail("ATTENTION_E2E_READ_MODE_UNKNOWN " .. tostring(mode))
+        end
+        local arguments = {}
+        if mode == "semantic-text" then
+            arguments = { text = argument, limit = 8 }
+        elseif mode == "semantic-text-reversed" then
+            arguments = { text = string.reverse(argument), limit = 8 }
+        elseif mode == "semantic-name" then
+            arguments = { name = argument, limit = 8 }
+        end
+        call, call_err = read_call(messages, tools, name, arguments, mode == "forced-cursor")
+    end
+    if not call then
+        return fail(call_err)
+    end
+    return finish("", { call })
+end
+
+-- Reports what the latest user prompt contains, so a test can prove that an
+-- unknown attachment kind or version stays out of the model input.
+local INERT_SENTINELS = { "preserve but do not render", "wippy.attention.v99", CONTEXT_PREFIX }
+
+local function handle_prompt_inertness(messages)
+    local index = latest_user_index(messages)
+    local parts = 0
+    local leaked = false
+    if index then
+        local content = messages[index].content
+        parts = type(content) == "table" and #content or 1
+        for _, text in ipairs(content_texts(content)) do
+            for _, sentinel in ipairs(INERT_SENTINELS) do
+                if string.find(text, sentinel, 1, true) then
+                    leaked = true
+                end
+            end
+        end
+    end
+    return finish(string.format("ATTENTION_E2E_PROMPT_INERT parts=%d leaked=%s", parts, tostring(leaked)))
+end
+
 local function handler(contract_args)
     local messages = contract_args.messages or {}
-    local action_result = decode_function_result(messages)
+    local probe_text = string.lower(latest_user_text(messages))
+    if string.find(string.lower(latest_user_last_text(messages)), "attention_e2e_force_provider_error", 1, true) then
+        -- A provider failure, not a model answer: the Session must end only
+        -- this turn and admit the next message.
+        return nil, errors.new({
+            message = "ATTENTION_E2E_FORCED_PROVIDER_ERROR",
+            kind = errors.INVALID,
+            retryable = false,
+        })
+    end
+    local read_mode, read_argument = read_probe(messages)
+    if read_mode then
+        return handle_read_probe(messages, contract_args.tools, read_mode, read_argument)
+    end
+    if string.find(probe_text, "forward_compat", 1, true)
+        or string.find(probe_text, "newer_version_barrier", 1, true) then
+        return handle_prompt_inertness(messages)
+    end
+    if string.find(probe_text, 'attention lifetime', 1, true) then
+        local metrics = { compact_results = 0, stale_results = 0, automatic_contexts = 0,
+            function_calls = 0, function_results = 0, result_bytes = 0 }
+        for _, message in ipairs(messages) do
+            if message.role == 'function_call' then metrics.function_calls = metrics.function_calls + 1 end
+            if message.role == 'function_result' then metrics.function_results = metrics.function_results + 1 end
+            for _, text in ipairs(content_texts(message.content)) do
+                if string.find(text, CONTEXT_PREFIX, 1, true) then metrics.automatic_contexts = metrics.automatic_contexts + 1 end
+                if message.role == 'function_result' then
+                    metrics.result_bytes = metrics.result_bytes + #text
+                    if string.find(text, 'STALE INFO:', 1, true) then metrics.stale_results = metrics.stale_results + 1 end
+                    local value = json.decode(text)
+                    if type(value) == 'table' and value.schema == 'wippy.attention.model.v1' then
+                        metrics.compact_results = metrics.compact_results + 1
+                        metrics.last_status = value.status
+                        metrics.last_outcome = value.outcome
+                        metrics.last_node_count = type(value.nodes) == 'table' and #value.nodes or 0
+                    end
+                end
+            end
+        end
+        if string.find(probe_text, 'history', 1, true) or decode_function_result(messages) then
+            return finish('ATTENTION_LIFETIME ' .. json.encode(metrics))
+        end
+        local call, call_err = tool_call(messages, contract_args.tools,
+            'wippy.agent.tools:attention_find_semantic', 'lifetime', { name = 'Attention target right', limit = 3 })
+        if not call then return fail(call_err) end
+        return finish('', { call })
+    end
+    local capture_format = string.match(latest_user_last_text(messages), "^%s*ATTENTION_CAPTURE%s+(%a+)%s*$")
+    local matched_capture_result = nil
+    if capture_format then
+        if capture_format ~= "webp" and capture_format ~= "png" and capture_format ~= "default" then
+            return fail("ATTENTION_E2E_CAPTURE_FORMAT_INVALID")
+        end
+        local response, terminal = handle_fresh_visual_capture(messages, contract_args.tools,
+            capture_format ~= "default" and "image/" .. capture_format or nil)
+        if response then
+            return response
+        end
+        matched_capture_result = terminal
+    end
+    local action_result = matched_capture_result or decode_function_result(messages)
     if action_result then
         local attention_context = rawget(action_result, "attention_context")
         if type(attention_context) == "table" and type(attention_context.enabled) == "boolean" then
@@ -663,7 +1070,8 @@ local function handler(contract_args)
     end
     if string.find(user_text, "prepare screenshot", 1, true)
         or string.find(user_text, "prepare image", 1, true) then
-        return handle_visual_capture(messages, contract_args.tools, snapshot)
+        local format = string.find(user_text, "webp", 1, true) and "image/webp" or "image/png"
+        return handle_visual_capture(messages, contract_args.tools, snapshot, format)
     end
     if string.find(user_text, "highlight", 1, true) then
         return handle_highlight(messages, contract_args.tools, snapshot)

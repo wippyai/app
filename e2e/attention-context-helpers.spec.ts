@@ -387,7 +387,7 @@ test('persisted context never becomes fabricated inline wire evidence', () => {
       text: 'fixture',
       context_attachments_ref: { version: 1, id: 'stage-1', content_hash: `sha256:${createHash('sha256').update(content).digest('hex')}`, content_bytes: Buffer.byteLength(content) },
     },
-    command_response: { type: 'command_response', success: true, request_id: 'request-1', socket_id: 'socket-1', received_at: 1 },
+    receipt: { type: 'received', success: true, request_id: 'request-1', socket_id: 'socket-1', received_at: 1 },
     persistedMessageId: 'persisted-1',
     persistedContextAttachments: [attachment],
   }

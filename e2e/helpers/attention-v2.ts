@@ -12,9 +12,9 @@ export const ATTENTION_ORACLE_LIMITS = {
 type ObjectValue = Record<string, unknown>
 type Point = { point_id: string, x: number, y: number }
 
-function requireValid(condition: unknown): asserts condition {
+function requireValid(condition: unknown, detail?: string): asserts condition {
   if (!condition)
-    throw new Error('Invalid Attention context in independent E2E oracle')
+    throw new Error(`Invalid Attention context in independent E2E oracle${detail ? `: ${detail}` : ''}`)
 }
 
 function object(value: unknown): asserts value is ObjectValue {
@@ -57,6 +57,8 @@ export function oracleCanonicalJson(value: unknown, depth = 0): string {
 const bytes = (value: unknown) => Buffer.byteLength(oracleCanonicalJson(value))
 const digest = (value: unknown) => `sha256:${createHash('sha256').update(oracleCanonicalJson(value)).digest('hex')}`
 const omit = (value: ObjectValue, keys: string[]) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)))
+const attentionSemanticPath = (path: ObjectValue[]) => path.map(segment => omit(segment, ['rect', 'clip_rect', 'local_to_parent', 'coordinate_quality']))
+const pathDigestMatches = (path: ObjectValue[], pathDigest: unknown) => pathDigest === digest(attentionSemanticPath(path)) || pathDigest === digest(path)
 
 const PATH_KINDS = ['host', 'panel', 'artifact', 'page', 'iframe', 'web-fragment', 'web-component', 'shadow-root', 'element']
 const PATH_ATTRIBUTE_FIELDS = ['label', 'panel_id', 'surface_id', 'artifact_id', 'page_id', 'package_id', 'tag_name', 'selector_hint', 'frame_origin', 'rect', 'clip_rect', 'local_to_parent', 'coordinate_quality']
@@ -145,10 +147,19 @@ function validateSemanticSnapshot(snapshot: ObjectValue): void {
       const action = candidate.action_ref
       object(action)
       const leaf = path[path.length - 1]
-      requireValid(action.snapshot_id === snapshot.snapshot_id && action.target_id === candidate.target_id
-        && action.host_instance_id === snapshot.host_instance_id && action.mount_id === leaf.mount_id
-        && action.generation === leaf.generation && oracleCanonicalJson(action.rect) === oracleCanonicalJson(candidate.rect)
-        && action.path_digest === digest(path))
+      const actionRefChecks = {
+        snapshot_id: action.snapshot_id === snapshot.snapshot_id,
+        target_id: action.target_id === candidate.target_id,
+        host_instance_id: action.host_instance_id === snapshot.host_instance_id,
+        mount_id: action.mount_id === leaf.mount_id,
+        generation: action.generation === leaf.generation,
+        rect: oracleCanonicalJson(action.rect) === oracleCanonicalJson(candidate.rect),
+        path_digest: pathDigestMatches(path, action.path_digest),
+      }
+      const actionRefMismatches = Object.entries(actionRefChecks)
+        .filter(([, matches]) => !matches)
+        .map(([field]) => field)
+      requireValid(actionRefMismatches.length === 0, `action_ref mismatch: ${actionRefMismatches.join(', ')}`)
     }
   }
   const events = [...snapshot.recent_events as ObjectValue[], ...(snapshot.pointer ? [snapshot.pointer as ObjectValue] : [])]

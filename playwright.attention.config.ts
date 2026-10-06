@@ -7,6 +7,7 @@ const attentionMetricsFile = process.env.WIPPY_ATTENTION_METRICS_FILE
 export default defineConfig({
   testDir: './e2e',
   testMatch: ['**/attention-tracer.spec.ts', '**/attention-agent.spec.ts'],
+  grep: process.env.WIPPY_ATTENTION_TEST_GREP ? new RegExp(process.env.WIPPY_ATTENTION_TEST_GREP) : undefined,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,

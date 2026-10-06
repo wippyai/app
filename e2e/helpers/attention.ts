@@ -56,6 +56,7 @@ export interface AttentionCandidate {
     target_id: string
   }
   path: AttentionPathSegment[]
+  rect?: { height: number, width: number, x: number, y: number }
   sample_point_ids: string[]
   summary?: { name?: string, role?: string, text?: string }
   target_id: string
@@ -195,8 +196,7 @@ export interface AttentionPayloadMetrics {
   }>
 }
 
-export interface CapturedCommandResponse {
-  dispatch?: CapturedDispatchDescriptor
+export interface CapturedCorrelatedReply {
   attachmentsShape?: 'missing' | 'array' | 'object' | 'other'
   attachmentReceiptCount?: number
   context_attachments_transport?: { version: number, staging: boolean, max_context_bytes: number }
@@ -220,11 +220,11 @@ export interface CapturedCommandResponse {
   socket_id: string
   received_at: number
   topic?: string
-  type: 'command_response'
+  type: 'command_response' | 'received' | 'error'
 }
 
 export interface AcknowledgedSessionMessage extends CapturedSessionMessage {
-  command_response: CapturedCommandResponse
+  receipt: CapturedCorrelatedReply
   persistedMessageId: string
   persistedContextAttachments?: ContextAttachment[]
 }
@@ -252,22 +252,57 @@ export interface CapturedUiActionResult {
 export interface PersistedMessage {
   data: string
   message_id: string
-  metadata?: { context_attachments?: ContextAttachment[], call_id?: string, result?: unknown, status?: string, source_id?: string }
+  metadata?: {
+    context_attachments?: ContextAttachment[]
+    call_id?: string
+    error_code?: string
+    registry_id?: string
+    result?: unknown
+    source_id?: string
+    status?: string
+    system_action?: string
+  }
   session_id: string
   type: string
 }
 
-export interface CapturedDispatchDescriptor {
-  version: 1
-  dispatch_id: string
-  message_id: string
-  response_id: string
-  state: 'queued' | 'started' | 'completed' | 'interrupted' | 'cancelled'
-  generation: number
-  revision: number
-  updated_at: string
-  terminal_code?: string
+/** The raw `session_ui_action_request` envelope a Host socket received. */
+export interface CapturedUiActionRequestEnvelope {
+  topic: string
+  data: {
+    action_id: string
+    created_at: string
+    expires_at: string
+    host_instance_id: string
+    message_type: string
+    mode: string
+    request_id: string
+    session_id: string
+    [key: string]: unknown
+  }
 }
+
+/** One `ATTENTION_E2E_READ` answer from the deterministic agent. */
+export interface AttentionReadReport {
+  mode: string
+  results: Array<Record<string, unknown> & {
+    columns?: string[]
+    continuation?: string
+    event?: { candidate_ids?: string[] } | false
+    host?: string
+    mounts?: Array<[string, string, number]>
+    nodes?: unknown[][]
+    outcome?: string
+    paths?: Array<Record<string, unknown>>
+    raw?: string
+    root?: [string, number]
+    schema?: string
+    status?: string
+  }>
+}
+
+export const ATTENTION_E2E_AGENT = 'app.attention_e2e:agent'
+export const ATTENTION_E2E_AGENT_WITHOUT_ATTENTION = 'app.attention_e2e:agent_without_attention'
 
 export interface CapturedIncomingPacket {
   socket_id: string
@@ -282,8 +317,6 @@ export interface CapturedIncomingPacket {
   call_id?: string
   status?: string
   success?: boolean
-  dispatch?: CapturedDispatchDescriptor
-  dispatches?: CapturedDispatchDescriptor[]
   attachmentsShape?: 'missing' | 'array' | 'object' | 'other'
   attachmentReceiptCount?: number
 }
@@ -338,32 +371,6 @@ export function installAttentionIncomingDiagnostics(): void {
   wire.__wippyAttentionE2EIncoming = []
   const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
   const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
-  const descriptor = (value: unknown): CapturedDispatchDescriptor | undefined => {
-    if (!record(value) || value.version !== 1 || !uuid(value.dispatch_id) || !uuid(value.message_id) || !uuid(value.response_id)
-      || !['queued', 'started', 'completed', 'interrupted', 'cancelled'].includes(String(value.state))
-      || !Number.isSafeInteger(value.generation) || (value.generation as number) < 0
-      || !Number.isSafeInteger(value.revision) || (value.revision as number) < 1
-      || (value.state === 'queued') !== (value.generation === 0)
-      || typeof value.updated_at !== 'string' || value.updated_at.length > 40
-      || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value.updated_at)
-      || !Number.isFinite(Date.parse(value.updated_at)))
-      return undefined
-    const [year, month, day] = value.updated_at.slice(0, 10).split('-').map(Number)
-    const days = [31, year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    if (month < 1 || month > 12 || day < 1 || day > days[month - 1])
-      return undefined
-    if (value.terminal_code !== undefined && (!['DISPATCH_COMPLETED', 'DISPATCH_CANCELLED', 'DISPATCH_OWNER_LOST', 'DISPATCH_HANDLER_FAILED', 'DISPATCH_ENQUEUE_FAILED', 'DISPATCH_INTERRUPTED'].includes(String(value.terminal_code))
-      || value.state === 'queued' || value.state === 'started'))
-      return undefined
-    if (Object.keys(value).some(key => !['version', 'dispatch_id', 'message_id', 'response_id', 'state', 'generation', 'revision', 'updated_at', 'terminal_code'].includes(key)))
-      return undefined
-    return {
-      version: 1, dispatch_id: value.dispatch_id, message_id: value.message_id, response_id: value.response_id,
-      state: value.state as CapturedDispatchDescriptor['state'], generation: value.generation as number,
-      revision: value.revision as number, updated_at: value.updated_at,
-      ...(value.terminal_code !== undefined ? { terminal_code: value.terminal_code as string } : {}),
-    }
-  }
   wire.__wippyAttentionE2ESanitizeIncoming = (envelope, socketId, at) => {
     if (!record(envelope) || !record(envelope.data) || !uuid(socketId) || !Number.isFinite(at) || typeof envelope.topic !== 'string')
       return undefined
@@ -371,7 +378,7 @@ export function installAttentionIncomingDiagnostics(): void {
     if (!topic || !uuid(topic[1]) || (topic[2] !== undefined && !uuid(topic[2])))
       return undefined
     const data = envelope.data
-    if (typeof data.type !== 'string' || !['command_response', 'session_open', 'session_closed', 'status', 'update', 'dispatch_status', 'response_started', 'received', 'content', 'done', 'error', 'function_call', 'function_success', 'function_error', 'invalidate'].includes(data.type))
+    if (typeof data.type !== 'string' || !['command_response', 'session_open', 'session_closed', 'status', 'update', 'received', 'content', 'done', 'error', 'function_call', 'function_success', 'function_error', 'invalidate'].includes(data.type))
       return undefined
     const result: CapturedIncomingPacket = { socket_id: socketId, received_at: at, topic: envelope.topic, type: data.type }
     for (const key of ['request_id', 'session_id', 'message_id', 'response_id', 'root_message_id'] as const) {
@@ -384,30 +391,20 @@ export function installAttentionIncomingDiagnostics(): void {
       result.status = data.status
     if (typeof data.success === 'boolean')
       result.success = data.success
-    if (data.type === 'command_response') {
-      result.attachmentsShape = !Object.hasOwn(data, 'attachments') ? 'missing'
-        : Array.isArray(data.attachments) ? 'array'
-          : record(data.attachments) ? 'object' : 'other'
-      if (Array.isArray(data.attachments))
-        result.attachmentReceiptCount = Math.min(data.attachments.length, 9)
-    }
-    result.dispatch = descriptor(data.dispatch)
-    const snapshot = data.dispatch_snapshot
-    if (record(snapshot) && snapshot.version === 1 && typeof snapshot.has_more === 'boolean'
-      && Array.isArray(snapshot.dispatches) && snapshot.dispatches.length <= 32) {
-      const dispatches = snapshot.dispatches.map(descriptor)
-      if (dispatches.every((item): item is CapturedDispatchDescriptor => Boolean(item))
-        && new Set(dispatches.map(item => item.dispatch_id)).size === dispatches.length
-        && new Set(dispatches.map(item => item.message_id)).size === dispatches.length
-        && new Set(dispatches.map(item => item.response_id)).size === dispatches.length)
-        result.dispatches = dispatches
+    if (data.type === 'received' || data.type === 'command_response') {
+      const attachments = data.context_attachments ?? data.attachments
+      result.attachmentsShape = attachments === undefined ? 'missing'
+        : Array.isArray(attachments) ? 'array'
+          : record(attachments) ? 'object' : 'other'
+      if (Array.isArray(attachments))
+        result.attachmentReceiptCount = Math.min(attachments.length, 9)
     }
     return result
   }
 }
 
 export interface RawSessionMessageResult {
-  commandResponse: CapturedCommandResponse
+  reply: CapturedCorrelatedReply
   outboundMessageId: string
   persistedMessageId?: string
   requestId: string
@@ -842,12 +839,6 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
           return 'snapshot-identity'
         if (text === 'Message outcome is unconfirmed: attachment receipts did not match')
           return 'ack-attachment-receipts'
-        if (text === 'Message outcome is unconfirmed: dispatch session capacity reached')
-          return 'ack-dispatch-capacity'
-        if (text === 'Message outcome is unconfirmed: dispatch acknowledgement requires current authority')
-          return 'ack-dispatch-authority'
-        if (text === 'Message outcome is unconfirmed: dispatch acknowledgement did not match')
-          return 'ack-dispatch-mismatch'
         if (text === 'Message outcome is unconfirmed: acknowledgement identity did not match'
           || text === 'Message outcome is unconfirmed: acknowledgement message identity did not match')
           return 'ack-message-identity'
@@ -880,7 +871,9 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
       __wippyAttentionE2EPayloadMetrics?: AttentionPayloadMetrics[]
       __wippyAttentionE2EIncoming?: CapturedIncomingPacket[]
       __wippyAttentionE2ESanitizeIncoming?: (envelope: unknown, socketId: string, at: number) => CapturedIncomingPacket | undefined
+      __wippyAttentionE2EUiActionRequests?: unknown[]
     }
+    wire.__wippyAttentionE2EUiActionRequests = []
     wire.__wippyAttentionE2ECommandResponses = []
     wire.__wippyAttentionE2ERealmId = crypto.randomUUID()
     wire.__wippyAttentionE2ESocketEvents = []
@@ -943,12 +936,47 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
           return
         const observations = record(message.observations) ? message.observations : undefined
         const focus = observations && record(observations.focus) ? observations.focus : undefined
+        const focusState = observations && record(observations.focus_state) ? observations.focus_state : undefined
         wire.__wippyAttentionE2EProtocol!.push({
           accepted_at: new Date().toISOString(),
+          focus_state: focusState ? {
+            changed_at: safeText(focusState.changed_at),
+            retained: focusState.retained === true,
+            candidate_id: record(focusState.focus) ? safeText(focusState.focus.candidate_id) : null,
+          } : undefined,
           budget_remaining_bytes: Number.isSafeInteger(message.budget?.remaining_bytes)
             ? message.budget.remaining_bytes
             : undefined,
           candidate_count: Array.isArray(message.candidates) ? message.candidates.length : undefined,
+          candidate_occluded: Array.isArray(message.candidates)
+            ? message.candidates.map((candidate: Record<string, unknown>) => candidate.occluded === true)
+            : undefined,
+          candidate_shapes: Array.isArray(message.candidates)
+            ? message.candidates.slice(0, 8).map((candidate: Record<string, unknown>) => {
+                const geometry = record(candidate.geometry) ? candidate.geometry : undefined
+                const rect = record(candidate.rect)
+                  ? candidate.rect
+                  : geometry && record(geometry.border_box) ? geometry.border_box : undefined
+                const path = Array.isArray(candidate.path) ? candidate.path : []
+                return {
+                  target_id: safeText(candidate.target_id),
+                  final_tag: path.length && record(path.at(-1)) ? safeText(path.at(-1).tag_name) : undefined,
+                  rect: rect
+                    ? {
+                        x: typeof rect.x === 'number' ? rect.x : undefined,
+                        y: typeof rect.y === 'number' ? rect.y : undefined,
+                        width: typeof rect.width === 'number' ? rect.width : undefined,
+                        height: typeof rect.height === 'number' ? rect.height : undefined,
+                      }
+                    : undefined,
+                  sample_count: Array.isArray(candidate.sample_point_ids) ? candidate.sample_point_ids.length : undefined,
+                  branch_mount_ids: path
+                    .filter(segment => record(segment) && ['artifact', 'page', 'iframe', 'web-fragment', 'web-component'].includes(String(segment.kind)))
+                    .slice(0, 16)
+                    .map(segment => record(segment) ? safeText(segment.mount_id) : undefined),
+                }
+              })
+            : undefined,
           candidate_path_lengths: Array.isArray(message.candidates)
             ? message.candidates.map((candidate: Record<string, unknown>) => Array.isArray(candidate.path) ? candidate.path.length : undefined)
             : undefined,
@@ -1036,6 +1064,14 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
         try {
           const envelope = JSON.parse(event.data)
           const response = envelope?.data
+          // Agent UI action requests carry only fixture prompts and target
+          // references, so the whole envelope is kept for routing assertions.
+          if (typeof envelope?.topic === 'string' && envelope.topic.startsWith('session_ui_action_request')) {
+            const requests = wire.__wippyAttentionE2EUiActionRequests!
+            requests.push(structuredClone(envelope))
+            if (requests.length > 64)
+              requests.splice(0, requests.length - 64)
+          }
           const incoming = wire.__wippyAttentionE2ESanitizeIncoming?.(envelope,
             (socket as WebSocket & { __wippyAttentionE2EId: string }).__wippyAttentionE2EId, Date.now())
           if (incoming) {
@@ -1049,20 +1085,20 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
             requestId: typeof response?.request_id === 'string' ? response.request_id : undefined,
             sessionId: typeof response?.session_id === 'string' ? response.session_id : undefined,
             sessionStatus: ['idle', 'running', 'stopped', 'error', 'completed', 'pending'].includes(response?.status) ? response.status : undefined,
-            type: ['command_response', 'welcome', 'session_open', 'session_closed', 'status', 'done'].includes(response?.type)
+            type: ['received', 'error', 'command_response', 'welcome', 'session_open', 'session_closed', 'status', 'done'].includes(response?.type)
               ? response.type
               : 'other',
           })
-          const isCommandResponse = response?.type === 'command_response'
-            && typeof response.request_id === 'string'
-            && typeof response.success === 'boolean'
-          if (!isCommandResponse)
+          const isCorrelatedReply = typeof response?.request_id === 'string'
+            && (response.type === 'received' || response.type === 'error'
+              || (response.type === 'command_response' && typeof response.success === 'boolean'))
+          if (!isCorrelatedReply)
             return
           const detailCode = typeof response.message === 'string'
             ? response.message.match(/^([a-z0-9-]+) at /)?.[1]
             : undefined
           const rawCapabilities = response.context_attachments_capabilities
-          const capabilitiesShape: CapturedCommandResponse['context_attachments_capabilities_shape'] = rawCapabilities === undefined
+          const capabilitiesShape: CapturedCorrelatedReply['context_attachments_capabilities_shape'] = rawCapabilities === undefined
             ? { shape: 'missing' }
             : rawCapabilities && typeof rawCapabilities === 'object' && !Array.isArray(rawCapabilities)
               ? {
@@ -1086,7 +1122,6 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
                 }
               : { shape: Array.isArray(rawCapabilities) ? 'array' : 'other' }
           wire.__wippyAttentionE2ECommandResponses!.push({
-            dispatch: incoming?.dispatch,
             attachmentsShape: incoming?.attachmentsShape,
             attachmentReceiptCount: incoming?.attachmentReceiptCount,
             context_attachments_transport: response.context_attachments_transport?.version === 1
@@ -1095,8 +1130,8 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
               ? { version: 1, staging: true, max_context_bytes: 32768 }
               : undefined,
             context_attachments_capabilities_shape: capabilitiesShape,
-            attachments: Array.isArray(response.attachments)
-              ? response.attachments.map((attachment: Record<string, unknown>) => ({
+            attachments: Array.isArray(response.context_attachments ?? response.attachments)
+              ? (response.context_attachments ?? response.attachments).map((attachment: Record<string, unknown>) => ({
                   attachment_id: attachment.attachment_id,
                   content_hash: attachment.content_hash,
                   kind: attachment.kind,
@@ -1109,13 +1144,13 @@ export async function installAttentionWireTap(page: Page): Promise<void> {
             request_id: response.request_id,
             socket_id: (socket as WebSocket & { __wippyAttentionE2EId: string }).__wippyAttentionE2EId,
             received_at: Date.now(),
-            success: response.success,
+            success: response.type === 'received' || (response.type === 'command_response' && response.success),
             topic: typeof envelope.topic === 'string' ? envelope.topic : undefined,
-            type: 'command_response',
+            type: response.type,
           })
         }
         catch {
-          // Only sanitized command responses are retained by this E2E hook.
+          // Only bounded reply metadata is retained by this E2E hook.
         }
       })
     }
@@ -1321,6 +1356,10 @@ interface ComposerDiagnostic {
   visible: boolean
 }
 
+// Bind ownership at the public send/open boundary. Vue development internals
+// are absent from the production bundles used by the release smoke tests.
+const activeSessionComposers = new WeakMap<Page, { sessionId: string, composer: Locator }>()
+
 export async function composerDiagnostics(page: Page): Promise<ComposerDiagnostic[]> {
   const diagnostics: ComposerDiagnostic[] = []
   for (const frame of page.frames()) {
@@ -1330,65 +1369,33 @@ export async function composerDiagnostics(page: Page): Promise<ComposerDiagnosti
       const composer = composers.nth(index)
       const visible = await composer.isVisible().catch(() => false)
       const detail = await composer.evaluate((element) => {
-        let component = (element as HTMLElement & {
-          __vueParentComponent?: { parent?: unknown, props?: { sessionId?: unknown, sessionStatus?: unknown } }
-        }).__vueParentComponent
-        for (let depth = 0; component && depth < 20; depth++) {
-          if (typeof component.props?.sessionId === 'string') {
-            const root = element.closest('.chat-input') ?? element.parentElement?.parentElement
-            return {
-              connected: element.isConnected,
-              editable: !(element as HTMLTextAreaElement).disabled && !(element as HTMLTextAreaElement).readOnly,
-              frame: (window as typeof window & { __wippyAttentionE2ERealmId?: string }).__wippyAttentionE2ERealmId ?? 'unidentified',
-              sessionId: component.props.sessionId,
-              sessionStatus: ['idle', 'running', 'stopped', 'error', 'completed', 'pending'].includes(String(component.props.sessionStatus))
-                ? String(component.props.sessionStatus)
-                : 'unknown',
-              sendVisible: Boolean(root?.querySelector('.chat-input__send-button')?.getClientRects().length),
-              stopVisible: Boolean(root?.querySelector('.chat-input__stop-button')?.getClientRects().length),
-            }
-          }
-          component = component.parent as typeof component
+        const root = element.closest('.chat-input')
+        return {
+          connected: element.isConnected,
+          editable: !(element as HTMLTextAreaElement).disabled && !(element as HTMLTextAreaElement).readOnly,
+          frame: (window as typeof window & { __wippyAttentionE2ERealmId?: string }).__wippyAttentionE2ERealmId ?? 'unidentified',
+          sendVisible: Boolean(root?.querySelector('button[aria-label="Send message"]:not(:disabled)')?.getClientRects().length),
+          stopVisible: Boolean(root?.querySelector('button[aria-label="Stop session"]')?.getClientRects().length),
         }
-        return undefined
       }).catch(() => undefined)
-      diagnostics.push({ connected: false, editable: false, frame: 'unidentified', sendVisible: false, stopVisible: false, ...detail, visible })
+      const owner = activeSessionComposers.get(page)
+      const handle = await composer.elementHandle()
+      const isOwner = owner && handle
+        ? await owner.composer.evaluate((element, candidate) => element === candidate, handle).catch(() => false)
+        : false
+      await handle?.dispose()
+      diagnostics.push({ connected: false, editable: false, frame: 'unidentified', sendVisible: false, stopVisible: false, ...detail, visible, sessionId: isOwner ? owner?.sessionId : undefined })
     }
   }
   return diagnostics
 }
 
 async function findSessionComposer(page: Page, sessionId: string, timeout = 20_000): Promise<Locator> {
-  const deadline = Date.now() + timeout
-  let diagnostics: ComposerDiagnostic[] = []
-  while (Date.now() < deadline) {
-    diagnostics = await composerDiagnostics(page)
-    for (const frame of page.frames()) {
-      const composers = frame.locator('textarea[placeholder="Type a message"]')
-      const count = await composers.count()
-      for (let index = 0; index < count; index++) {
-        const composer = composers.nth(index)
-        const visible = await composer.isVisible().catch(() => false)
-        const currentSessionId = await composer.evaluate((element) => {
-          let component = (element as HTMLElement & {
-            __vueParentComponent?: { parent?: unknown, props?: { sessionId?: unknown } }
-          }).__vueParentComponent
-          for (let depth = 0; component && depth < 20; depth++) {
-            if (typeof component.props?.sessionId === 'string')
-              return component.props.sessionId
-            component = component.parent as typeof component
-          }
-          return undefined
-        }).catch(() => undefined)
-        if (!visible)
-          continue
-        if (currentSessionId === sessionId)
-          return composer
-      }
-    }
-    await page.waitForTimeout(100)
-  }
-  throw new Error(`No current composer for session ${sessionId}; composer diagnostics: ${JSON.stringify(diagnostics)}`)
+  const owner = activeSessionComposers.get(page)
+  if (owner?.sessionId !== sessionId)
+    throw new Error(`No composer bound by a public send/open operation for session ${sessionId}`)
+  await expect(owner.composer).toBeVisible({ timeout })
+  return owner.composer
 }
 
 export async function waitForSessionComposerReady(page: Page, sessionId: string): Promise<Locator> {
@@ -1433,7 +1440,7 @@ export async function sendRawSessionMessage(
   const composer = await findSessionComposer(page, sessionId)
   const outboundMessageId = options.outboundMessageId ?? crypto.randomUUID()
   const requestId = options.requestId ?? crypto.randomUUID()
-  const responsesBefore = await capturedCommandResponses(page)
+  const responsesBefore = await capturedCorrelatedReplies(page)
   const sent = await composer.evaluate((_element, { attachments, messageId, messageText, targetRequestId, targetSessionId, reference, runtimeContext, receiverCapabilityProbe }) => {
     const wire = window as typeof window & {
       __wippyAttentionE2ESockets?: WebSocket[]
@@ -1494,19 +1501,20 @@ export async function sendRawSessionMessage(
       expect(socket?.events.some(event => event.event === 'local_close_call')).toBe(false)
       return socket?.events.find(event => event.event === 'close')?.code
     }, { timeout: 20_000, message: 'native oversized WebSocket frame is rejected with close code 1009' }).toBe(1009)
-    expect((await capturedCommandResponses(page)).filter(response => response.request_id === requestId)).toHaveLength(0)
+    expect((await capturedCorrelatedReplies(page)).filter(response => response.request_id === requestId)).toHaveLength(0)
     return { requestId, socketId: sent.socketId, closeCode: 1009 }
   }
 
-  const matchesResponse = (response: CapturedCommandResponse) => response.request_id === requestId
-    && response.topic === `session:${sessionId}` && response.socket_id === sent.socketId
+  const matchesResponse = (response: CapturedCorrelatedReply) => response.request_id === requestId
+    && (response.topic === `session:${sessionId}` || response.topic === `session:${sessionId}:message:${response.message_id}`)
+    && response.socket_id === sent.socketId
   const responseCountBefore = responsesBefore.filter(matchesResponse).length
 
-  let response: CapturedCommandResponse | undefined
+  let response: CapturedCorrelatedReply | undefined
   try {
     const deadline = Date.now() + 20_000
     while (Date.now() < deadline) {
-      response = (await capturedCommandResponses(page))
+      response = (await capturedCorrelatedReplies(page))
         .filter(matchesResponse)[responseCountBefore]
       if (response)
         break
@@ -1514,7 +1522,7 @@ export async function sendRawSessionMessage(
       await page.waitForTimeout(100)
     }
     if (!response)
-      throw new Error(`command_response for raw request ${requestId} timed out`)
+      throw new Error(`Correlated reply for raw request ${requestId} timed out`)
   }
   catch (error) {
     const [composers, sockets] = await Promise.all([
@@ -1524,7 +1532,7 @@ export async function sendRawSessionMessage(
     throw new Error(`${error instanceof Error ? error.message : String(error)}; owning send: ${JSON.stringify(sent)}; composer diagnostics: ${JSON.stringify(composers)}; socket diagnostics: ${JSON.stringify(sockets)}`)
   }
   return {
-    commandResponse: response!,
+    reply: response!,
     outboundMessageId,
     persistedMessageId: response!.message_id,
     requestId,
@@ -1543,9 +1551,9 @@ export async function verifyContextStagingCapability(page: Page, sessionId: stri
   expect(advertised.status).toBe(200)
   expect(advertised.supported).toBe(true)
   const receiver = await sendRawSessionMessage(page, sessionId, '', undefined, { receiverCapabilityProbe: true })
-  expect(receiver.commandResponse.success).toBe(true)
-  expect(receiver.commandResponse.context_attachments_transport).toEqual({ version: 1, staging: true, max_context_bytes: 32768 })
-  expect((await capturedCommandResponses(page)).filter(item => item.request_id === receiver.requestId)).toHaveLength(1)
+  expect(receiver.reply.success).toBe(true)
+  expect(receiver.reply.context_attachments_transport).toEqual({ version: 1, staging: true, max_context_bytes: 32768 })
+  expect((await capturedCorrelatedReplies(page)).filter(item => item.request_id === receiver.requestId)).toHaveLength(1)
   const socket = (await attentionSocketDiagnostics(page)).find(socket => socket.id === receiver.socketId)
   expect(socket?.events.filter(event => event.event === 'send' && event.type === 'session_command' && event.requestId === receiver.requestId)).toHaveLength(1)
 }
@@ -1722,17 +1730,197 @@ async function proxyFrame(page: Page): Promise<Frame> {
   throw new Error('No injected Wippy proxy realm became available')
 }
 
-export async function startDeterministicAttentionChat(page: Page): Promise<Locator> {
+export async function prepareCssPagination(page: Page, target: Locator) {
+  await target.evaluate((element) => {
+    const container = element.parentElement
+    if (!container)
+      throw new Error('CSS pagination target has no parent element')
+    if (container.querySelector('[data-testid="attention-css-pagination-fixture"]'))
+      throw new Error('CSS pagination fixture already exists')
+
+    const doc = element.ownerDocument
+    const fixture = doc.createElement('div')
+    fixture.dataset.testid = 'attention-css-pagination-fixture'
+    fixture.style.cssText = 'position: fixed; top: 8px; right: 8px; z-index: 10000'
+    const root = fixture.attachShadow({ mode: 'open' })
+    for (const label of ['CSS page one', 'CSS page two']) {
+      const button = doc.createElement('button')
+      button.type = 'button'
+      button.textContent = label
+      button.setAttribute('aria-label', label)
+      root.append(button)
+    }
+    container.append(fixture)
+  })
+
+  const fixture = await findVisibleTestId(page, 'attention-css-pagination-fixture')
+  await expect(fixture.locator('button')).toHaveText(['CSS page one', 'CSS page two'])
+
   const frame = await proxyFrame(page)
-  await frame.evaluate(async () => {
+  return frame.evaluate(async () => {
+    type NodeRef = {
+      host_instance_id: string
+      node_id: string
+      mount_id: string
+      generation: number
+    }
+
+    const sameRef = (left: NodeRef | undefined, right: NodeRef) =>
+      left?.host_instance_id === right.host_instance_id
+      && left.node_id === right.node_id
+      && left.mount_id === right.mount_id
+      && left.generation === right.generation
+
+    const instance = await (window as any).getWippyApi()
+    const found = await instance.attention.find(
+      { role: 'button', name: 'CSS page one' },
+      { fromRoot: true, limit: 8 },
+    )
+    const matches = (found.data?.nodes ?? []).filter(
+      (node: any) => node.summary?.role === 'button'
+        && node.summary?.name === 'CSS page one',
+    )
+    if (matches.length !== 1 || !matches[0].parent)
+      throw new Error(`CSS pagination root discovery failed: ${JSON.stringify(found)}`)
+
+    const root = matches[0].parent as NodeRef
+    const tree = await instance.attention.getTree({
+      fromRoot: true,
+      node: root,
+      limit: 1,
+      depth: 0,
+    })
+    const rootNode = (tree.data?.nodes ?? []).find(
+      (node: any) => sameRef(node.ref, root),
+    )
+    if (!sameRef(tree.data?.root, root) || rootNode?.kind !== 'shadow-root')
+      throw new Error(`CSS pagination scope is not the requested ShadowRoot: ${JSON.stringify(tree)}`)
+
+    return root
+  })
+}
+
+export async function startDeterministicAttentionChat(page: Page, agentName = ATTENTION_E2E_AGENT): Promise<Locator> {
+  const frame = await proxyFrame(page)
+  await frame.evaluate(async (name) => {
     const instance = await (window as any).getWippyApi()
     const response = await instance.api.get('/api/v1/agents/list')
-    const agent = response.data?.agents?.find((candidate: any) => candidate.name === 'app.attention_e2e:agent')
+    const agent = response.data?.agents?.find((candidate: any) => candidate.name === name)
     if (!agent?.start_token)
-      throw new Error('Deterministic Attention E2E agent is not registered')
+      throw new Error(`Deterministic Attention E2E agent is not registered: ${name}`)
     instance.host.startChat(agent.start_token, { sidebar: true })
-  })
+  }, agentName)
   return findVisible(page, root => root.locator('textarea[placeholder="Type a message"]'), 'chat message textarea', 30_000)
+}
+
+/** Reads the persisted Session Attention control state through the public API. */
+export async function sessionAttentionContext(page: Page, sessionId: string): Promise<{ enabled: boolean, revision: number, updated_by?: string }> {
+  const frame = await proxyFrame(page)
+  return frame.evaluate(async (id) => {
+    const instance = await (window as any).getWippyApi()
+    const response = await instance.api.get('/api/v1/sessions/get', { params: { session_id: id } })
+    const state = response.data?.session?.attention_context
+    if (!state || typeof state.enabled !== 'boolean' || typeof state.revision !== 'number')
+      throw new Error('Session response has no attention_context state')
+    return { enabled: state.enabled, revision: state.revision, updated_by: state.updated_by }
+  }, sessionId)
+}
+
+/** Waits for the deterministic agent's `ATTENTION_E2E_READ` answer to one user message. */
+export async function waitForReadReport(page: Page, sessionId: string, sourceMessageId: string, timeout = 30_000): Promise<AttentionReadReport> {
+  const marker = 'ATTENTION_E2E_READ '
+  const answer = await waitForPersistedMessage(page, sessionId, message => message.type === 'assistant'
+    && message.metadata?.source_id === sourceMessageId && message.data.startsWith(marker), timeout)
+  return JSON.parse(answer.data.slice(marker.length)) as AttentionReadReport
+}
+
+/**
+ * The function calls of one user turn as the Session stored them when they
+ * ran. A later prompt can withdraw an earlier read result from the model, but
+ * the stored record keeps what the tool returned at the time.
+ */
+export async function turnFunctionCalls(page: Page, sessionId: string, userMessageId: string): Promise<Array<{
+  arguments: Record<string, unknown>
+  call_id?: string
+  function_name?: string
+  result: AttentionReadReport['results'][number]
+  status?: string
+}>> {
+  const history = await sessionMessages(page, sessionId)
+  const start = history.findIndex(message => message.message_id === userMessageId)
+  if (start < 0)
+    throw new Error(`User message ${userMessageId} is not in the session history`)
+  const calls = []
+  for (const message of history.slice(start + 1)) {
+    if (message.type === 'user')
+      break
+    if (message.type !== 'function' && message.type !== 'private_function')
+      continue
+    const metadata = message.metadata as PersistedMessage['metadata'] & { function_name?: string }
+    calls.push({
+      arguments: JSON.parse(message.data || '{}') as Record<string, unknown>,
+      call_id: metadata?.call_id,
+      function_name: metadata?.function_name,
+      result: metadata?.result as AttentionReadReport['results'][number],
+      status: metadata?.status,
+    })
+  }
+  return calls
+}
+
+/** Adds one ordinary file to the visible chat composer queue. */
+export async function addComposerUpload(page: Page, file: { name: string, mimeType: string, buffer: Buffer }): Promise<void> {
+  const input = await findVisible(page, root => root.locator('.chat-input:has(textarea[placeholder="Type a message"])'), 'chat composer', 30_000)
+  await input.locator('input[type="file"]').setInputFiles(file)
+}
+
+export async function capturedUiActionRequests(page: Page): Promise<CapturedUiActionRequestEnvelope[]> {
+  const perFrame = await Promise.all(page.frames().map(async (frame) => {
+    try {
+      return await frame.evaluate(() => structuredClone((window as typeof window & {
+        __wippyAttentionE2EUiActionRequests?: unknown[]
+      }).__wippyAttentionE2EUiActionRequests ?? [])) as CapturedUiActionRequestEnvelope[]
+    }
+    catch {
+      return []
+    }
+  }))
+  return perFrame.flat()
+}
+
+export async function waitForUiActionRequest(page: Page, sessionId: string, mode: string, timeout = 20_000): Promise<CapturedUiActionRequestEnvelope> {
+  let found: CapturedUiActionRequestEnvelope | undefined
+  await expect.poll(async () => {
+    found = (await capturedUiActionRequests(page)).find(envelope => envelope.data?.session_id === sessionId
+      && envelope.data?.message_type === 'request' && envelope.data?.mode === mode)
+    return Boolean(found)
+  }, { timeout, message: `session_ui_action_request ${mode} for ${sessionId}` }).toBe(true)
+  return found!
+}
+
+/**
+ * Delivers one server envelope to this page's open Session socket exactly as
+ * if the server had sent it. It models a request that reaches the wrong Host.
+ */
+export async function injectSessionSocketEnvelope(page: Page, envelope: unknown): Promise<void> {
+  const delivered = await Promise.all(page.frames().map(async (frame): Promise<number> => {
+    try {
+      return await frame.evaluate((value) => {
+        const wire = window as typeof window & { __wippyAttentionE2ESockets?: WebSocket[] }
+        const socket = [...(wire.__wippyAttentionE2ESockets ?? [])]
+          .reverse()
+          .find(candidate => candidate.readyState === WebSocket.OPEN && new URL(candidate.url).pathname === '/api/v1/ws/join')
+        if (!socket)
+          return 0
+        socket.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(value) }))
+        return 1
+      }, envelope)
+    }
+    catch {
+      return 0
+    }
+  }))
+  expect(delivered.reduce((total, count) => total + count, 0), 'one open Session socket received the envelope').toBe(1)
 }
 
 export async function enablePointingContext(page: Page): Promise<void> {
@@ -1740,7 +1928,7 @@ export async function enablePointingContext(page: Page): Promise<void> {
   if ((await attachments.getAttribute('aria-label'))?.match(/pointing context selected/))
     return
   await attachments.click()
-  const pointing = await findVisibleRole(page, 'menuitem', 'Include what I’m pointing at')
+  const pointing = await findVisibleRole(page, 'menuitem', 'Automatically attach pointing context')
   await pointing.click()
   await expect(attachments).toHaveAttribute('aria-label', /pointing context selected/)
 }
@@ -1787,13 +1975,13 @@ export async function capturedWireMessages(page: Page): Promise<Array<CapturedSe
   return perFrame.flat()
 }
 
-export async function capturedCommandResponses(page: Page): Promise<CapturedCommandResponse[]> {
+export async function capturedCorrelatedReplies(page: Page): Promise<CapturedCorrelatedReply[]> {
   const perFrame = await Promise.all(page.frames().map(async (frame) => {
     try {
       return await frame.evaluate(() => {
         const wire = window as typeof window & { __wippyAttentionE2ECommandResponses?: unknown[] }
         return structuredClone(wire.__wippyAttentionE2ECommandResponses ?? [])
-      }) as CapturedCommandResponse[]
+      }) as CapturedCorrelatedReply[]
     }
     catch {
       return []
@@ -1816,69 +2004,8 @@ export async function capturedIncomingPackets(page: Page): Promise<CapturedIncom
   return perFrame.flat().sort((left, right) => left.received_at - right.received_at).slice(-4096)
 }
 
-export async function waitForTerminalDispatch(page: Page, sessionId: string, messageId: string): Promise<CapturedIncomingPacket> {
-  let packet: CapturedIncomingPacket | undefined
-  await expect.poll(async () => {
-    const incoming = await capturedIncomingPackets(page)
-    packet = incoming.find(item => item.type === 'dispatch_status'
-      && item.topic === `session:${sessionId}` && item.dispatch?.message_id === messageId
-      && ['completed', 'interrupted', 'cancelled'].includes(item.dispatch.state))
-    if (!packet) {
-      for (const item of incoming) {
-        if (item.topic !== `session:${sessionId}`)
-          continue
-        const dispatch = item.dispatches?.find(candidate => candidate.message_id === messageId
-          && ['completed', 'interrupted', 'cancelled'].includes(candidate.state))
-        if (dispatch) {
-          packet = { ...item, dispatch }
-          break
-        }
-      }
-    }
-    return Boolean(packet)
-  }, { timeout: 30_000, message: `terminal dispatch for accepted root ${messageId}` }).toBe(true)
-  return packet!
-}
-
-export async function requestDispatchStatus(
-  page: Page,
-  sessionId: string,
-  dispatchId: string,
-): Promise<CapturedDispatchDescriptor> {
-  const composer = await findSessionComposer(page, sessionId)
-  const requestId = crypto.randomUUID()
-  await composer.evaluate((_element, request) => {
-    const sockets = (window as typeof window & { __wippyAttentionE2ESockets?: WebSocket[] })
-      .__wippyAttentionE2ESockets ?? []
-    const socket = [...sockets].reverse().find(candidate => (
-      candidate.readyState === WebSocket.OPEN
-      && new URL(candidate.url).pathname === '/api/v1/ws/join'
-    ))
-    if (!socket)
-      throw new Error('The reconnected session has no open owning WebSocket')
-    socket.send(JSON.stringify({
-      data: {
-        command: 'dispatch_status',
-        dispatch_ids: [request.dispatchId],
-      },
-      request_id: request.requestId,
-      session_id: request.sessionId,
-      type: 'session_command',
-    }))
-  }, { dispatchId, requestId, sessionId })
-
-  let descriptor: CapturedDispatchDescriptor | undefined
-  await expect.poll(async () => {
-    const response = (await capturedIncomingPackets(page)).find(packet => (
-      packet.type === 'command_response'
-      && packet.topic === `session:${sessionId}`
-      && packet.request_id === requestId
-      && packet.success === true
-    ))
-    descriptor = response?.dispatches?.find(candidate => candidate.dispatch_id === dispatchId)
-    return Boolean(descriptor)
-  }, { timeout: 20_000, message: `dispatch status response for ${dispatchId}` }).toBe(true)
-  return descriptor!
+export async function waitForAssistantReply(page: Page, sessionId: string, messageId: string): Promise<PersistedMessage> {
+  return waitForPersistedMessage(page, sessionId, message => message.type === 'assistant' && message.metadata?.source_id === messageId)
 }
 
 export async function sendChatMessage(
@@ -1912,27 +2039,30 @@ export async function sendChatMessage(
     const [composers, sockets, responses] = await Promise.all([
       composerDiagnostics(page),
       attentionSocketDiagnostics(page),
-      capturedCommandResponses(page),
+      capturedCorrelatedReplies(page),
     ])
     throw new Error(`${error instanceof Error ? error.message : String(error)}; composition categories: ${JSON.stringify(compositionFailures.get(page) ?? [])}; command responses: ${JSON.stringify(responses)}; HTTP stages: ${JSON.stringify(capturedHttpStageMetrics(page))}; composer diagnostics: ${JSON.stringify(composers)}; socket diagnostics: ${JSON.stringify(sockets)}`)
   }
 
+  activeSessionComposers.set(page, { sessionId: captured!.session_id, composer })
   await recordSendLifecycle(page, 'outbound-observed', captured!)
 
-  let response: CapturedCommandResponse | undefined
+  let response: CapturedCorrelatedReply | undefined
   try {
     await expect.poll(async () => {
-      response = (await capturedCommandResponses(page)).find(item => item.request_id === captured!.request_id)
+      response = (await capturedCorrelatedReplies(page)).find(item => item.request_id === captured!.request_id)
       return Boolean(response)
-    }, { timeout: 20_000, message: `command_response for ${captured!.request_id}` }).toBe(true)
+    }, { timeout: 20_000, message: `received response for ${captured!.request_id}` }).toBe(true)
   }
   catch (error) {
     await recordSendLifecycle(page, 'ack-failed', captured!)
     throw error
   }
   await recordSendLifecycle(page, response!.success ? 'ack-success' : 'ack-rejected', { ...captured!, message_id: response!.message_id })
-  if (!response!.success || !response!.message_id)
+  if (response!.type !== 'received' || !response!.success || !response!.message_id)
     throw new Error(`Session message ${captured!.request_id} was rejected (${response!.code ?? 'missing-message-id'})`)
+  expect(response!.topic).toBe(`session:${captured!.session_id}:message:${response!.message_id}`)
+  expect((await capturedCorrelatedReplies(page)).filter(item => item.request_id === captured!.request_id)).toHaveLength(1)
   const persisted = captured!.data.context_attachments_ref
     ? await waitForPersistedMessage(page, captured!.session_id, message => message.message_id === response!.message_id && message.type === 'user')
     : undefined
@@ -1945,7 +2075,7 @@ export async function sendChatMessage(
   }
   return {
     ...captured!,
-    command_response: response!,
+    receipt: response!,
     persistedMessageId: response!.message_id,
     ...(persisted ? { persistedContextAttachments: persisted.metadata!.context_attachments } : {}),
   }
@@ -2065,7 +2195,9 @@ export async function openPersistedSession(page: Page, sessionId: string): Promi
     const instance = await (window as any).getWippyApi()
     instance.host.openSession(id, { sidebar: true })
   }, sessionId)
-  return findSessionComposer(page, sessionId, 30_000)
+  const composer = await findVisible(page, root => root.locator('textarea[placeholder="Type a message"]'), 'opened session composer', 30_000)
+  activeSessionComposers.set(page, { sessionId, composer })
+  return composer
 }
 
 export async function navigateAttentionHost(page: Page, path: string): Promise<void> {
