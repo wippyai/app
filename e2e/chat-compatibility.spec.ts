@@ -16,6 +16,18 @@ import {
   waitForPersistedMessage,
 } from './helpers/attention'
 import { loginAsAdmin } from './helpers/login'
+import { useLocalReleaseAssets } from './helpers/release62'
+
+test.beforeEach(async ({ page }) => {
+  await useLocalReleaseAssets(page)
+  if (process.env.RELEASE62_LOCAL_ASSETS !== '1' && process.env.RELEASE62_PUBLISHED !== '1') return
+  // This smoke changes models; its fixture explicitly enables that policy.
+  await page.route('**/api/public/facade/config', async (route) => {
+    const response = await route.fetch()
+    const config = await response.json()
+    await route.fulfill({ response, json: { ...config, allowSelectModel: true } })
+  })
+})
 
 const cell = process.env.COMPATIBILITY_CELL || 'M15'
 const sessionVersion = process.env.COMPATIBILITY_SESSION_VERSION || 'current'

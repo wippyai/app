@@ -1,6 +1,6 @@
 {
   "name": "app-template-raw",
-  "version": "0.0.0",
+  "version": "0.0.62",
   "private": true,
   "description": "Wippy app-template-raw — top-level package.json scoped to the e2e suite. Per-app builds live under frontend/applications/*/package.json.",
   "scripts": {

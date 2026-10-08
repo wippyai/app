@@ -34,6 +34,7 @@ catch (error) {
 }
 
 await mkdir(runtime, { recursive: true })
+await mkdir(path.join(runtime, '.wippy'), { recursive: true })
 await writeFile(marker, 'app-template-e2e\n', 'utf8')
 for (const name of ['src', 'static']) {
   const target = path.join(runtime, name)

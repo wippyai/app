@@ -55,6 +55,13 @@ import {
   waitForUiActionRequest,
   waitForUiActionResult,
 } from './helpers/attention'
+import { useLocalReleaseAssets } from './helpers/release62'
+
+test.beforeEach(async ({ page }) => useLocalReleaseAssets(page))
+test.afterEach(async ({ page }) => {
+  if (process.env.RELEASE62_LOCAL_ASSETS === '1')
+    await page.unrouteAll({ behavior: 'wait' })
+})
 
 const cell = attentionRuntimeCell()
 const describeCell = `${cell.layout}/${cell.engine}/${cell.mode}${cell.visualCapture ? '/visual' : ''}`

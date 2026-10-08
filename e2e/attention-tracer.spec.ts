@@ -1,6 +1,13 @@
 import type { Locator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
+import { useLocalReleaseAssets } from './helpers/release62'
+
+test.beforeEach(async ({ page }) => useLocalReleaseAssets(page))
+test.afterEach(async ({ page }) => {
+  if (process.env.RELEASE62_LOCAL_ASSETS === '1')
+    await page.unrouteAll({ behavior: 'wait' })
+})
 
 type AttentionEngine = 'iframe' | 'fragment'
 type AttentionLayout = 'compat' | 'managed'

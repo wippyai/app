@@ -25,9 +25,10 @@ modules:
       hash: 43bf8a4d29276aabece9cae4fe3a28d0ce512c5cb4544698adbfa1fbef9576b4
     - name: wippy-swiss/voice
       version: 0.1.3
+      hash: f8851bd7aa73638712e9d545a95abcea29a62ba4329c56237e1658641844b048
     - name: wippy/agent
-      version: 0.4.15
-      hash: cb2c5e2396fe60ae43f33507074e532f0c96bccda654fa90fc61d31856d2cf38
+      version: 0.5.3
+      hash: 58288cfadfaef4112e0735c882778e0cb8161fe8cdb97975c11c16a312b9bf07
     - name: wippy/bootloader
       version: 0.3.14
       hash: aa5e32807eba6a5ea0e5a224069a006288f58605c4542a444f5469caee862c58
@@ -38,7 +39,8 @@ modules:
       version: 0.6.39
       hash: 8521220405ba7fb388dd434d3064d15dec3a80fbb9e0654b51603365888c721a
     - name: wippy/llm
-      version: 0.5.3
+      version: 0.5.5
+      hash: a108a1836fd1a28c35dcf05acf7ab1f09c49b920c74970ca8efde118e810114c
     - name: wippy/migration
       version: 0.3.18
       hash: e00cad6706bb95f556aeab5318a04e55d3884c027b09f6340fc4e7d69c905a17
