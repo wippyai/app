@@ -2,6 +2,71 @@ version: "1.0"
 namespace: app.security
 
 entries:
+  # Login is public, so token_auth cannot supply an actor before credentials
+  # are verified. Configure only this function, leaving router/user scopes alone.
+  - name: login_execution_security
+    kind: ns.requirement
+    targets:
+      - entry: userspace.user.api:login
+        path: .security
+    default:
+      actor:
+        id: app.security:login_ingress
+      policies:
+        - app.security:login.env_read
+        - app.security:login.database
+        - app.security:login.scopes
+        - app.security:login.actor
+        - app.security:login.tokens
+
+  - name: login.env_read
+    kind: security.policy
+    policy:
+      resources:
+        - userspace.user.env:database_resource
+        - userspace.user.env:admin_group_id
+        - userspace.user.env:default_group_id
+        - userspace.user.env:admin_init_enabled
+        - userspace.user.env:token_expiration
+      actions:
+        - env.get
+      effect: allow
+
+  - name: login.database
+    kind: security.policy
+    policy:
+      resources: app:db
+      actions:
+        - db.get
+      effect: allow
+
+  - name: login.scopes
+    kind: security.policy
+    policy:
+      resources:
+        - app.security:admin
+        - app.security:user
+      actions:
+        - security.policy_group.get
+      effect: allow
+
+  - name: login.actor
+    kind: security.policy
+    policy:
+      resources: '*'
+      actions:
+        - security.actor.create
+      effect: allow
+
+  - name: login.tokens
+    kind: security.policy
+    policy:
+      resources: userspace.user.security:tokens
+      actions:
+        - security.token_store.get
+        - security.token.create
+      effect: allow
+
   - name: admin.all_access
     kind: security.policy
     groups:
