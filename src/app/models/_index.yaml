@@ -198,6 +198,39 @@ entries:
       - id: wippy.llm.openai_compat:provider
         provider_model: openai/gpt-5.3-codex
 
+  # DeepSeek
+  - name: deepseek-v4.1-flash
+    kind: registry.entry
+    meta:
+      name: deepseek-v4.1-flash
+      type: llm.model
+      title: DeepSeek V4.1 Flash
+      comment: Fast agentic model for coding, tool use, and long-context tasks
+      capabilities:
+        - tool_use
+        - vision
+        - generate
+        - structured_output
+        - coding
+        - reasoning
+      class:
+        - default
+        - balanced
+        - orchestrator
+        - coder
+        - coding
+        - fast
+      priority: 110
+    max_tokens: 1048576
+    output_tokens: 1048576
+    pricing:
+      input: 0.13
+      output: 0.52
+      cached_input: 0.0026
+    providers:
+      - id: wippy.llm.openai_compat:provider
+        provider_model: deepseek/deepseek-v4.1-flash
+
   # ── Embedding ──
   - name: text-embedding-3-small
     kind: registry.entry

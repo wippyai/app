@@ -63,6 +63,14 @@ What the Wippy runtime gives you, exercised by this template:
 - **HTTP, users & security** — HTTP endpoints, user CRUD, policy-based access control, and a token store.
 - **Batteries-included Lua modules** — `http_client`, `html` (sanitize), `llm`, `json`, `time`, `security`, and more, available to any `function.lua`.
 
+Upload queue jobs run without a request actor. `src/app/security/_index.yaml`
+gives the upload worker access to `app:db`, status notifications, and upload
+types and processing functions in the `app` and `app.*` namespaces. The template
+does not define a default upload pipeline. When adding one, declare any extra
+permissions its processors need, such as filesystem or cloud storage access.
+Upload token callbacks also need explicit permissions for the encryption key,
+callback scope, and callback function.
+
 ## Project structure
 
 Backend folders mirror Wippy namespaces — each `src/app/<name>/_index.yaml` declares namespace `app.<name>`:
@@ -102,8 +110,12 @@ All frontend, theming, and web-component guidance lives in [`frontend/docs/`](fr
 ## Testing
 
 ```bash
-wippy run test users
+wippy test users-test
 ```
+
+This command waits for the users database migrations and runs the users suite.
+It exits nonzero if any case fails or no cases run. The test entry is inactive
+during normal `wippy run` startup.
 
 ## Documentation
 

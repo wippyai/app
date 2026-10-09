@@ -131,3 +131,40 @@ entries:
       test: wippy.test:test
       user_repo: userspace.user.persist:user_repo
       user_groups_repo: userspace.user.persist:user_groups_repo
+
+  - name: users_test_runner_policy
+    kind: security.policy
+    meta:
+      comment: Allows the CLI users runner to call its suite and access its database configuration
+    policy:
+      resources:
+        - app.users:users_test
+        - userspace.user.env:database_resource
+        - app:db
+      actions:
+        - funcs.call
+        - env.get
+        - db.get
+      effect: allow
+
+  - name: users_test_runner
+    kind: process.lua
+    meta:
+      comment: Runs the users suite through wippy test; never runs during normal application boot
+      command:
+        name: users-test
+        short: Run users tests
+        use_case: test
+        security:
+          actor:
+            id: app.users:users_test_runner
+          policies:
+            - app.users:users_test_runner_policy
+    source: file://users_test_runner.lua
+    method: main
+    modules:
+      - funcs
+      - io
+      - env
+      - sql
+      - time

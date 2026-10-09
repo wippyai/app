@@ -1,6 +1,5 @@
-import type { Router } from 'vue-router'
 import type { HostApi, ProxyApiInstance } from '../types'
-import { createMemoryHistory, createRouter } from 'vue-router'
+import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 
 // Reuse the proxy's exact `on()` typing instead of redeclaring a looser
 // alias — gives correct `@history` callback inference and tracks upstream
@@ -32,6 +31,16 @@ const routes = [
     path: '/bridge',
     name: 'bridge',
     component: () => import('../pages/bridge.vue'),
+  },
+  {
+    path: '/attention-target/:side',
+    name: 'attention-target',
+    component: () => import('../pages/attention-target.vue'),
+  },
+  {
+    path: '/attention-leaf/:side',
+    name: 'attention-leaf',
+    component: () => import('../pages/attention-leaf.vue'),
   },
   {
     path: '/:pathMatch(.*)*',

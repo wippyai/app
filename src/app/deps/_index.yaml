@@ -51,7 +51,7 @@ entries:
   - name: llm
     kind: ns.dependency
     component: wippy/llm
-    version: '>=v0.2.10'
+    version: '>=v0.5.6'
     parameters:
       - name: process_host
         value: app:processes
@@ -61,12 +61,12 @@ entries:
   - name: agent
     kind: ns.dependency
     component: wippy/agent
-    version: '>=v0.2.1'
+    version: '>=v0.5.3'
 
   - name: relay
     kind: ns.dependency
     component: wippy/relay
-    version: '>=v0.2.1'
+    version: '>=v0.3.16'
     parameters:
       - name: user_security_scope
         value: app.security:user
@@ -84,7 +84,7 @@ entries:
   - name: session
     kind: ns.dependency
     component: wippy/session
-    version: '>=v0.1.0'
+    version: '>=v0.6.7'
     parameters:
       - name: api_router
         value: app:api
@@ -170,9 +170,17 @@ entries:
       - name: server
         value: app:gateway
 
-  # wc-voice (wippy-swiss/voice 0.1.2) removed: its tts_token.endpoint entry
-  # ships without router metadata and aborts boot ("router metadata is
-  # required"). Not needed for the theming e2e harness.
+  - name: wc-voice
+    kind: ns.dependency
+    component: wippy-swiss/voice
+    version: '>=v0.1.0'
+    parameters:
+      - name: server
+        value: app:gateway
+      - name: router
+        value: app:api
+      - name: env_storage
+        value: app.env:store
 
   - name: keeper
     kind: ns.dependency
@@ -199,7 +207,7 @@ entries:
   - name: facade
     kind: ns.dependency
     component: wippy/facade
-    version: '>=v0.5.37'
+    version: '>=v0.6.43'
     parameters:
       - name: server
         value: app:gateway
@@ -213,6 +221,8 @@ entries:
         value: "wippy:logo"
       - name: show_admin
         value: "false"
+      - name: allow_select_model
+        value: "true"
       - name: hide_nav_bar
         value: "true"
       # Default login is the Jet page at /login (server-side cookie theme
@@ -248,6 +258,11 @@ entries:
         value: "fs://css-variables.facade.json"
       - name: content_fs
         value: app:app_fs
+      # Attention is active for the production-shaped tracer fixture, while
+      # attaching it to a message remains an explicit per-send choice.
+      - name: attention
+        value: >-
+          {"enabled":true,"messageContext":{"enabled":true,"defaultInclude":false},"agentActions":{"enabled":true,"requireConfirmation":true},"visualCapture":{"enabled":true},"sampling":{"radiusCssPx":20,"stepCssPx":5},"privacy":{"text":"safe"}}
       # Managed-layout demo declaration. INERT unless the app is launched
       # with `-o wippy.facade:fe_mode:default=managed` — the facade only
       # forwards it to `hostConfig.layout`, and the compat entry

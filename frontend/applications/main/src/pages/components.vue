@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import Chip from 'primevue/chip'
@@ -31,8 +31,31 @@ function selectTab(id: TabId) {
   router.push({ query: id === 'components' ? {} : { tab: id } })
 }
 
+const chatLoadError = ref(false)
+const chatElement = ref<HTMLElement | null>(null)
+let chatShellLoaded = false
+watch([activeTab, chatElement], async ([tab, element]) => {
+  if (tab !== 'chat' || !element || chatShellLoaded) return
+  try {
+    // Register in the document that owns the visible element. A fragment's
+    // JavaScript realm can differ from its reflected DOM's document.
+    const owner = element.ownerDocument
+    const script = owner.createElement('script')
+    script.type = 'module'
+    script.src = new URL('chat.js', import.meta.resolve('@wippy-fe/proxy')).href
+    await new Promise<void>((resolve, reject) => {
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error('Unable to load chat shell'))
+      owner.head.appendChild(script)
+    })
+    chatShellLoaded = true
+    chatLoadError.value = false
+  } catch {
+    chatLoadError.value = true
+  }
+}, { immediate: true })
+
 // --- Web component event logs ---
-import { ref } from 'vue'
 const reactionEvents = ref<Array<{ emoji: string; active: boolean; time: string }>>([])
 const modelEvents = ref<Array<{ name: string; provider: string; time: string }>>([])
 const counterEvents = ref<Array<{ count: number; time: string }>>([])
@@ -63,6 +86,19 @@ const mermaidDef = `graph LR
     B --> D[View Component]
     D --> E[Shadow DOM]
     E --> F[Vue App]`
+
+// Parse this fixed example as HTML so native template.content holds its text.
+// Vue's compiled template children otherwise become ordinary child nodes.
+const mermaidChildrenHtml = `<example-mermaid><template data-type="text/vnd.mermaid">
+sequenceDiagram
+participant H as Host
+participant C as Component
+participant S as Shadow DOM
+H->>C: Register tag
+C->>S: Attach shadow
+S->>S: Load CSS
+S->>C: Mount Vue app
+</template></example-mermaid>`
 
 const markdownContent = `# Web Components
 
@@ -365,18 +401,7 @@ const emit = useComponentEvents()
               Via children content
               <code class="text-[10px] ml-1 text-surface-400">&lt;template data-type="..."&gt;</code>
             </div>
-            <example-mermaid>
-              <template data-type="text/vnd.mermaid">
-                sequenceDiagram
-                participant H as Host
-                participant C as Component
-                participant S as Shadow DOM
-                H->>C: Register tag
-                C->>S: Attach shadow
-                S->>S: Load CSS
-                S->>C: Mount Vue app
-              </template>
-            </example-mermaid>
+            <div v-html="mermaidChildrenHtml" />
           </div>
         </div>
       </div>
@@ -533,14 +558,24 @@ const emit = useComponentEvents()
         (no <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">session-id</code> →
         it follows the picked session). The thin
         <code class="text-xs bg-surface-100 dark:bg-surface-700 px-1 rounded">chat.js</code>
-        shell is auto-injected by the host; the chat internals lazy-load on first mount.
+        shell loads when this tab opens; the chat internals lazy-load on first mount.
+      </p>
+      <p
+        v-if="chatLoadError"
+        role="alert"
+        class="text-red-600 dark:text-red-400"
+      >
+        The embedded chat could not be loaded. Reload the page to try again.
       </p>
       <div class="flex-1 min-h-0 flex flex-col border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden">
         <wippy-session-selector
           class="shrink-0 border-b border-surface-200 dark:border-surface-700"
           style="display: block"
         />
-        <wippy-chat style="display: block; flex: 1 1 0%; min-height: 0" />
+        <wippy-chat
+          ref="chatElement"
+          style="display: block; flex: 1 1 0%; min-height: 0"
+        />
       </div>
     </div>
   </div>

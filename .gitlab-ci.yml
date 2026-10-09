@@ -27,20 +27,21 @@ Test:
     - curl -fsSL https://hub.wippy.ai/install.sh -o /tmp/wippy-install.sh && . /tmp/wippy-install.sh
   script:
     - wippy install
-    - wippy run test users
+    - wippy test users-test
   tags:
     - hetzner
 
 Build_frontend:
   stage: build
   image: node:${NODE_VERSION}-alpine
+  before_script:
+    - apk add --no-cache make
   script:
-    - cd frontend
-    - npm ci
-    - npm run build
+    - make build NPM_INSTALL='npm ci'
   artifacts:
     paths:
-      - static/dist/
+      - static/app/
+      - static/wc/
     expire_in: 1 hour
   tags:
     - hetzner

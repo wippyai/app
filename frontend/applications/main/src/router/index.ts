@@ -34,6 +34,11 @@ const routes = [
     component: () => import('../pages/nested-nav.vue'),
   },
   {
+    path: '/attention-tracer',
+    name: 'attention-tracer',
+    component: () => import('../pages/attention-tracer.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     redirect: '/',
