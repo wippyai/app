@@ -2,6 +2,91 @@ version: "1.0"
 namespace: app.security
 
 entries:
+  # Queue deliveries have no request actor. Give only the upload worker the
+  # permissions needed to load uploads and run app-declared processing stages.
+  - name: upload_worker_execution_security
+    kind: ns.requirement
+    targets:
+      - entry: userspace.uploads:process_worker
+        path: .security
+    default:
+      actor:
+        id: app.security:upload_worker
+      policies:
+        - app.security:upload_worker.env_read
+        - app.security:upload_worker.database
+        - app.security:upload_worker.pipeline
+        - app.security:upload_worker.actor
+        - app.security:upload_worker.context
+        - app.security:upload_worker.security
+        - app.security:upload_worker.notifications
+
+  - name: upload_worker.env_read
+    kind: security.policy
+    policy:
+      resources: userspace.uploads.env:database_resource
+      actions:
+        - env.get
+      effect: allow
+
+  - name: upload_worker.database
+    kind: security.policy
+    policy:
+      resources: app:db
+      actions:
+        - db.get
+      effect: allow
+
+  - name: upload_worker.pipeline
+    kind: security.policy
+    policy:
+      resources: '*'
+      actions:
+        - registry.get
+        - funcs.call
+      conditions:
+        - field: resource
+          operator: matches
+          value: '^app(\.[^:]+)?:[^:]+$'
+      effect: allow
+
+  - name: upload_worker.actor
+    kind: security.policy
+    policy:
+      resources: '*'
+      actions:
+        - security.actor.create
+      effect: allow
+
+  - name: upload_worker.context
+    kind: security.policy
+    policy:
+      resources: context
+      actions:
+        - funcs.context
+      effect: allow
+
+  - name: upload_worker.security
+    kind: security.policy
+    policy:
+      resources: security
+      actions:
+        - funcs.security
+      effect: allow
+
+  - name: upload_worker.notifications
+    kind: security.policy
+    policy:
+      # process.send checks the resolved PID, whose host is app:processes.
+      resources: '*'
+      actions:
+        - process.send
+      conditions:
+        - field: resource
+          operator: matches
+          value: '^\{[^@{}]+@app:processes\|[^{}]+\}$'
+      effect: allow
+
   # Login is public, so token_auth cannot supply an actor before credentials
   # are verified. Configure only this function, leaving router/user scopes alone.
   - name: login_execution_security
