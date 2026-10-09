@@ -51,7 +51,7 @@ entries:
   - name: llm
     kind: ns.dependency
     component: wippy/llm
-    version: '>=v0.2.10'
+    version: '>=v0.5.6'
     parameters:
       - name: process_host
         value: app:processes
@@ -61,12 +61,12 @@ entries:
   - name: agent
     kind: ns.dependency
     component: wippy/agent
-    version: '>=v0.2.1'
+    version: '>=v0.5.3'
 
   - name: relay
     kind: ns.dependency
     component: wippy/relay
-    version: '>=v0.2.1'
+    version: '>=v0.3.16'
     parameters:
       - name: user_security_scope
         value: app.security:user
@@ -84,7 +84,7 @@ entries:
   - name: session
     kind: ns.dependency
     component: wippy/session
-    version: '>=v0.1.0'
+    version: '>=v0.6.7'
     parameters:
       - name: api_router
         value: app:api
@@ -207,7 +207,7 @@ entries:
   - name: facade
     kind: ns.dependency
     component: wippy/facade
-    version: '>=v0.5.37'
+    version: '>=v0.6.43'
     parameters:
       - name: server
         value: app:gateway
