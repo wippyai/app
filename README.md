@@ -102,8 +102,12 @@ All frontend, theming, and web-component guidance lives in [`frontend/docs/`](fr
 ## Testing
 
 ```bash
-wippy run test users
+wippy test users-test
 ```
+
+This command waits for the users database migrations and runs the users suite.
+It exits nonzero if any case fails or no cases run. The test entry is inactive
+during normal `wippy run` startup.
 
 ## Documentation
 
