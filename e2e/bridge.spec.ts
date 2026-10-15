@@ -76,7 +76,7 @@ test.describe('proxy bridge round-trip', () => {
     // ── Verify __bridgeLog window-scoped history matches the DOM log ──
     // bridge.vue mirrors every log line into window.__bridgeLog so tests
     // (and future tooling) can read it without scraping the <pre>.
-    const windowLog = await demoFrame.locator('body').evaluate<string[]>(
+    const windowLog = await demoFrame.locator('body').evaluate(
       () => (window as unknown as { __bridgeLog?: string[] }).__bridgeLog ?? [],
     )
     expect(windowLog.length).toBeGreaterThan(0)
@@ -89,7 +89,7 @@ test.describe('proxy bridge round-trip', () => {
     // <w-iframe> is registered by the proxy inside the iframe-demo's window.
     const demoFrame = await getDemoFrame(page)
     await demoFrame.locator('body').waitFor({ timeout: 15_000 })
-    const wIframeRegistered = await demoFrame.locator('body').evaluate<boolean>(
+    const wIframeRegistered = await demoFrame.locator('body').evaluate(
       () => typeof customElements.get('w-iframe') === 'function',
     )
     expect(wIframeRegistered).toBe(true)
@@ -104,7 +104,7 @@ test.describe('proxy bridge round-trip', () => {
     const demoFrame = await getDemoFrame(page)
     await demoFrame.locator('body').waitFor({ timeout: 15_000 })
     const hostFrame = await getHostFrame(page)
-    const wArtifactRegistered = await hostFrame.locator('body').evaluate<boolean>(
+    const wArtifactRegistered = await hostFrame.locator('body').evaluate(
       () => typeof customElements.get('w-artifact') === 'function',
     )
     expect(wArtifactRegistered).toBe(true)
