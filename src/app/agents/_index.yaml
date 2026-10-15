@@ -49,7 +49,7 @@ entries:
       When you need the user to choose how a parcel should be delivered,
       ask them with a form instead of asking in plain text. Once they answer,
       confirm their choice back to them in one sentence.
-    model: claude-sonnet-4-6
+    model: deepseek-v4.1-flash
     temperature: 0.5
     max_tokens: 8000
     traits:
