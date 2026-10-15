@@ -23,9 +23,12 @@ modules:
     - name: wippy-swiss/mermaid
       version: 0.1.2
       hash: 43bf8a4d29276aabece9cae4fe3a28d0ce512c5cb4544698adbfa1fbef9576b4
+    - name: wippy-swiss/voice
+      version: 0.1.3
+      hash: f8851bd7aa73638712e9d545a95abcea29a62ba4329c56237e1658641844b048
     - name: wippy/agent
-      version: 0.5.1
-      hash: 0cb7539dbfbd28e6a13ce3e8cf19bbc640baae6f69a9dd4c45569294b053984c
+      version: 0.5.3
+      hash: 58288cfadfaef4112e0735c882778e0cb8161fe8cdb97975c11c16a312b9bf07
     - name: wippy/bootloader
       version: 0.3.16
       hash: a31e9c64ec482ced0b0095bc0c85b2a69a7b1361c207ab43ffae807da473f6bc
@@ -33,23 +36,23 @@ modules:
       version: 0.7.20
       hash: 9ea1319be209e24a09d9796edbd65dc886bccebf7a70718a445d218da7ceccd3
     - name: wippy/facade
-      version: 0.6.41
-      hash: cda2b1efec0153dd7644ffaadab2e85aa3b7e2ba088dccfc534795fcab5dfffd
+      version: 0.6.43
+      hash: f14ffbf6581cdf753ad37f706fe2b5f1c1808a27440d944df4ac94a3ce7dd8ee
     - name: wippy/llm
-      version: 0.5.2
-      hash: b231cddd2ed7bdd6987fe84ced821f21102a6c4f092ca3f2c269039c27c93c05
+      version: 0.5.6
+      hash: 30782eeacc5756f6b5eea42204485b3d3b8572b3a0aa3c8a76f28773516814c6
     - name: wippy/migration
       version: 0.3.19
       hash: 3067a844cc4a453a6f39a8adc332def9ee7c00e4eba2afb27d7e3ddacb3cda1c
     - name: wippy/relay
-      version: 0.3.15
-      hash: e7f1cccc88cf497d83711b39e21fde364d8c8ea5e3b70f3cd6689164162cd24b
+      version: 0.3.16
+      hash: d09d95cc2ca912c3c0c930150faa5f776cca74387894a69e9b40ca6ae2ba56fa
     - name: wippy/security
       version: 0.4.3
       hash: f636859979e88b23647a78fb9aa8a553799de18750b0fb5fb085cbe21542c86c
     - name: wippy/session
-      version: 0.6.3
-      hash: b16b93b330fdee755b25e511e7cc2ba3d0c6d08212b416d5de53b43c700d39a7
+      version: 0.6.7
+      hash: cdd7ebddd9623c10eba2deeaed4425ee7af58aa827f7a0d586be7f6c9a04f7b7
     - name: wippy/terminal
       version: 0.4.6
       hash: aa0c92b85c0dc2c96f00119a7eaa1ced569a2ac8899514d432aef0c910e73e63

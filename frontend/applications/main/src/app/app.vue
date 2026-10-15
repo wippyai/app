@@ -31,6 +31,11 @@ const themeOptions = [
 
 type ThemeMode = (typeof themeOptions)[number]['mode']
 
+interface NavigateAction {
+  data?: { path?: unknown }
+  path?: unknown
+}
+
 const themeMode = ref<ThemeMode>('auto')
 const currentThemeOption = computed(
   () => themeOptions.find(o => o.mode === themeMode.value) ?? themeOptions[0],
@@ -46,15 +51,11 @@ function cycleTheme() {
   setTheme(themeOptions[(idx + 1) % themeOptions.length].mode)
 }
 
-// The relay nests the process.send payload under `.data`; accept either shape.
-interface NavigatePayload {
-  path?: string
-  data?: { path?: string }
-}
-
-instance.on('action:navigate', (raw: unknown) => {
-  const payload = raw as NavigatePayload | null | undefined
-  const path = payload?.data?.path || payload?.path
+instance.on('action:navigate', (value: unknown) => {
+  const data = value as NavigateAction
+  const path = typeof data.data?.path === 'string'
+    ? data.data.path
+    : typeof data.path === 'string' ? data.path : null
   if (path) router.push(path)
 })
 
@@ -135,8 +136,9 @@ onMounted(() => {
   fetchMe()
   fetchWippyAgent()
   themeMode.value = host.getThemeMode()
-  instance.on('@theme', (mode) => {
-    themeMode.value = mode
+  instance.on('@theme', (mode: unknown) => {
+    if (themeOptions.some(option => option.mode === mode))
+      themeMode.value = mode as ThemeMode
   })
 })
 </script>

@@ -1,0 +1,172 @@
+# Local matrix fixture. Load only in an isolated compatibility application.
+version: "1.0"
+namespace: app.attention_compat
+
+entries:
+  - name: generate
+    kind: function.lua
+    meta:
+      type: llm_function
+      comment: Deterministic ordinary conversation and streaming for the compatibility matrix
+    source: file://generate.lua
+    modules:
+      - time
+    imports:
+      output: wippy.llm:output
+    method: handler
+
+  - name: status
+    kind: function.lua
+    meta:
+      type: llm_function
+      comment: Local compatibility provider status
+    source: file://status.lua
+    modules: []
+    imports: {}
+    method: handler
+
+  - name: driver
+    kind: contract.binding
+    contracts:
+      - contract: wippy.llm:generator
+        methods:
+          generate: app.attention_compat:generate
+      - contract: wippy.llm:provider
+        methods:
+          status: app.attention_compat:status
+
+  - name: provider
+    kind: registry.entry
+    meta:
+      name: attention-compat
+      type: llm.provider
+      title: Compatibility fixture
+      comment: Local deterministic provider with no external model calls
+    driver:
+      id: app.attention_compat:driver
+      options: {}
+
+  - name: model_a
+    kind: registry.entry
+    meta:
+      name: attention-compat-a
+      type: llm.model
+      title: Compatibility Model A
+      capabilities:
+        - generate
+      class:
+        - attention-compat
+      priority: 100
+    max_tokens: 32768
+    output_tokens: 4096
+    providers:
+      - id: app.attention_compat:provider
+        provider_model: attention-compat-a
+
+  - name: model_b
+    kind: registry.entry
+    meta:
+      name: attention-compat-b
+      type: llm.model
+      title: Compatibility Model B
+      capabilities:
+        - generate
+      class:
+        - attention-compat
+      priority: 90
+    max_tokens: 32768
+    output_tokens: 4096
+    providers:
+      - id: app.attention_compat:provider
+        provider_model: attention-compat-b
+
+  - name: agent_a
+    kind: registry.entry
+    meta:
+      name: attention-compat-agent-a
+      type: agent.gen1
+      title: Compatibility Agent A
+      comment: Ordinary deterministic fixture agent with Model A as its default
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      COMPAT_AGENT=A
+      You are an ordinary deterministic compatibility fixture agent.
+    model: attention-compat-a
+    max_tokens: 4096
+    agent_options:
+      checkpoint:
+        model: attention-compat-a
+
+  - name: agent_b
+    kind: registry.entry
+    meta:
+      name: attention-compat-agent-b
+      type: agent.gen1
+      title: Compatibility Agent B
+      comment: Ordinary deterministic fixture agent with Model B as its default
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      COMPAT_AGENT=B
+      You are an ordinary deterministic compatibility fixture agent.
+    model: attention-compat-b
+    max_tokens: 4096
+    agent_options:
+      checkpoint:
+        model: attention-compat-b
+
+  - name: agent_steering
+    kind: registry.entry
+    meta:
+      name: attention-compat-agent-steering
+      type: agent.gen1
+      title: Compatibility Steering Agent
+      comment: Deterministic fixture for message input ordering
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      COMPAT_AGENT=A
+      You are an ordinary deterministic compatibility fixture agent.
+    model: attention-compat-a
+    max_tokens: 4096
+    agent_options:
+      checkpoint:
+        model: attention-compat-a
+      session_input:
+        while_running: steer
+
+  - name: title
+    kind: function.lua
+    meta:
+      comment: Deterministic title for isolated compatibility sessions
+    source: file://title.lua
+    modules: []
+    imports: {}
+    method: handler
+
+  - name: complete_upload
+    kind: function.lua
+    meta:
+      comment: Completes the ordinary text fixture through the existing Uploads pipeline
+    source: file://complete_upload.lua
+    modules: []
+    imports: {}
+    method: handler
+
+  - name: text_upload
+    kind: registry.entry
+    meta:
+      type: upload.type
+      title: Compatibility text file
+      comment: Plain text upload with deterministic completion and no model processing
+    mime_types:
+      - text/plain
+    extensions:
+      - txt
+    pipeline:
+      - title: Complete compatibility text upload
+        func: app.attention_compat:complete_upload
