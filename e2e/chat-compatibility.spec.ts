@@ -197,7 +197,7 @@ test(`${cell}: ordinary files, agent/model changes, Stop and persisted history`,
       && reply.topic === `session:${stopCommand!.session_id}`
       && Number.isInteger(reply.interaction?.revision)
       && reply.interaction!.revision! >= 0
-      && reply.interaction.can_send === false), {
+      && reply.interaction!.can_send === false), {
       message: 'existing correlated Stop update confirms acceptance',
     }).toBe(true)
   }

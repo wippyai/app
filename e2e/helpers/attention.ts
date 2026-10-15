@@ -254,6 +254,7 @@ export interface PersistedMessage {
   message_id: string
   metadata?: {
     context_attachments?: ContextAttachment[]
+    file_uuids?: string[]
     call_id?: string
     error_code?: string
     registry_id?: string
