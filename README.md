@@ -21,7 +21,7 @@ wippy run -c                # start the runtime
 
 `wippy run` reads configuration from OS environment variables, not from `.env` — export the file into your shell (the `set -a` line above) or the seeded admin credentials fall back to random values.
 
-- **App** — <http://localhost:8080> · default admin `admin@wippy.local` / `admin123`
+- **App** — <http://localhost:8080> · sign in as the admin set by `USERSPACE_USER_DEFAULT_ADMIN_EMAIL` and `USERSPACE_USER_DEFAULT_ADMIN_PASSWORD` in `.env` (the password has no default)
 - **Keeper** — <http://localhost:8080/c/keeper:main>
 
 ## What's inside
