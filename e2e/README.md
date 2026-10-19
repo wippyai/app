@@ -43,7 +43,10 @@ URL.
    `PUBLIC_API_URL`) in sync with the port. It does not edit your `.env`: it
    writes a per-run copy of `.env` with those keys and `APP_PORT` replaced under
    `.local/run-dev/`, points the runtime at it, and deletes it when the runtime
-   exits. A dry run (`RUN_DEV_DRY_RUN=1`) writes nothing. The launcher passes the
+   exits. A dry run (`RUN_DEV_DRY_RUN=1`) writes nothing. The launcher refuses
+   to start when `.env` has no `ENCRYPTION_KEY`, because a key the runtime
+   generated into the per-run copy would be lost; run `make run` once first so
+   the runtime writes the key to `.env`. The launcher passes the
    same four values to the runtime's process environment; for the Playwright run
    in another shell, set `WIPPY_URL` to the app origin yourself (the launcher
    prints it and writes it to the `RUN_DEV_MANIFEST` file when you set one):

@@ -161,8 +161,11 @@ async function main() {
   console.log(`[run-dev] app=${appOrigin} facade=${facadeUrl || '(none)'} manifest=${manifestPath || '(none)'}`)
   console.log(`[run-dev] session forms dev fixtures: ${fixturesOn ? `on (profile ${FIXTURES_PROFILE})` : 'off'}`)
   console.log(`[run-dev] env file for this run: ${runEnvPath} (port keys: ${portEnv.changed.join(', ')}; .env is not modified)`)
+  // The encryption-key bootloader stores a generated key through the env
+  // storage, which here is the per-run copy that is deleted on exit. Each run
+  // would get a new key and could no longer read data encrypted by the last one.
   if (readEnvKey(envPath, 'ENCRYPTION_KEY') === undefined)
-    console.warn('[run-dev] warning: no ENCRYPTION_KEY in .env or the environment; a key the runtime generates goes to the per-run env file and is lost when it exits')
+    throw new Error('no ENCRYPTION_KEY in .env or the environment. Run `make run` (or `make.bat run`) once so the runtime writes one to .env, or set ENCRYPTION_KEY yourself, then start this launcher again.')
 
   if (dryRun) {
     console.log('[run-dev] dry run: nothing written, runtime not started')
