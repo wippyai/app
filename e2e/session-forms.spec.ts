@@ -53,6 +53,13 @@ async function askForForm(page: Page) {
 }
 
 test.describe('Session Forms Fixture', () => {
+  // The fixture agents exist only with the `session-forms-fixtures` profile,
+  // which scripts/run-dev.mjs selects when SESSION_FORMS_DEV_FIXTURES=true.
+  test.skip(
+    process.env.SESSION_FORMS_DEV_FIXTURES !== 'true',
+    'requires the Session Forms dev fixtures: start the app with SESSION_FORMS_DEV_FIXTURES=true and run this suite with the same value',
+  )
+
   test('ask me -> pick an option -> answered, and it stays answered after reload', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
 

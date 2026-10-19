@@ -40,7 +40,13 @@ URL.
 
    Equivalent via the generic local launcher (`scripts/run-dev.mjs`), which
    also keeps the `.env`-derived URLs (`WIPPY_URL` / `APP_BASE_URL` /
-   `PUBLIC_API_URL`) in sync with the port:
+   `PUBLIC_API_URL`) in sync with the port. It does not edit your `.env`: it
+   writes a per-run copy of `.env` with those keys and `APP_PORT` replaced under
+   `.local/run-dev/`, points the runtime at it, and deletes it when the runtime
+   exits. A dry run (`RUN_DEV_DRY_RUN=1`) writes nothing. The launcher passes the
+   same four values to the runtime's process environment; for the Playwright run
+   in another shell, set `WIPPY_URL` to the app origin yourself (the launcher
+   prints it and writes it to the `RUN_DEV_MANIFEST` file when you set one):
    ```sh
    APP_PORT=8086 FACADE_URL=http://localhost:5173 make run-dev
    # Windows:
@@ -279,7 +285,9 @@ pnpm test:e2e:headed
   the first, the agent asks for a form, the test answers it, and the form stays
   answered after a reload. In the second, the test answers a form after the
   conversation has moved on, and the agent replies with the late-answer notice.
-  Both fail on a console error. Needs the Session Forms dev fixtures.
+  Both fail on a console error. Needs the Session Forms dev fixtures. The suite
+  skips itself unless `SESSION_FORMS_DEV_FIXTURES=true` is set in the
+  environment or `.env` of the test run.
 - `iframe-engine.spec.ts` checks the default iframe render engine. A page renders
   as a srcdoc iframe, the fragment gateway is never requested, and `$W` and
   state work. It is skipped when `WIPPY_ENGINE=fragment`.
