@@ -1,6 +1,6 @@
 {
   "name": "@example/counter-persist",
-  "version": "0.0.66",
+  "version": "0.0.67",
   "specification": "wippy-component-1.0",
   "title": "Counter Persist",
   "description": "A counter widget demonstrating Pinia state persistence across iframe reloads.",

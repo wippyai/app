@@ -1,6 +1,6 @@
 {
   "name": "@example/websocket-log",
-  "version": "0.0.66",
+  "version": "0.0.67",
   "specification": "wippy-component-1.0",
   "title": "WebSocket Log",
   "description": "A terminal-style log viewer demonstrating WebSocket subscriptions via on() from the proxy.",

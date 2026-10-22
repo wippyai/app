@@ -1,6 +1,6 @@
 {
   "name": "@example/markdown",
-  "version": "0.0.66",
+  "version": "0.0.67",
   "specification": "wippy-component-1.0",
   "title": "Markdown Viewer",
   "description": "A markdown renderer demonstrating children content support, markdown-it parsing, and sanitize-html sanitization.",

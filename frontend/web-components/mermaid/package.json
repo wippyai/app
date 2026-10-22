@@ -1,6 +1,6 @@
 {
   "name": "@example/mermaid",
-  "version": "0.0.66",
+  "version": "0.0.67",
   "specification": "wippy-component-1.0",
   "title": "Mermaid Diagram",
   "description": "A Mermaid diagram renderer demonstrating bundled 3rd-party lib, CSS variable theming, and children content support.",

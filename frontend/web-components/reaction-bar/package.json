@@ -1,6 +1,6 @@
 {
   "name": "@example/reaction-bar",
-  "version": "0.0.66",
+  "version": "0.0.67",
   "specification": "wippy-component-1.0",
   "title": "Reaction Bar",
   "description": "A row of emoji reaction buttons demonstrating event emission via useEvents().",

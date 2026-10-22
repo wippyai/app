@@ -1,6 +1,6 @@
 {
   "name": "@example/chart-circle",
-  "version": "0.0.66",
+  "version": "0.0.67",
   "specification": "wippy-component-1.0",
   "title": "Chart Circle",
   "description": "A doughnut chart demonstrating bundled third-party library (Chart.js) usage.",

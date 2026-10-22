@@ -1,6 +1,6 @@
 {
   "name": "@example/model-gallery",
-  "version": "0.0.66",
+  "version": "0.0.67",
   "specification": "wippy-component-1.0",
   "title": "Model Gallery",
   "description": "A card grid of AI models demonstrating proxy API fetch (api.get) with PrimeVue components (Button, Tag) in unstyled mode styled by Tailwind + PrimeUI.",
