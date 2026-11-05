@@ -205,18 +205,24 @@ entries:
       name: deepseek-v4.1-flash
       type: llm.model
       title: DeepSeek V4.1 Flash
-      comment: Fast agentic model for tool use and long-context tasks
+      comment: Fast agentic model for coding, tool use, and long-context tasks
       capabilities:
         - tool_use
+        - vision
         - generate
         - structured_output
         - coding
         - reasoning
       class:
+        - default
+        - balanced
+        - orchestrator
+        - coder
+        - coding
         - fast
-      priority: 80
+      priority: 110
     max_tokens: 1048576
-    output_tokens: 32768
+    output_tokens: 1048576
     pricing:
       input: 0.13
       output: 0.52

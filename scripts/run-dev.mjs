@@ -1,12 +1,17 @@
 /**
  * Generic local launcher for the app-template-raw demo. Picks a free port
- * (or honors APP_PORT), rewrites the four env-store keys derived from it
- * (the file-based env store wins over process env, so a CLI-only port
- * override alone leaves WIPPY_URL/APP_BASE_URL/PUBLIC_API_URL stale), then
- * spawns `wippy run` with matching CLI overrides. See e2e/README.md.
+ * (or honors APP_PORT) and spawns `wippy run` with matching CLI overrides.
+ *
+ * The file-based env store wins over process env, so a CLI-only port override
+ * alone leaves WIPPY_URL/APP_BASE_URL/PUBLIC_API_URL stale. The launcher never
+ * edits the project's .env for this. It writes a per-run copy of .env with the
+ * four port-derived keys replaced, under .local/run-dev/, and points the
+ * runtime's env file at that copy (`-o app.env:file:file_path=...`). The copy
+ * is removed when the runtime exits. A dry run (RUN_DEV_DRY_RUN=1) writes
+ * nothing. See e2e/README.md.
  */
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import path from 'node:path'
 import process from 'node:process'
@@ -48,18 +53,17 @@ function readEnvKey(filePath, key) {
   return process.env[key]
 }
 
-// Rewrites only the four port-derived keys in an existing .env, preserving
-// every other line, comment, ordering and the file's own EOL style. Returns
-// the names of the keys that changed, never their values.
-function rewriteEnvPort(filePath, port) {
-  if (!existsSync(filePath))
-    return []
-
-  const raw = readFileSync(filePath, 'utf8')
+// Builds the text of a per-run env file: the contents of an existing .env with
+// only the four port-derived keys replaced, preserving every other line,
+// comment, ordering and the file's own EOL style (missing keys are appended).
+// Pure: it reads the source file and writes nothing. Returns the text and the
+// names of the keys that changed, never their values.
+function buildPortEnv(filePath, port) {
+  const raw = existsSync(filePath) ? readFileSync(filePath, 'utf8') : ''
   const eol = raw.includes('\r\n') ? '\r\n' : '\n'
-  const hadTrailingNewline = raw.endsWith('\n')
-  const lines = raw.split(/\r\n|\n/)
-  if (hadTrailingNewline)
+  const hadTrailingNewline = raw === '' || raw.endsWith('\n')
+  const lines = raw === '' ? [] : raw.split(/\r\n|\n/)
+  if (raw !== '' && hadTrailingNewline)
     lines.pop()
 
   const origin = `http://localhost:${port}`
@@ -82,8 +86,7 @@ function rewriteEnvPort(filePath, port) {
     changed.push(key)
   }
 
-  writeFileSync(filePath, out.join(eol) + (hadTrailingNewline || appended ? eol : ''))
-  return changed
+  return { text: out.join(eol) + (hadTrailingNewline || appended ? eol : ''), changed }
 }
 
 async function main() {
@@ -111,7 +114,13 @@ async function main() {
   const fixturesOn = readEnvKey(envPath, FIXTURES_ENV_KEY) === 'true'
   const facadeUrl = process.env.FACADE_URL || ''
 
-  const overrides = [`app:gateway:addr=:${port}`]
+  const dryRun = process.env.RUN_DEV_DRY_RUN === '1'
+  const appOrigin = `http://localhost:${port}`
+  const portEnv = buildPortEnv(envPath, port)
+  // Per-run env file, so the project's .env is never rewritten.
+  const runEnvPath = path.join(cwd, '.local', 'run-dev', `env-${port}`).replaceAll(path.sep, '/')
+
+  const overrides = [`app:gateway:addr=:${port}`, `app.env:file:file_path=${runEnvPath}`]
   if (facadeUrl)
     overrides.push(`wippy.facade:fe_facade_url:default=${facadeUrl}`)
   if (feMode)
@@ -129,11 +138,6 @@ async function main() {
   for (const o of overrides)
     args.push('-o', o)
 
-  const changedKeys = rewriteEnvPort(envPath, port)
-  if (changedKeys.length)
-    console.log(`[run-dev] updated .env keys: ${changedKeys.join(', ')}`)
-
-  const appOrigin = `http://localhost:${port}`
   const manifest = {
     app_port: port,
     app_origin: appOrigin,
@@ -144,24 +148,47 @@ async function main() {
     configs,
     profiles: fixturesOn ? [FIXTURES_PROFILE] : [],
     overrides,
+    env_file: runEnvPath,
     started_at: new Date().toISOString(),
     pid: null,
   }
 
   const manifestPath = process.env.RUN_DEV_MANIFEST || ''
-  if (manifestPath)
+  if (manifestPath && !dryRun)
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
 
   console.log(`[run-dev] ${wippyBin} ${args.join(' ')}`)
   console.log(`[run-dev] app=${appOrigin} facade=${facadeUrl || '(none)'} manifest=${manifestPath || '(none)'}`)
   console.log(`[run-dev] session forms dev fixtures: ${fixturesOn ? `on (profile ${FIXTURES_PROFILE})` : 'off'}`)
+  console.log(`[run-dev] env file for this run: ${runEnvPath} (port keys: ${portEnv.changed.join(', ')}; .env is not modified)`)
+  // The encryption-key bootloader stores a generated key through the env
+  // storage, which here is the per-run copy that is deleted on exit. Each run
+  // would get a new key and could no longer read data encrypted by the last one.
+  if (readEnvKey(envPath, 'ENCRYPTION_KEY') === undefined)
+    throw new Error('no ENCRYPTION_KEY in .env or the environment. Run `make run` (or `make.bat run`) once so the runtime writes one to .env, or set ENCRYPTION_KEY yourself, then start this launcher again.')
 
-  if (process.env.RUN_DEV_DRY_RUN === '1')
+  if (dryRun) {
+    console.log('[run-dev] dry run: nothing written, runtime not started')
     return
+  }
 
-  const child = spawn(wippyBin, args, { stdio: 'inherit', cwd, env: process.env })
+  mkdirSync(path.dirname(runEnvPath), { recursive: true })
+  writeFileSync(runEnvPath, portEnv.text)
+  const removeRunEnv = () => rmSync(runEnvPath, { force: true })
+
+  // The port-derived keys also go to the child's process env, so tools started
+  // from the same shell (for example Playwright) agree with the runtime.
+  const childEnv = {
+    ...process.env,
+    APP_PORT: String(port),
+    WIPPY_URL: appOrigin,
+    APP_BASE_URL: appOrigin,
+    PUBLIC_API_URL: appOrigin,
+  }
+  const child = spawn(wippyBin, args, { stdio: 'inherit', cwd, env: childEnv })
 
   child.on('error', (err) => {
+    removeRunEnv()
     console.error(`[run-dev] failed to start "${wippyBin}": ${err.message}`)
     process.exit(1)
   })
@@ -175,6 +202,7 @@ async function main() {
     process.on(sig, () => child.kill(sig))
 
   child.on('exit', (code, signal) => {
+    removeRunEnv()
     process.exit(code ?? (signal ? 1 : 0))
   })
 }

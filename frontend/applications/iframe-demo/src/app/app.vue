@@ -13,6 +13,7 @@ const tabs = [
 ]
 
 const currentName = computed(() => route.name)
+const isAttentionTarget = computed(() => currentName.value === 'attention-target' || currentName.value === 'attention-leaf')
 
 const primaryColor = ref('')
 onMounted(() => {
@@ -23,7 +24,7 @@ onMounted(() => {
 
 <template>
   <div class="h-full flex flex-col">
-    <header class="flex items-center gap-3 px-4 py-2 border-b border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800">
+    <header v-if="!isAttentionTarget" class="flex items-center gap-3 px-4 py-2 border-b border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800">
       <div
         class="w-3 h-3 rounded-full shrink-0"
         :style="{ background: primaryColor }"
@@ -51,7 +52,10 @@ onMounted(() => {
       </nav>
     </header>
 
-    <main class="flex-1 overflow-y-auto p-3 bg-surface-0 dark:bg-surface-900">
+    <main
+      class="flex-1 bg-surface-0 dark:bg-surface-900"
+      :class="isAttentionTarget ? 'overflow-hidden' : 'overflow-y-auto p-3'"
+    >
       <RouterView />
     </main>
   </div>

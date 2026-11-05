@@ -13,11 +13,9 @@
  * dynamic chunks freely without breaking custom-element registration.
  */
 
-import type Mermaid from 'mermaid'
+import type { Mermaid } from 'mermaid'
 
-// Type-only import: erased at build time, so `mermaid` still loads only
-// through the dynamic import below.
-let mermaidPromise: Promise<typeof Mermaid> | null = null
+let mermaidPromise: Promise<Mermaid> | null = null
 
 function loadMermaid() {
   if (!mermaidPromise) {

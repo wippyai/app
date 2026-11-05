@@ -28,7 +28,12 @@ export default defineConfig({
    * (`pnpm test:e2e:managed`), not part of the default suite, which
    * assumes the default compat chrome.
    */
-  testIgnore: ['**/managed-layout.spec.ts'],
+  testIgnore: [
+    '**/managed-layout.spec.ts',
+    '**/attention-tracer.spec.ts',
+    '**/attention-agent.spec.ts',
+    '**/attention-restart-*.spec.ts',
+  ],
   fullyParallel: false, // Wippy session is stateful; serialize for now.
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

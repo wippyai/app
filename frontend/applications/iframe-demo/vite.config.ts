@@ -30,7 +30,7 @@ export default defineConfig({
         'axios',
       ],
       output: {
-        entryFileNames: '[name].js',
+        entryFileNames: 'assets/[name]-[hash].js',
         assetFileNames: '[name]-[hash][extname]',
       },
     },

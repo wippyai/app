@@ -1,0 +1,210 @@
+version: "1.0"
+namespace: app.attention_e2e
+
+entries:
+  - name: generate
+    kind: function.lua
+    meta:
+      type: llm_function
+      comment: Deterministic Attention Context E2E generator
+    source: file://generate.lua
+    modules:
+      - json
+    imports: {}
+    method: handler
+
+  - name: status
+    kind: function.lua
+    meta:
+      type: llm_function
+      comment: Deterministic Attention Context E2E provider status
+    source: file://status.lua
+    modules: []
+    imports: {}
+    method: handler
+
+  - name: driver
+    kind: contract.binding
+    meta:
+      name: Attention Context E2E driver
+      comment: Local deterministic provider used by production-shaped browser tests
+      tags:
+        - attention
+        - e2e
+    contracts:
+      - contract: wippy.llm:generator
+        methods:
+          generate: app.attention_e2e:generate
+      - contract: wippy.llm:provider
+        methods:
+          status: app.attention_e2e:status
+
+  - name: provider
+    kind: registry.entry
+    meta:
+      name: attention-e2e
+      type: llm.provider
+      title: Attention E2E
+      comment: Deterministic local provider for Attention Context acceptance tests
+      tags:
+        - attention
+        - e2e
+    driver:
+      id: app.attention_e2e:driver
+      options: {}
+
+  - name: model
+    kind: registry.entry
+    meta:
+      name: attention-e2e-deterministic
+      type: llm.model
+      title: Attention E2E Deterministic
+      comment: Deterministic model that validates real rendered Attention Context
+      capabilities:
+        - generate
+        - tool_use
+      class:
+        - attention-e2e
+      priority: 100
+    max_tokens: 32768
+    output_tokens: 4096
+    providers:
+      - id: app.attention_e2e:provider
+        provider_model: attention-e2e-deterministic
+
+  - name: agent
+    kind: registry.entry
+    meta:
+      name: attention-e2e-agent
+      type: agent.gen1
+      title: Attention E2E Agent
+      comment: Validates Attention Context and UI actions without an external model
+      icon: tabler:target-arrow
+      group: Test fixtures
+      class:
+        - public
+      pages:
+        attention-tracer: /home/attention-tracer
+    prompt: |
+      You are the deterministic Wippy Attention Context end-to-end fixture.
+      Validate the rendered context and return its exact safe data.
+    model: attention-e2e-deterministic
+    max_tokens: 4096
+    traits:
+      - id: app.agents:wippy_attention_trait
+      - id: wippy.agent.traits:attention
+
+  # Same deterministic model without the Attention trait. It proves that read
+  # authority comes from the trait, not from the Host or the model.
+  - name: agent_without_attention
+    kind: registry.entry
+    meta:
+      name: attention-e2e-agent-without-attention
+      type: agent.gen1
+      title: Attention E2E Agent Without Attention
+      comment: Deterministic fixture agent that has no Attention trait and therefore no read authority
+      icon: tabler:target-off
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic Wippy Attention fixture without the Attention trait.
+    model: attention-e2e-deterministic
+    max_tokens: 4096
+
+  - name: title
+    kind: function.lua
+    meta:
+      comment: Deterministic session title for Attention Context E2E runs
+    source: file://title.lua
+    modules: []
+    imports: {}
+    method: handler
+
+  - name: complete_visual_upload
+    kind: function.lua
+    meta:
+      comment: Completes image files prepared by the Attention visual action
+    source: file://complete_visual_upload.lua
+    modules: []
+    imports: {}
+    method: handler
+
+  - name: attention_visual_png
+    kind: registry.entry
+    meta:
+      type: upload.type
+      title: Attention visual PNG
+      comment: PNG files prepared for review by the Attention visual action
+      tags:
+        - attention
+        - image
+        - upload
+    mime_types:
+      - image/png
+    extensions:
+      - png
+    pipeline:
+      - title: Complete visual upload
+        func: app.attention_e2e:complete_visual_upload
+
+  - name: attention_visual_webp
+    kind: registry.entry
+    meta:
+      type: upload.type
+      title: Attention visual WebP
+      comment: WebP files prepared for review by the Attention visual action
+      tags:
+        - attention
+        - image
+        - upload
+    mime_types:
+      - image/webp
+    extensions:
+      - webp
+    pipeline:
+      - title: Complete visual upload
+        func: app.attention_e2e:complete_visual_upload
+
+  - name: generate_test
+    kind: function.lua
+    meta:
+      type: test
+      suite: attention-e2e-provider
+    source: file://generate_test.lua
+    modules:
+      - json
+    imports:
+      test: wippy.test:test
+      generator: app.attention_e2e:generate
+    method: run
+
+  - name: provider_test_runner_policy
+    kind: security.policy
+    meta:
+      comment: Allows the local provider test runner to call only its owning suite
+    policy:
+      resources:
+        - app.attention_e2e:generate_test
+      actions:
+        - funcs.call
+      effect: allow
+
+  - name: provider_test_runner
+    kind: process.lua
+    meta:
+      comment: Runs the deterministic Attention provider suite through wippy test
+      command:
+        name: attention-provider-test
+        short: Run Attention provider tests
+        use_case: test
+        security:
+          actor:
+            id: app.attention_e2e:provider_test_runner
+          policies:
+            - app.attention_e2e:provider_test_runner_policy
+    source: file://provider_test_runner.lua
+    method: main
+    modules:
+      - funcs
+      - io

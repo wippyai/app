@@ -21,7 +21,7 @@ wippy run -c                # start the runtime
 
 `wippy run` reads configuration from OS environment variables, not from `.env` — export the file into your shell (the `set -a` line above) or the seeded admin credentials fall back to random values.
 
-- **App** — <http://localhost:8080> · default admin `admin@wippy.local` / `admin123`
+- **App** — <http://localhost:8080> · sign in as the admin set by `USERSPACE_USER_DEFAULT_ADMIN_EMAIL` and `USERSPACE_USER_DEFAULT_ADMIN_PASSWORD` in `.env` (the password has no default)
 - **Keeper** — <http://localhost:8080/c/keeper:main>
 
 ## What's inside
@@ -63,6 +63,14 @@ What the Wippy runtime gives you, exercised by this template:
 - **HTTP, users & security** — HTTP endpoints, user CRUD, policy-based access control, and a token store.
 - **Batteries-included Lua modules** — `http_client`, `html` (sanitize), `llm`, `json`, `time`, `security`, and more, available to any `function.lua`.
 
+Upload queue jobs run without a request actor. `src/app/security/_index.yaml`
+gives the upload worker access to `app:db`, status notifications, and upload
+types and processing functions in the `app` and `app.*` namespaces. The template
+does not define a default upload pipeline. When adding one, declare any extra
+permissions its processors need, such as filesystem or cloud storage access.
+Upload token callbacks also need explicit permissions for the encryption key,
+callback scope, and callback function.
+
 ## Project structure
 
 Backend folders mirror Wippy namespaces — each `src/app/<name>/_index.yaml` declares namespace `app.<name>`:
@@ -97,11 +105,11 @@ wippy run -c                                   # server
 
 ## Session Forms demo
 
-The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks for delivery details or delivery preferences with a form. The agent uses the `wippy.session.forms:ask_user_fields` trait from the `wippy/session` module, whose `ask_user_fields` tool takes choice questions and the standard fields (text, textarea, number, email, date and checkbox). The `wippy.session.forms:ask_user` trait has the `ask_user` tool, which takes choice questions only. It runs on `gpt-6-luna` from the local Codex test provider (the `llm_codex` dependency, which reads the Codex CLI sign-in from `CODEX_HOME`).
+The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks for delivery details or delivery preferences with a form. The agent uses the `wippy.session.forms:ask_user_fields` trait from the `wippy/session` module, whose `ask_user_fields` tool takes choice questions and the standard fields (text, textarea, number, email, date and checkbox). The `wippy.session.forms:ask_user` trait has the `ask_user` tool, which takes choice questions only. The agent has one forms trait, because attaching both would offer the model two form tools. It uses the same model as Ask Wippy.
 
 ### Dev fixtures
 
-The page can also start three scripted fixture agents. They make no model calls, so the e2e tests can rely on fixed replies. They belong to the `app.session_forms_demo` namespace, together with a deterministic model and provider and a test-only endpoint that edits an artifact. `.wippy.yaml` removes the namespace unless the `session-forms-fixtures` profile is selected, so a release has none of it.
+The page can also start four scripted fixture agents. They make no model calls, so the e2e tests can rely on fixed replies. They belong to the `app.session_forms_demo` namespace, together with a deterministic model and provider and a test-only endpoint that edits an artifact. `.wippy.yaml` removes the namespace unless the `session-forms-fixtures` profile is selected, so a release has none of it.
 
 ```bash
 wippy run -c --profile session-forms-fixtures
@@ -127,6 +135,12 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 | `read form <id>` | Calls `read_form` for that form id. |
 | `list forms` | Reports whether the prompt holds a checkpoint summary, and the form index. |
 | `checkpoint now` | Reports enough prompt tokens for the Session to write a checkpoint. |
+| `slow tool` | Writes "Starting the slow job." and calls a tool that sleeps 25 seconds, then replies "Slow job finished." The text is stored while the tool still runs. |
+| `fail after text` | Writes "Starting the quick job." and calls a quick tool, then the next model call returns a provider error, so the turn fails after the text. |
+| `limit after text` | Writes "Starting the quick job again." and calls a quick tool. Use the Session Forms Limit Fixture agent, whose turn allows one model step: the next step hits the turn limit. On the other agents the reply after the tool is "Quick job finished." |
+| `artifact and ask` | In one model round, calls a tool that returns an inline artifact and calls `ask_user`. The round has no text. |
+
+The four job phrases (`slow tool`, `fail after text`, `limit after text`, `artifact and ask`) also work in a form answer. Type one as the Other text of a question and the next turn runs that phrase, the same way `work slowly` delays the reply. A late answer keeps its late-answer reply, and the answer to a form with standard fields gets the id=value reply above even if a field holds one of the phrases. The plain fixture agent has no job tools and replies "I can't run jobs here."
 
 ## Frontend & theming
 
@@ -135,8 +149,12 @@ All frontend, theming, and web-component guidance lives in [`frontend/docs/`](fr
 ## Testing
 
 ```bash
-wippy run test users
+wippy test users-test
 ```
+
+This command waits for the users database migrations and runs the users suite.
+It exits nonzero if any case fails or no cases run. The test entry is inactive
+during normal `wippy run` startup.
 
 ## Documentation
 

@@ -22,15 +22,6 @@ entries:
       - app.env:file
       - app.env:os
 
-  - name: codex_home
-    kind: env.variable
-    meta:
-      comment: Codex CLI home directory (holds auth.json) for the local Codex LLM provider
-      private: true
-    default: .codex
-    storage: app.env:store
-    variable: CODEX_HOME
-
   # Enables the Session Forms dev endpoint. Must be exactly "true" (see
   # session_forms_demo/_index.yaml).
   - name: session_forms_dev_fixtures
