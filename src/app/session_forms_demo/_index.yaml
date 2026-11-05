@@ -77,6 +77,92 @@ entries:
       - id: app.session_forms_demo:provider
         provider_model: session-forms-deterministic
 
+  # Fixture tools for the two-round phrases in generate.lua ("slow tool",
+  # "fail after text", "limit after text", "artifact and ask"). Only the
+  # fixture agents below use them.
+  - name: slow_job_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Slow Job
+      comment: Fixture tool that sleeps 25 seconds, so a test can stop or Stop the session while it runs
+      llm_alias: slow_job
+      llm_description: Runs a slow fixture job and returns when it is done.
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "job": { "type": "string", "description": "Name of the job." }
+          }
+        }
+    source: file://jobs.lua
+    modules:
+      - time
+    method: slow_job
+    pool:
+      size: 4
+
+  - name: quick_job_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Quick Job
+      comment: Fixture tool that returns at once
+      llm_alias: quick_job
+      llm_description: Runs a quick fixture job and returns when it is done.
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "job": { "type": "string", "description": "Name of the job." }
+          }
+        }
+    source: file://jobs.lua
+    modules:
+      - time
+    method: quick_job
+    pool:
+      size: 2
+
+  - name: note_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Make Note
+      comment: Fixture tool that returns an inline artifact
+      llm_alias: make_note
+      llm_description: Saves a short note as an inline artifact.
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "topic": { "type": "string", "description": "Topic of the note." }
+          }
+        }
+    source: file://jobs.lua
+    modules:
+      - time
+    method: make_note
+    pool:
+      size: 2
+
+  - name: fixture_jobs
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      title: Session Forms Fixture Jobs
+      comment: Offers the fixture tools to a fixture agent
+      tags:
+        - session-forms
+        - fixture
+    prompt: |
+      The fixture tools slow_job, quick_job and make_note are used only by
+      scripted phrases. The scripted model calls them; do not call them.
+    tools:
+      - app.session_forms_demo:slow_job_tool
+      - app.session_forms_demo:quick_job_tool
+      - app.session_forms_demo:note_tool
+
   # The checkpoint options apply to the agent that sets them, so other agents
   # keep the default checkpoint behavior. They set a 5000 token threshold and
   # use the fixture model for the summary.
@@ -99,6 +185,7 @@ entries:
     max_tokens: 4096
     traits:
       - id: wippy.session.forms:ask_user
+      - id: app.session_forms_demo:fixture_jobs
     agent_options:
       checkpoint:
         function_id: wippy.session.funcs:checkpoint
@@ -127,7 +214,38 @@ entries:
     traits:
       - id: wippy.session.forms:ask_user
       - id: wippy.session.traits:steering
+      - id: app.session_forms_demo:fixture_jobs
     agent_options:
+      checkpoint:
+        function_id: wippy.session.funcs:checkpoint
+        token_threshold: 5000
+        model: session-forms-deterministic
+
+  # fixture_agent with a turn limit of one model step, so "limit after text"
+  # writes its text and calls a tool, and the next step hits the limit.
+  - name: limit_fixture_agent
+    kind: registry.entry
+    meta:
+      name: session-forms-limit-fixture-agent
+      type: agent.gen1
+      title: Session Forms Limit Fixture
+      comment: Deterministic fixture agent whose turn allows one model step
+      icon: tabler:gauge
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic Session Forms fixture agent with a turn limit
+      of one step, used for demos and tests. Say "limit after text" to reach
+      the limit after a short preamble.
+    model: session-forms-deterministic
+    max_tokens: 4096
+    traits:
+      - id: wippy.session.forms:ask_user
+      - id: app.session_forms_demo:fixture_jobs
+    agent_options:
+      loop:
+        max_iterations: 1
       checkpoint:
         function_id: wippy.session.funcs:checkpoint
         token_threshold: 5000

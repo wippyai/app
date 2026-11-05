@@ -42,6 +42,11 @@ const AGENTS: DemoAgent[] = [
     registryId: 'app.session_forms_demo:plain_fixture_agent',
     description: 'Same deterministic fixture without the forms trait. Say "ask me" and it replies that it can\'t create forms here.',
   },
+  {
+    title: 'Session Forms Limit Fixture',
+    registryId: 'app.session_forms_demo:limit_fixture_agent',
+    description: 'Same deterministic fixture whose turn allows one model step. Say "limit after text" to write a preamble and hit the turn limit.',
+  },
 ]
 
 const api = useApi()
@@ -96,7 +101,7 @@ function openChat(agent: DemoAgent) {
       <p class="text-xs text-surface-500 mt-1">
         The agents here ask a delivery-preference question with a form. Forms
         demo talks to a real model. When the app runs with the Session Forms
-        dev fixtures on, three scripted fixture agents that never leave this
+        dev fixtures on, four scripted fixture agents that never leave this
         server are listed as well.
       </p>
     </header>

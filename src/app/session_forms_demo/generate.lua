@@ -14,14 +14,28 @@ local FIXTURE_PROVIDER = "app.session_forms_demo:provider"
 local ASK_USER_TOOL = "wippy.session.forms:ask_user_tool"
 local READ_FORM_TOOL = "wippy.session.forms:read_form_tool"
 local READ_FORM_TOOL_NAME = "read_form"
+-- The fixture tools in jobs.lua. Their names are the llm_alias values in _index.yaml.
+local SLOW_JOB_TOOL = "app.session_forms_demo:slow_job_tool"
+local QUICK_JOB_TOOL = "app.session_forms_demo:quick_job_tool"
+local NOTE_TOOL = "app.session_forms_demo:note_tool"
+local SLOW_JOB_TOOL_NAME = "slow_job"
+local QUICK_JOB_TOOL_NAME = "quick_job"
+local NOTE_TOOL_NAME = "make_note"
 -- Must match the element that wippy/session's forms/answer_text.lua writes,
 -- with the record in a single-quoted attribute.
 local ANSWERS_OPEN = "<wippy-form-answers record='"
 local ANSWERS_CLOSE = "</wippy-form-answers>"
 local READ_FORM_PREFIX = "read form"
 local NO_FORMS_HERE_TEXT = "I can't create forms here."
+local NO_JOBS_HERE_TEXT = "I can't run jobs here."
 local PROPOSE_ACTION_TEXT = "I plan to book a courier pickup. I will only do it after you confirm."
 local WORK_SLOWLY_TEXT = "Done working."
+local SLOW_JOB_START_TEXT = "Starting the slow job."
+local SLOW_JOB_DONE_TEXT = "Slow job finished."
+local FAIL_START_TEXT = "Starting the quick job."
+local LIMIT_START_TEXT = "Starting the quick job again."
+local QUICK_JOB_DONE_TEXT = "Quick job finished."
+local PROVIDER_FAILURE_TEXT = "Session Forms fixture: scripted provider failure after the quick job."
 local LATE_ANSWER_TEXT = "This answer arrived after the conversation moved on. Please confirm again before I act on it."
 local CHECKPOINT_SUMMARY_TEXT = "Summary: deterministic Session Forms fixture checkpoint. Recent activity "
     .. "has been condensed for this test session; consult the session's own form and message records for "
@@ -38,9 +52,18 @@ local CHECKPOINT_ELEVATED_PROMPT_TOKENS = 6000
 local SLOW_DELAY = "25s"
 
 -- Must match phrases in the system prompts in wippy/session's
--- funcs/checkpoint.lua (PROMPTS.initial and PROMPTS.update).
-local CHECKPOINT_INITIAL_MARKER = "Create comprehensive checkpoint using ALL available tokens"
+-- funcs/checkpoint.lua (PROMPTS.initial and PROMPTS.update). The token budget
+-- that follows "in at most" changes with the model window, so the initial
+-- marker stops before it.
+local CHECKPOINT_INITIAL_MARKER = "Create comprehensive checkpoint in at most"
 local CHECKPOINT_UPDATE_MARKER = "Merge previous checkpoint with new events"
+
+-- Two-round phrases. The first model round writes text and calls a fixture
+-- tool; the round after the tool result is scripted by the same phrase.
+local PHRASE_SLOW_TOOL = "slow tool"
+local PHRASE_FAIL_AFTER_TEXT = "fail after text"
+local PHRASE_LIMIT_AFTER_TEXT = "limit after text"
+local PHRASE_ARTIFACT_AND_ASK = "artifact and ask"
 
 -- "ask me": one required single-choice question.
 local ASK_USER_ARGUMENTS = {
@@ -227,13 +250,14 @@ local function next_call_id(messages)
     return string.format("session-forms-fixture-call-%d", count)
 end
 
-local function tool_call(messages, tools, registry_id, arguments)
+-- id_suffix tells apart two calls of one round, which share next_call_id.
+local function tool_call(messages, tools, registry_id, arguments, id_suffix)
     local tool = find_tool(tools, registry_id)
     if not tool then
         return nil, "SESSION_FORMS_FIXTURE_TOOL_MISSING: " .. registry_id
     end
     return {
-        id = next_call_id(messages),
+        id = next_call_id(messages) .. (id_suffix or ""),
         name = tool.name,
         registry_id = tool.registry_id,
         arguments = arguments,
@@ -262,6 +286,25 @@ local function is_read_form_result(message)
     end
     local name = message.name or message.tool_name or message.function_name
     return name == READ_FORM_TOOL_NAME
+end
+
+local function function_result_name(message)
+    if type(message) ~= "table" or message.role ~= "function_result" then
+        return nil
+    end
+    return message.name or message.tool_name or message.function_name
+end
+
+local JOB_PHRASES = { PHRASE_SLOW_TOOL, PHRASE_FAIL_AFTER_TEXT, PHRASE_LIMIT_AFTER_TEXT, PHRASE_ARTIFACT_AND_ASK }
+
+-- The two-round phrase that `lower` (lowercased text) holds, or nil.
+local function job_phrase(lower: string): string?
+    for _, phrase in ipairs(JOB_PHRASES) do
+        if string.find(lower, phrase, 1, true) then
+            return phrase
+        end
+    end
+    return nil
 end
 
 local function read_form_result_text(message)
@@ -401,12 +444,17 @@ local function handler(contract_args)
     -- Answer from a read_form result anywhere after the latest user message,
     -- not only the very last message: the Session may add rows after it.
     local user_index = latest_user_index(messages) or 0
+    local job_result_name = nil
     for index = #messages, user_index + 1, -1 do
         local message = messages[index]
         if is_read_form_result(message) then
             return finish("Form record: " .. read_form_result_text(message))
         end
-        if type(message) == "table" and message.role == "function_result" then
+        local name = function_result_name(message)
+        if name == SLOW_JOB_TOOL_NAME or name == QUICK_JOB_TOOL_NAME then
+            -- The newest job result decides the reply.
+            job_result_name = job_result_name or name
+        elseif type(message) == "table" and message.role == "function_result" then
             return finish("Unexpected tool result: " .. tostring(message.name))
         end
     end
@@ -434,6 +482,44 @@ local function handler(contract_args)
         return reply("", { call })
     end
 
+    -- Round one of a two-round phrase: text, then a call to a fixture tool.
+    local function job_round(text: string, registry_id: string, arguments: any): any
+        local call = tool_call(messages, contract_args.tools, registry_id, arguments)
+        if not call then
+            return reply(NO_JOBS_HERE_TEXT)
+        end
+        return reply(text, { call })
+    end
+
+    local function start_job(phrase: string): any
+        if phrase == PHRASE_SLOW_TOOL then
+            return job_round(SLOW_JOB_START_TEXT, SLOW_JOB_TOOL, { job = "slow" })
+        end
+        if phrase == PHRASE_FAIL_AFTER_TEXT then
+            return job_round(FAIL_START_TEXT, QUICK_JOB_TOOL, { job = "fail" })
+        end
+        if phrase == PHRASE_LIMIT_AFTER_TEXT then
+            return job_round(LIMIT_START_TEXT, QUICK_JOB_TOOL, { job = "limit" })
+        end
+        -- PHRASE_ARTIFACT_AND_ASK: an inline artifact and a form in one round.
+        local note = tool_call(messages, contract_args.tools, NOTE_TOOL, { topic = "fixture" }, "-note")
+        local ask = tool_call(messages, contract_args.tools, ASK_USER_TOOL, ASK_USER_ARGUMENTS, "-ask")
+        if not note or not ask then
+            return reply(NO_JOBS_HERE_TEXT)
+        end
+        return reply("", { note, ask })
+    end
+
+    -- The round after a job tool's result. The phrase is read from the answer
+    -- record when the turn was started by a form answer, as in the first round.
+    if job_result_name then
+        local trigger = record_json and string.lower(record_json) or lower
+        if job_result_name == QUICK_JOB_TOOL_NAME and job_phrase(trigger) == PHRASE_FAIL_AFTER_TEXT then
+            return nil, errors.new({ kind = errors.INVALID, retryable = false, message = PROVIDER_FAILURE_TEXT })
+        end
+        return reply(job_result_name == SLOW_JOB_TOOL_NAME and SLOW_JOB_DONE_TEXT or QUICK_JOB_DONE_TEXT)
+    end
+
     -- An answer that contains "work slowly" (for example as an Other text)
     -- gets the same delay as the typed phrase, so a test can stop the runtime
     -- after the answer is admitted and before the reply exists.
@@ -448,6 +534,12 @@ local function handler(contract_args)
         if parsed.late then
             return reply(LATE_ANSWER_TEXT)
         end
+        -- The other phrases script the model round the same way when typed or
+        -- sent as an Other text. A late answer keeps its late reply.
+        local answer_phrase = job_phrase(string.lower(record_json))
+        if answer_phrase then
+            return start_job(answer_phrase)
+        end
         if answers_key_count(parsed.answers) == 1 then
             local value, value_err = first_answer_value(parsed)
             if not value then
@@ -457,6 +549,11 @@ local function handler(contract_args)
         end
         local answers_json = extract_answers_json(parsed) or "{}"
         return reply("Thanks, noted: " .. answers_json)
+    end
+
+    local typed_phrase = job_phrase(lower)
+    if typed_phrase then
+        return start_job(typed_phrase)
     end
 
     if string.find(lower, "ask me many", 1, true) then

@@ -109,7 +109,7 @@ The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms
 
 ### Dev fixtures
 
-The page can also start three scripted fixture agents. They make no model calls, so the e2e tests can rely on fixed replies. They belong to the `app.session_forms_demo` namespace, together with a deterministic model and provider and a test-only endpoint that edits an artifact. `.wippy.yaml` removes the namespace unless the `session-forms-fixtures` profile is selected, so a release has none of it.
+The page can also start four scripted fixture agents. They make no model calls, so the e2e tests can rely on fixed replies. They belong to the `app.session_forms_demo` namespace, together with a deterministic model and provider and a test-only endpoint that edits an artifact. `.wippy.yaml` removes the namespace unless the `session-forms-fixtures` profile is selected, so a release has none of it.
 
 ```bash
 wippy run -c --profile session-forms-fixtures
@@ -130,6 +130,12 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 | `read form <id>` | Calls `read_form` for that form id. |
 | `list forms` | Reports whether the prompt holds a checkpoint summary, and the form index. |
 | `checkpoint now` | Reports enough prompt tokens for the Session to write a checkpoint. |
+| `slow tool` | Writes "Starting the slow job." and calls a tool that sleeps 25 seconds, then replies "Slow job finished." The text is stored while the tool still runs. |
+| `fail after text` | Writes "Starting the quick job." and calls a quick tool, then the next model call returns a provider error, so the turn fails after the text. |
+| `limit after text` | Writes "Starting the quick job again." and calls a quick tool. Use the Session Forms Limit Fixture agent, whose turn allows one model step: the next step hits the turn limit. On the other agents the reply after the tool is "Quick job finished." |
+| `artifact and ask` | In one model round, calls a tool that returns an inline artifact and calls `ask_user`. The round has no text. |
+
+The four job phrases (`slow tool`, `fail after text`, `limit after text`, `artifact and ask`) also work in a form answer. Type one as the Other text of a question and the next turn runs that phrase, the same way `work slowly` delays the reply. A late answer keeps its late-answer reply. The plain fixture agent has no job tools and replies "I can't run jobs here."
 
 ## Frontend & theming
 
