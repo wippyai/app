@@ -104,7 +104,7 @@ Wippy runtime:
 
 | Variable | Values | Matches in the runtime |
 |---|---|---|
-| `WIPPY_URL` | `http://127.0.0.1:8086` | The gateway address. Use `127.0.0.1`, because the WebSocket origin check rejects `localhost`. |
+| `WIPPY_URL` | `http://127.0.0.1:8086` | The gateway address. Spell it the way `PUBLIC_API_URL` does (`127.0.0.1` here). The WebSocket origin check accepts an Origin with the same host and port as the socket, and the `allow_origins` list in `src/app/_index.yaml`; it answers 403 when the page uses `localhost` and the socket uses `127.0.0.1`, and the other way round. |
 | `WIPPY_LAYOUT` | `compat` or `managed` | `wippy.facade:fe_mode` |
 | `WIPPY_ENGINE` | `iframe` or `fragment` | `wippy.facade:render_engine` |
 | `WIPPY_ATTENTION_MODE` | `enabled` (default) or `disabled` | `enabled` in `wippy.facade:attention` |
