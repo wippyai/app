@@ -1,10 +1,13 @@
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
+import { attentionSnapshotFromAttachment } from './helpers/attention-v2'
 import {
   attentionRuntimeCell,
+  findVisibleRole,
   installAttentionWireTap,
   openPersistedSession,
   sendChatMessage,
+  sessionAttentionContext,
   sessionMessages,
   waitForAgentText,
   waitForPersistedMessage,
@@ -42,11 +45,25 @@ test('recovers persisted Attention context after a real Wippy runtime restart', 
     message => message.message_id === state.messageId && message.type === 'user',
   )
   expect(persisted.metadata?.context_attachments).toEqual([state.attachment])
-  expect(JSON.parse(state.attachment.content)).toEqual(expect.objectContaining({
+  expect(attentionSnapshotFromAttachment(state.attachment)).toEqual(expect.objectContaining({
     schema: 'wippy.attention.v1',
     snapshot_id: state.snapshotId,
   }))
   await expect(await waitForAgentText(page, state.expectedAssistantFragment)).toContainText(state.expectedTargetId)
+
+  // The Session restores automatic context too. Disable it explicitly before
+  // sending a history-only follow-up without a fresh pointing observation.
+  const restoredContext = await sessionAttentionContext(page, state.sessionId)
+  expect(restoredContext.enabled).toBe(true)
+  const attachments = await findVisibleRole(page, 'button', /^Attachments/)
+  await expect(attachments).toHaveAttribute('aria-label', /pointing context selected/)
+  await attachments.click()
+  await (await findVisibleRole(page, 'menuitem', 'Stop automatically attaching pointing context')).click()
+  await expect(attachments).toHaveAttribute('aria-label', 'Attachments')
+  expect(await sessionAttentionContext(page, state.sessionId)).toEqual(expect.objectContaining({
+    enabled: false,
+    revision: restoredContext.revision + 1,
+  }))
 
   const followUp = await sendChatMessage(page, composer, 'Verify this session after the real runtime restart')
   expect(followUp.session_id).toBe(state.sessionId)
