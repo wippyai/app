@@ -27,8 +27,8 @@ modules:
       version: 0.1.3
       hash: f8851bd7aa73638712e9d545a95abcea29a62ba4329c56237e1658641844b048
     - name: wippy/agent
-      version: 0.5.5
-      hash: afd0e1315e2e0785661f266885054b96b4e2037763f92c50cc78540714415282
+      version: 0.5.11
+      hash: 09667b33edc815b7e9e904e57d64d50db96ebace931a11a2ea899223d7b36117
     - name: wippy/bootloader
       version: 0.3.14
       hash: aa5e32807eba6a5ea0e5a224069a006288f58605c4542a444f5469caee862c58
