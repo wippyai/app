@@ -823,10 +823,7 @@ test.describe('Session Forms V2 limits', () => {
     await submit.click()
     await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
     await expect(page.getByText(LIMITS_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
-    // The answer row stores both values in full. The agent's reply is not
-    // checked here: the Session cuts the middle out of a model-visible answer
-    // record of more than 6000 bytes (prompt_builder.lua's
-    // checkpoint_request_excerpt), so the fixture cannot decode this record.
+    expect(await storedAcknowledgement(page)).toBe(`Thanks, noted: quantity=1; summary=${'s'.repeat(TEXT_CAP)}; details=${'d'.repeat(TEXTAREA_CAP)}`)
     const answers = await storedAnswers(page)
     expect(answers.quantity.answer).toBe(1)
     expect(answers.summary.answer).toBe('s'.repeat(TEXT_CAP))
