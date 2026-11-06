@@ -284,11 +284,17 @@ pnpm test:e2e:headed
   `request('echo')`. It checks each one in the parent event log and in
   `window.__bridgeLog`. The other two tests check that `<w-iframe>` and
   `<w-artifact>` are registered as custom elements.
-- `session-forms.spec.ts` has two tests against the scripted fixture agent. In
+- `session-forms.spec.ts` has six tests against the scripted fixture agents. In
   the first, the agent asks for a form, the test answers it, and the form stays
   answered after a reload. In the second, the test answers a form after the
   conversation has moved on, and the agent replies with the late-answer notice.
-  Both fail on a console error. Needs the Session Forms dev fixtures. The suite
+  The third presses Enter on the required several-answer form (`ask me several`)
+  with nothing ticked and expects the tick-one message. The last four run the
+  job phrases: `fail after text` and `limit after text` (Limit Fixture agent) as
+  the Other text of a form, where the text and tool call stay, the error follows
+  and the card reads interrupted, and `artifact and ask`, where the note shows
+  once before and after the answer. The 25 second `slow tool` phrase has no
+  test. All fail on a console error. Needs the Session Forms dev fixtures. The suite
   skips itself unless `SESSION_FORMS_DEV_FIXTURES=true` is set in the
   environment or `.env` of the test run.
 - `iframe-engine.spec.ts` checks the default iframe render engine. A page renders
