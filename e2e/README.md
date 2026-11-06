@@ -302,7 +302,7 @@ pnpm test:e2e:headed
   a reload. One test uses the steering fixture agent, which has only
   `ask_user`, and checks that the server refuses a form with standard fields on
   `ask_user` with `unsupported_type` and that the agent gets the refusal. Most
-  tests fail on a console error. The suite skips itself unless
+  tests fail on a console error. Every test in the file is skipped unless
   `SESSION_FORMS_DEV_FIXTURES=true` is set in the environment or `.env` of the
   test run.
 - `iframe-engine.spec.ts` checks the default iframe render engine. A page renders
