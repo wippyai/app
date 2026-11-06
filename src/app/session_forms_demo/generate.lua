@@ -25,7 +25,6 @@ local QUICK_JOB_TOOL = "app.session_forms_demo:quick_job_tool"
 local NOTE_TOOL = "app.session_forms_demo:note_tool"
 local SLOW_JOB_TOOL_NAME = "slow_job"
 local QUICK_JOB_TOOL_NAME = "quick_job"
-local NOTE_TOOL_NAME = "make_note"
 -- Must match the element that wippy/session's forms/answer_text.lua writes,
 -- with the record in a single-quoted attribute.
 local ANSWERS_OPEN = "<wippy-form-answers record='"
@@ -712,11 +711,12 @@ local function handler(contract_args)
             return reply(LATE_ANSWER_TEXT)
         end
         -- A version 2 form echoes its saved values, so text typed into a field
-        -- is never read as a phrase.
+        -- never starts a job phrase. "work slowly" is the exception: the scan
+        -- above reads the whole record, so it delays the reply here as well.
         if parsed.version >= 2 then
             return reply(fields_reply(parsed))
         end
-        -- The other phrases script the model round the same way when typed or
+        -- The job phrases script the model round the same way when typed or
         -- sent as an Other text. A late answer keeps its late reply.
         local answer_phrase = job_phrase(string.lower(record_json))
         if answer_phrase then
