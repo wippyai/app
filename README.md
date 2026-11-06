@@ -130,6 +130,7 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 | `ask me several` | Asks one required several-answer question with an Other box through `ask_user`, so Enter with nothing ticked shows the tick-one message. |
 | `ask me delivery` | Asks a delivery-details form with text, email, date, number, textarea and checkbox fields through `ask_user_fields`. |
 | `ask me preferences` | Asks a form with one choice question, three checkboxes and a short text note through `ask_user_fields`. |
+| `ask me limits` | Asks a form with a number that has a step of 0.25 and bounds, a text capped at 2000 characters, a textarea capped at 8000 characters, and an optional email and date, through `ask_user_fields`. |
 | `ask me delivery via ask_user` | Sends the delivery-details form to `ask_user`. The server refuses it with `unsupported_type`, and the reply quotes the refusal. |
 | `propose action` | Replies with a plan that waits for confirmation. |
 | `work slowly` | Replies after 25 seconds. |

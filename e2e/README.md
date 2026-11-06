@@ -299,7 +299,13 @@ pnpm test:e2e:headed
   `ask me preferences` forms, which the fixture asks through `ask_user_fields`.
   They check browser-side checks, the server's `pattern_mismatch` refusal,
   typed and picked dates, unticked checkboxes, and the exact saved values after
-  a reload. One test uses the steering fixture agent, which has only
+  a reload. Four more tests use the `ask me limits` form: a floating `step`
+  (0.5 accepted, 0.3 refused), the text cap of 2000 and the textarea cap of 8000
+  (one more character refused, the cap accepted and stored in full), an optional
+  email and date left blank and stored as unanswered, and a send held for 3
+  seconds (the Submit button reads "Sending…" with a spinner, keeps focus and is
+  not `disabled`, and the status region says "Sending your answers."). They read
+  the stored values through the messages API. One test uses the steering fixture agent, which has only
   `ask_user`, and checks that the server refuses a form with standard fields on
   `ask_user` with `unsupported_type` and that the agent gets the refusal. Most
   tests fail on a console error. Every test in the file is skipped unless

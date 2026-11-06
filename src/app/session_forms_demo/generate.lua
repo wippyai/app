@@ -265,6 +265,50 @@ local ASK_USER_PREFERENCES_ARGUMENTS = {
     },
 }
 
+-- Version 2 fixture form for "ask me limits": the rules the other forms do not
+-- reach. A floating `step` with bounds, the longest text cap (2000) and the
+-- longest textarea cap (8000), and an optional email and an optional date
+-- that a test can leave blank. The number is required and has no `default`,
+-- so a test fills it; the optional fields are left out of the answer when
+-- blank (see fields_reply).
+local ASK_USER_LIMITS_ARGUMENTS = {
+    title = "Limits",
+    answered_message = "Sent my limits.",
+    fields = {
+        {
+            id = "quantity",
+            type = "number",
+            label = "Quantity",
+            required = true,
+            min = 0,
+            max = 10,
+            step = 0.25,
+        },
+        {
+            id = "summary",
+            type = "text",
+            label = "Summary",
+            max_length = 2000,
+        },
+        {
+            id = "details",
+            type = "textarea",
+            label = "Details",
+            max_length = 8000,
+        },
+        {
+            id = "backup_email",
+            type = "email",
+            label = "Backup email",
+        },
+        {
+            id = "reminder_date",
+            type = "date",
+            label = "Reminder date",
+        },
+    },
+}
+
 local function content_texts(content)
     if type(content) == "string" then
         return { content }
@@ -753,6 +797,10 @@ local function handler(contract_args)
 
     if string.find(lower, "ask me preferences", 1, true) then
         return ask_form(ASK_USER_FIELDS_TOOL, ASK_USER_PREFERENCES_ARGUMENTS, NO_FIELD_FORMS_TEXT)
+    end
+
+    if string.find(lower, "ask me limits", 1, true) then
+        return ask_form(ASK_USER_FIELDS_TOOL, ASK_USER_LIMITS_ARGUMENTS, NO_FIELD_FORMS_TEXT)
     end
 
     if string.find(lower, "ask me many", 1, true) then

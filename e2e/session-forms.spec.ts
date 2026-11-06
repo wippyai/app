@@ -684,6 +684,244 @@ test.describe('Session Forms V2 standard fields', () => {
   })
 })
 
+/*
+ * Limits: the fixture's "ask me limits" form (generate.lua's
+ * ASK_USER_LIMITS_ARGUMENTS) reaches the rules the delivery form does not: a
+ * floating `step` (0.25) with bounds, the text cap of 2000, the textarea cap of
+ * 8000, and an optional email and date that can stay blank. The saved values
+ * are read from the messages API (GET /api/v1/sessions/messages), where the
+ * fixture's acknowledgement reply holds every answered field as `<id>=<value>`.
+ */
+const LIMITS_ANSWERED_MESSAGE = 'Sent my limits.'
+const TEXT_CAP = 2000
+const TEXTAREA_CAP = 8000
+
+/** The stored messages of the chat the page shows, read through the messages API. */
+async function storedMessages(page: Page): Promise<Array<{ type: string, data: string }>> {
+  const sessionId = new URL(page.url()).pathname.match(/\/chat\/([^/?#]+)/)?.[1]
+  expect(sessionId, `chat id in ${page.url()}`).toBeTruthy()
+  const token = await page.evaluate(() => {
+    try {
+      return JSON.parse(localStorage.getItem('@wippy_token_info') ?? 'null')?.token as string | undefined
+    }
+    catch {
+      return undefined
+    }
+  })
+  expect(token, 'signed-in token in localStorage').toBeTruthy()
+  const response = await page.request.get('/api/v1/sessions/messages', {
+    headers: { Authorization: `Bearer ${token}` },
+    params: { cursor: '', limit: 100, session_id: sessionId! },
+  })
+  expect(response.status()).toBe(200)
+  const body = await response.json() as { messages?: Array<{ type: string, data: string }> }
+  return body.messages ?? []
+}
+
+/** Waits until the stored replies hold exactly one acknowledgement and returns it. */
+async function storedAcknowledgement(page: Page): Promise<string> {
+  let acknowledgements: string[] = []
+  await expect.poll(async () => {
+    acknowledgements = (await storedMessages(page))
+      .filter(message => message.type === 'assistant' && message.data.startsWith('Thanks, noted:'))
+      .map(message => message.data)
+    return acknowledgements.length
+  }, { timeout: 15_000, message: 'one stored acknowledgement' }).toBe(1)
+  return acknowledgements[0]
+}
+
+/**
+ * The answer record the server stored for the form's answer row (the user
+ * message that starts with the form's answered sentence), as parsed JSON:
+ * each answer under `answers.<field id>.answer`, `null` when left unanswered.
+ */
+async function storedAnswers(page: Page): Promise<Record<string, { question: string, answer: unknown }>> {
+  let row: { type: string, data: string } | undefined
+  await expect.poll(async () => {
+    row = (await storedMessages(page)).find(message => message.type === 'user' && message.data.startsWith(LIMITS_ANSWERED_MESSAGE))
+    return Boolean(row)
+  }, { timeout: 15_000, message: 'the stored form answer row' }).toBe(true)
+  const record = row!.data.match(/<wippy-form-answers record='([\s\S]*)'>\s*<\/wippy-form-answers>\s*$/)?.[1]
+  expect(record, 'answer record in the stored answer row').toBeTruthy()
+  return (JSON.parse(record!) as { answers: Record<string, { question: string, answer: unknown }> }).answers
+}
+
+test.describe('Session Forms V2 limits', () => {
+  test('ask me limits -> a step of 0.25 refuses 0.3 with its error and accepts 0.5, and the stored value is 0.5', async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page)
+
+    await openFixtureChat(page)
+    consoleErrors.length = 0
+
+    const formCard = await askForForm(page, 'ask me limits')
+    await expect(formCard.getByRole('heading', { name: 'Limits' })).toBeVisible()
+
+    const quantity = formCard.getByLabel('Quantity')
+    const submit = formCard.getByRole('button', { name: /^submit$/i })
+    const status = formCard.getByRole('status')
+
+    // 0.3 is inside the bounds but is not a multiple of 0.25.
+    await quantity.fill('0.3')
+    await submit.click()
+    await expect(quantity).toHaveAttribute('aria-invalid', 'true')
+    await expect(quantity).toHaveAccessibleDescription(/\S/)
+    await expect(quantity).toBeFocused()
+    await expect(quantity).toHaveValue('0.3')
+    await expect(status).toHaveText('1 question needs attention.')
+    await expect(formCard).toHaveAttribute('card-state', 'active')
+    await expect(page.getByText(LIMITS_ANSWERED_MESSAGE, { exact: true })).toHaveCount(0)
+
+    // 0.5 is a multiple of 0.25: the error goes and the answer is saved.
+    await quantity.fill('0.5')
+    await expect(quantity).not.toHaveAttribute('aria-invalid', 'true')
+    await submit.click()
+    await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
+    await expect(page.getByText(LIMITS_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
+    expect(await storedAcknowledgement(page)).toBe('Thanks, noted: quantity=0.5')
+    expect((await storedAnswers(page)).quantity.answer).toBe(0.5)
+
+    expect(consoleErrors.filter(message => !/status of 422/.test(message)), `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+
+  test('ask me limits -> 2001 text and 8001 textarea characters are refused, 2000 and 8000 are accepted and stored in full', async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page)
+
+    await openFixtureChat(page)
+    consoleErrors.length = 0
+
+    const formCard = await askForForm(page, 'ask me limits')
+
+    const quantity = formCard.getByLabel('Quantity')
+    const summary = formCard.getByLabel('Summary')
+    const details = formCard.getByLabel('Details')
+    const submit = formCard.getByRole('button', { name: /^submit$/i })
+    const status = formCard.getByRole('status')
+
+    // `fill` sets the whole text in one input event, not one key at a time.
+    await quantity.fill('1')
+    await summary.fill('s'.repeat(TEXT_CAP + 1))
+    await details.fill('d'.repeat(TEXTAREA_CAP + 1))
+    await submit.click()
+    await expect(summary).toHaveAttribute('aria-invalid', 'true')
+    await expect(summary).toHaveAccessibleDescription(/\S/)
+    await expect(details).toHaveAttribute('aria-invalid', 'true')
+    await expect(details).toHaveAccessibleDescription(/\S/)
+    await expect(status).toHaveText('2 questions need attention.')
+    await expect(summary).toHaveValue('s'.repeat(TEXT_CAP + 1))
+    await expect(details).toHaveValue('d'.repeat(TEXTAREA_CAP + 1))
+    await expect(formCard).toHaveAttribute('card-state', 'active')
+    await expect(page.getByText(LIMITS_ANSWERED_MESSAGE, { exact: true })).toHaveCount(0)
+
+    // Each error goes as soon as its own box is back at the cap.
+    await summary.fill('s'.repeat(TEXT_CAP))
+    await expect(summary).not.toHaveAttribute('aria-invalid', 'true')
+    await expect(details).toHaveAttribute('aria-invalid', 'true')
+    await details.fill('d'.repeat(TEXTAREA_CAP))
+    await expect(details).not.toHaveAttribute('aria-invalid', 'true')
+    await expect(status).toHaveText('')
+
+    await submit.click()
+    await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
+    await expect(page.getByText(LIMITS_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
+    // The answer row stores both values in full. The agent's reply is not
+    // checked here: the Session cuts the middle out of a model-visible answer
+    // record of more than 6000 bytes (prompt_builder.lua's
+    // checkpoint_request_excerpt), so the fixture cannot decode this record.
+    const answers = await storedAnswers(page)
+    expect(answers.quantity.answer).toBe(1)
+    expect(answers.summary.answer).toBe('s'.repeat(TEXT_CAP))
+    expect(answers.details.answer).toBe('d'.repeat(TEXTAREA_CAP))
+    expect(answers.backup_email.answer).toBeNull()
+    expect(answers.reminder_date.answer).toBeNull()
+
+    expect(consoleErrors.filter(message => !/status of 422/.test(message)), `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+
+  test('ask me limits -> an optional email and date left blank submit, and both are stored as unanswered', async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page)
+    const answerSubmissions = watchAnswerSubmissions(page)
+
+    await openFixtureChat(page)
+    consoleErrors.length = 0
+
+    const formCard = await askForForm(page, 'ask me limits')
+
+    // Only the required number is filled. Email and date are blank on purpose.
+    await expect(formCard.getByLabel('Backup email')).toHaveValue('')
+    await expect(formCard.getByLabel('Reminder date')).toHaveValue('')
+    await formCard.getByLabel('Quantity').fill('2.75')
+    await formCard.getByRole('button', { name: /^submit$/i }).click()
+
+    await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
+    await expect.poll(() => answerSubmissions.length).toBe(1)
+    await expect(page.getByText(LIMITS_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
+
+    // Stored: the number only. A blank optional field has no entry at all.
+    const acknowledgement = await storedAcknowledgement(page)
+    expect(acknowledgement).toBe('Thanks, noted: quantity=2.75')
+    expect(acknowledgement).not.toMatch(/backup_email|reminder_date/)
+    const answers = await storedAnswers(page)
+    expect(answers.quantity.answer).toBe(2.75)
+    for (const id of ['summary', 'details', 'backup_email', 'reminder_date'])
+      expect(answers[id].answer, `${id} is stored as unanswered`).toBeNull()
+
+    const readOnly = readOnlyValues([
+      ['Quantity', '2.75'],
+      ['Summary', 'Skipped'],
+      ['Details', 'Skipped'],
+      ['Backup email', 'Skipped'],
+      ['Reminder date', 'Skipped'],
+    ])
+    await page.reload()
+    await expect(page.locator('wippy-form')).toHaveAttribute('card-state', 'answered', { timeout: 15_000 })
+    await expect(page.locator('wippy-form')).toHaveText(readOnly)
+    expect(answerSubmissions).toHaveLength(1)
+
+    expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+
+  test('ask me limits -> a slow send reads Sending…, spins, keeps focus on an enabled button, says so after 2 seconds, and then the form is answered', async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page)
+
+    await openFixtureChat(page)
+    consoleErrors.length = 0
+
+    // The state POST is held for 3 seconds before it goes on to the server.
+    await page.route(SUBMIT_ANSWER_URL, async (route) => {
+      if (route.request().method() === 'POST')
+        await new Promise(resolve => setTimeout(resolve, 3000))
+      await route.continue()
+    })
+
+    const formCard = await askForForm(page, 'ask me limits')
+    const status = formCard.getByRole('status')
+
+    await formCard.getByLabel('Quantity').fill('1')
+    const submit = formCard.getByRole('button', { name: /^submit$/i })
+    await submit.click()
+
+    // The same button, now labelled "Sending…", with its spinner. It keeps
+    // focus and is not `disabled`, so a screen reader user does not lose their place.
+    const sending = formCard.getByRole('button', { name: 'Sending…' })
+    await expect(sending).toBeVisible()
+    await expect(sending.locator('.animate-spin')).toBeVisible()
+    await expect(sending).toBeFocused()
+    await expect(sending).not.toHaveAttribute('disabled')
+    await expect(status).toHaveText('')
+
+    // The status region speaks only once the send has run for 2 seconds.
+    await expect(status).toHaveText('Sending your answers.', { timeout: 2_900 })
+    await expect(sending).toBeFocused()
+    await expect(sending).not.toHaveAttribute('disabled')
+
+    await expect(formCard).toHaveAttribute('card-state', 'answered', { timeout: 10_000 })
+    await expect(page.getByText(LIMITS_ANSWERED_MESSAGE, { exact: true })).toHaveCount(1)
+    expect(await storedAcknowledgement(page)).toBe('Thanks, noted: quantity=1')
+
+    expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
+  })
+})
+
 // These replies must match generate.lua. The fixture quotes a tool result
 // other than read_form on one line, so its reply shows what the agent was told.
 const REFUSED_BY_ASK_USER_REPLY = /^Tool result from ask_user: .*unsupported_type/
