@@ -127,6 +127,7 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 |---|---|
 | `ask me` | Asks a single-question delivery form through `ask_user`. |
 | `ask me many` | Asks a four-question order form through `ask_user`. |
+| `ask me several` | Asks one required several-answer question with an Other box through `ask_user`, so Enter with nothing ticked shows the tick-one message. |
 | `ask me delivery` | Asks a delivery-details form with text, email, date, number, textarea and checkbox fields through `ask_user_fields`. |
 | `ask me preferences` | Asks a form with one choice question, three checkboxes and a short text note through `ask_user_fields`. |
 | `ask me delivery via ask_user` | Sends the delivery-details form to `ask_user`. The server refuses it with `unsupported_type`, and the reply quotes the refusal. |

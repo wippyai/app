@@ -284,11 +284,18 @@ pnpm test:e2e:headed
   `request('echo')`. It checks each one in the parent event log and in
   `window.__bridgeLog`. The other two tests check that `<w-iframe>` and
   `<w-artifact>` are registered as custom elements.
-- `session-forms.spec.ts` runs against the scripted fixture agent and needs the
-  Session Forms dev fixtures. Two tests cover choice forms: the agent asks for
-  a form, the test answers it, and the form stays answered after a reload; and
-  a form answered after the conversation has moved on gets the late-answer
-  notice. Six tests cover the standard fields on the `ask me delivery` and
+- `session-forms.spec.ts` runs against the scripted fixture agents and needs the
+  Session Forms dev fixtures. Six tests cover choice forms and job phrases. In
+  the first, the agent asks for a form, the test answers it, and the form stays
+  answered after a reload. In the second, the test answers a form after the
+  conversation has moved on, and the agent replies with the late-answer notice.
+  The third presses Enter on the required several-answer form (`ask me several`)
+  with nothing ticked and expects the tick-one message. The last three run the
+  job phrases: `fail after text` and `limit after text` (Limit Fixture agent) as
+  the Other text of a form, where the text and tool call stay, the error follows
+  and the card reads interrupted, and `artifact and ask`, where the note shows
+  once before and after the answer. The 25 second `slow tool` phrase has no
+  test. Six more tests cover the standard fields on the `ask me delivery` and
   `ask me preferences` forms, which the fixture asks through `ask_user_fields`.
   They check browser-side checks, the server's `pattern_mismatch` refusal,
   typed and picked dates, unticked checkboxes, and the exact saved values after
