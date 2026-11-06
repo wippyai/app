@@ -595,9 +595,10 @@ test.describe('Session Forms V2 standard fields', () => {
     await expect(calendar).toBeHidden()
     await expect(deliveryDate).toHaveValue(keyboardPick)
 
-    // The calendar's own colours follow the form's forced theme (it opens in the
-    // theme plugin's overlay layer, outside the themed container, so it needs
-    // the container's class to read in the Dark theme).
+    // The calendar's own colours follow the form's forced theme. It opens in the
+    // theme plugin's overlay layer, outside the themed container, and that layer
+    // takes the theme class of the control that opened it.
+    const overlayLayer = calendar.locator('xpath=ancestor::*[@data-wippy-overlay-layer]')
     for (const mode of ['dark', 'light'] as const) {
       await formCard.evaluate((host, m) => {
         const root = host.shadowRoot!.querySelector('[data-wippy-theme-root]') as HTMLElement
@@ -608,7 +609,7 @@ test.describe('Session Forms V2 standard fields', () => {
       }, mode)
       await calendarButton.click()
       await expect(calendar).toBeVisible()
-      await expect(calendar).toHaveClass(new RegExp(`w-theme-${mode}`))
+      await expect(overlayLayer).toHaveClass(new RegExp(`w-theme-${mode}`))
       const luminance = await calendar.evaluate((el) => {
         // Chromium reports a colour as rgb (0 to 255) or as color(srgb) (0 to 1).
         const background = getComputedStyle(el).backgroundColor
