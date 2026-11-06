@@ -57,7 +57,7 @@ entries:
          - full name: type text, required, max_length 100
          - email address: type email, required
          - phone number: type text, optional, pattern [+]?[0-9 ]{6,20}
-         - delivery date: type date, required, min 2026-01-01, max 2027-12-31
+         - delivery date: type date, required, min 2026-01-01, no max
          - number of parcels: type number, required, integer true, min 1,
            max 20, default 1
          - delivery notes: type textarea, optional, max_length 1000
@@ -72,9 +72,9 @@ entries:
            parcel at the door
          - an optional short note: type text, max_length 200
 
-      You do not know today's date. For a date field always use the fixed
-      bounds given above, never a relative date such as "today" or "next
-      week". Never put a default on a checkbox.
+      You do not know today's date. For a date field use only the fixed
+      minimum given above and set no max, and never use a relative date such
+      as "today" or "next week". Never put a default on a checkbox.
 
       Once they answer, confirm what they told you back to them in one
       sentence.
