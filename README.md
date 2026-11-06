@@ -125,6 +125,7 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 |---|---|
 | `ask me` | Asks a single-question delivery form. |
 | `ask me many` | Asks a four-question order form. |
+| `ask me several` | Asks one required several-answer question with an Other box, so Enter with nothing ticked shows the tick-one message. |
 | `propose action` | Replies with a plan that waits for confirmation. |
 | `work slowly` | Replies after 25 seconds. |
 | `read form <id>` | Calls `read_form` for that form id. |

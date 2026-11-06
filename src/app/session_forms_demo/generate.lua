@@ -80,6 +80,24 @@ local ASK_USER_ARGUMENTS = {
     },
 }
 
+-- "ask me several": one required several-answer question with an Other box.
+-- A test can send it with nothing ticked, or type a job phrase as the Other text.
+local ASK_USER_SEVERAL_ARGUMENTS = {
+    title = "Delivery extras",
+    answered_message = "Answered a question about delivery extras.",
+    fields = {
+        {
+            id = "extras",
+            type = "choice",
+            label = "Which extras do you want?",
+            required = true,
+            multiple = true,
+            allow_other = true,
+            options = { "Gift wrap", "Insurance", "Express handling" },
+        },
+    },
+}
+
 -- "ask me many": object options, multiple, allow_other, Unicode labels, and a
 -- required question with allow_other.
 local ASK_USER_MANY_ARGUMENTS = {
@@ -558,6 +576,11 @@ local function handler(contract_args)
 
     if string.find(lower, "ask me many", 1, true) then
         return ask_form(ASK_USER_MANY_ARGUMENTS)
+    end
+
+    -- Before "ask me", which this phrase also contains.
+    if string.find(lower, "ask me several", 1, true) then
+        return ask_form(ASK_USER_SEVERAL_ARGUMENTS)
     end
 
     if string.find(lower, "ask me", 1, true) then
