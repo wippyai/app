@@ -41,6 +41,21 @@ entries:
       entry_point: app.html
       mountRoute: /demo/:part(.*)*
 
+  - name: session-forms-demo
+    kind: registry.entry
+    meta:
+      type: view.page
+      name: session-forms-demo
+      title: Session Forms Demo
+      icon: tabler:forms
+      order: 5
+      announced: true
+      secure: false
+      url: /app
+      base_path: app/session-forms-demo
+      entry_point: app.html
+      mountRoute: /session-forms-demo/:part(.*)*
+
   # Variant: shares iframe-demo's bundle, adds a custom palette via
   # meta.config_overrides (deep-merged over bundled wippy.configOverrides;
   # YAML wins per nested key — must use camelCase to match).

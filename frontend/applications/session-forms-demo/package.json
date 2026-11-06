@@ -1,0 +1,71 @@
+{
+  "name": "@wippy/session-forms-demo",
+  "version": "1.0.0",
+  "specification": "wippy-component-1.0",
+  "title": "Session Forms Demo",
+  "description": "Starts a chat with the Session Forms demo agent, and with the deterministic fixture agents when the dev fixtures are on",
+  "files": [
+    "dist/",
+    "src/",
+    "package.json"
+  ],
+  "browser": "dist/app.js",
+  "wippy": {
+    "type": "page",
+    "title": "Session Forms Demo",
+    "icon": "tabler:forms",
+    "path": "dist/app.html",
+    "proxy": {
+      "enabled": true,
+      "injections": {
+        "css": {
+          "fonts": true,
+          "themeConfig": true,
+          "iframe": true,
+          "primevue": true,
+          "markdown": false,
+          "customCss": true,
+          "customVariables": true
+        },
+        "tailwindConfig": true,
+        "resizeObserver": true,
+        "preventLinkClicks": false,
+        "iconifyIcons": true,
+        "errorCapture": true
+      }
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "build:debug": "vite build --mode development",
+    "dev": "vite build --watch",
+    "type-check": "vue-tsc --build --force",
+    "lint": "eslint src --ext .ts,.vue",
+    "lint:fix": "eslint src --ext .ts,.vue --fix"
+  },
+  "dependencies": {
+    "@wippy-fe/theme": "^0.0.67"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "@wippy-fe/vite-plugin": "^0.0.67",
+    "@wippy-fe/types-global-proxy": "^0.0.67",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.0.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "3",
+    "typescript": "^5.0.0",
+    "vite": "^6.4.5",
+    "vue": "^3.5.0",
+    "vue-eslint-parser": "^9.4.3",
+    "vue-tsc": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@wippy-fe/proxy": "^0.0.67",
+    "axios": "^1.0.0",
+    "vue": "^3.5.0"
+  }
+}
