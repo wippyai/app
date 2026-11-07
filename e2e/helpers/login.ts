@@ -51,6 +51,15 @@ export async function getDemoFrame(page: Page): Promise<FrameLocator> {
 }
 
 /**
+ * Scope of the iframe-demo page. The iframe engine gives it a srcdoc frame. The
+ * fragment engine reflects it into the Host document, where locators reach it
+ * through its shadow roots.
+ */
+export async function getDemoScope(page: Page): Promise<Page | FrameLocator> {
+  return process.env.WIPPY_ENGINE === 'fragment' ? getHostFrame(page) : getDemoFrame(page)
+}
+
+/**
  * Sign in to the wippy host with the seeded admin credentials from `.env`.
  * Returns once the authenticated application shell is visible. Managed Web
  * Fragment layout may keep the outer URL at `/`, while other layouts redirect
