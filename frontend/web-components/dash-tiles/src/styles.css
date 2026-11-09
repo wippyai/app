@@ -1,0 +1,34 @@
+@import "@wippy-fe/theme/theme-config.css";
+
+/* Sizing block: unknown elements default to display:inline and collapse. */
+:host {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+:host > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* dash-text. Theme tokens only. */
+.dash-text {
+  height: 100%;
+  overflow: auto;
+  padding: 0.75rem;
+  box-sizing: border-box;
+  color: var(--p-text-color);
+}
+
+.dash-text__markdown {
+  display: block;
+}
+
+.dash-text__plain {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

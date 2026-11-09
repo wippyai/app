@@ -31,3 +31,38 @@ entries:
       auto_register: true
       url: /app/wc/dashboard-layout
       entry_point: dash-placeholder.js
+
+  # Tiles of the `dash-tiles` bundle (frontend/web-components/dash-tiles, built to static/wc/dash-tiles).
+  # Each tag has its own entry file. Stage C4 adds dash-kpi, dash-select, dash-chart and dash-table.
+  - name: dash-text
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dash-text
+      tag_name: dash-text
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/dash-tiles
+      entry_point: dash-text.js
+
+  # Tile descriptors (contracts section 5.3). The engine and the catalogue read these.
+  - name: text
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      title: Text
+      tile_type: text
+      tag: dash-text
+      inputs:
+        main:
+          shape: record
+      fields: [text]
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size: { w: 160px, h: 96px }
+      default_size: { w: 25%, h: 140px }

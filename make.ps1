@@ -34,6 +34,7 @@ $wcs = @(
     @{ name = 'model-gallery';   dir = 'frontend/web-components/model-gallery';   out = 'static/wc/model-gallery' }
     @{ name = 'counter-persist'; dir = 'frontend/web-components/counter-persist'; out = 'static/wc/counter-persist' }
     @{ name = 'dashboard-layout'; dir = 'frontend/web-components/dashboard-layout'; out = 'static/wc/dashboard-layout' }
+    @{ name = 'dash-tiles'; dir = 'frontend/web-components/dash-tiles'; out = 'static/wc/dash-tiles' }
 )
 
 # Subset that runs `npm run lint` - mirrors Makefile's `lint:` recipe.
@@ -48,6 +49,7 @@ $lintDirs = @(
     'frontend/web-components/model-gallery'
     'frontend/web-components/counter-persist'
     'frontend/web-components/dashboard-layout'
+    'frontend/web-components/dash-tiles'
 )
 
 function Invoke-Recipe {

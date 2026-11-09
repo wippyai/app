@@ -1,4 +1,4 @@
-.PHONY: build clean-build dev run run-e2e prepare-e2e lint test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-dashboard-page build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-dashboard-layout
+.PHONY: build clean-build dev run run-e2e prepare-e2e lint test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-dashboard-page build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-dashboard-layout build-wc-dash-tiles
 
 # Use NPM_INSTALL=true after installing local release packages for a smoke build.
 NPM_INSTALL ?= npm install
@@ -20,7 +20,7 @@ test-attention-touch:
 test-attention-helpers:
 	npm run test:e2e -- attention-context-helpers.spec.ts --project=chromium --max-failures=1 --output=.local/test-results/attention-helpers-tmp
 
-build: build-app-main build-app-iframe-demo build-app-dashboard-page build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-dashboard-layout
+build: build-app-main build-app-iframe-demo build-app-dashboard-page build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-dashboard-layout build-wc-dash-tiles
 
 build-app-main:
 	cd frontend/applications/main && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/app/main --emptyOutDir
@@ -55,6 +55,9 @@ build-wc-counter-persist:
 build-wc-dashboard-layout:
 	cd frontend/web-components/dashboard-layout && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/wc/dashboard-layout --emptyOutDir
 
+build-wc-dash-tiles:
+	cd frontend/web-components/dash-tiles && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/wc/dash-tiles --emptyOutDir
+
 lint:
 	cd frontend/applications/main && npm run lint
 	cd frontend/applications/dashboard-page && npm run lint
@@ -66,6 +69,7 @@ lint:
 	cd frontend/web-components/model-gallery && npm run lint
 	cd frontend/web-components/counter-persist && npm run lint
 	cd frontend/web-components/dashboard-layout && npm run lint
+	cd frontend/web-components/dash-tiles && npm run lint
 
 clean-build:
 	cd frontend/applications/main && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir
@@ -79,6 +83,7 @@ clean-build:
 	cd frontend/web-components/model-gallery && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/model-gallery --emptyOutDir
 	cd frontend/web-components/counter-persist && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/counter-persist --emptyOutDir
 	cd frontend/web-components/dashboard-layout && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/dashboard-layout --emptyOutDir
+	cd frontend/web-components/dash-tiles && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/dash-tiles --emptyOutDir
 
 dev:
 	cd frontend/applications/main && npm run dev
