@@ -1,0 +1,171 @@
+@import "@wippy-fe/theme/theme-config.css";
+@import 'tailwind.css';
+
+/* Sizing block: unknown elements default to display:inline and collapse. */
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+:host > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* Board: a scrolling wrapper around a canvas as tall as the page. Theme tokens only. */
+.board {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+  color: var(--p-text-color);
+}
+
+.board__canvas {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+}
+
+.board__notice {
+  padding: 1rem;
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
+.board__notice--error {
+  color: var(--p-danger-color);
+}
+
+/* Frame: one per tile. It fills its slot and leaves a small gap around itself. */
+.frame {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 6px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--p-content-background);
+  color: var(--p-text-color);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-content-border-radius);
+}
+
+.frame__bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.frame__bar::after {
+  content: "";
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--p-primary-color);
+  animation: frame-bar 1.2s ease-in-out infinite;
+}
+
+@keyframes frame-bar {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame__bar::after {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+.frame__tile {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.frame__tile > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.frame__tile--covered > * {
+  visibility: hidden;
+}
+
+.frame__state {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  text-align: center;
+  background: var(--p-content-background);
+}
+
+.frame__state-title {
+  font-weight: 600;
+}
+
+.frame__state-detail {
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+}
+
+.frame--error .frame__state-title,
+.frame--load-failed .frame__state-title,
+.frame--denied .frame__state-title {
+  color: var(--p-danger-color);
+}
+
+.frame--timeout .frame__state-title {
+  color: var(--p-warn-color);
+}
+
+.frame__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  padding: 0.25rem 0.5rem;
+  color: var(--p-text-muted-color);
+  font-size: 0.75rem;
+  border-top: 1px solid var(--p-content-border-color);
+}
+
+/* dash-placeholder: the test tile. */
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  height: 100%;
+  padding: 0.75rem;
+  box-sizing: border-box;
+  color: var(--p-text-color);
+}
+
+.placeholder__id {
+  font-weight: 600;
+}
+
+.placeholder__note {
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+}
