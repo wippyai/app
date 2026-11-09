@@ -58,7 +58,7 @@ function M.llm_usage()
         },
         tiles = {
             text = { type = "text", data = { main = "summary" } },
-            model_picker = { type = "control.select", param = "model" },
+            model_picker = { type = "control.select", param = "model", options = { label = "Model" } },
             tokens = {
                 type = "kpi",
                 data = { main = "tokens" },
@@ -79,7 +79,7 @@ function M.llm_usage()
             layouts = {
                 default = column(
                     { "text", "120px" },
-                    { "model_picker", "96px" },
+                    { "model_picker", "140px" },
                     { "tokens", "140px" },
                     { "by_day", "320px" },
                     { "by_model", "240px" }
@@ -143,13 +143,13 @@ function M.app_activity()
                     { "sessions", "140px" },
                     { "messages", "140px" },
                     { "sessions_by_month", "320px" },
-                    { "message_types", "280px" }
+                    { "message_types", "340px" }
                 ),
                 lg = {
                     direction = "vertical",
                     children = {
                         row("320px", { "sessions", "25%" }, { "messages", "25%" }, { "sessions_by_month", "50%" }),
-                        row("280px", { "message_types", "100%" }),
+                        row("340px", { "message_types", "100%" }),
                     },
                 },
             },

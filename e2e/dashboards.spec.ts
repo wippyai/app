@@ -30,6 +30,79 @@ async function boxes(frame: FrameLocator, ids: string[]) {
   return out
 }
 
+/** Collects console errors and failed requests from the page and all its frames. */
+function watchErrors(page: Page) {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error')
+      errors.push(`console: ${m.text().slice(0, 200)}`)
+  })
+  page.on('pageerror', e => errors.push(`pageerror: ${e.message.slice(0, 200)}`))
+  page.on('response', (r) => {
+    if (r.status() >= 400)
+      errors.push(`http ${r.status()}: ${new URL(r.url()).pathname}`)
+  })
+  page.on('requestfailed', r => errors.push(`failed: ${new URL(r.url()).pathname} ${r.failure()?.errorText ?? ''}`))
+  return errors
+}
+
+async function chartLabels(frame: FrameLocator, tileId: string): Promise<number> {
+  const data = await frame.locator(`[data-tile-id="${tileId}"] wippy-chartjs`).getAttribute('data')
+  return data ? (JSON.parse(data).labels ?? []).length : -1
+}
+
+test.describe('stage C: built-in tiles with real data', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await loginAsAdmin(page)
+  })
+
+  test('LLM usage shows the real values', async ({ page }) => {
+    const errors = watchErrors(page)
+    await openInShell(page, '/reports/llm-usage')
+    const f = pageFrame(page, 'llm_usage')
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="text"]')).toContainText('38 calls used 550135 tokens. claude-sonnet-4-6 used 97.1% of them.')
+    await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(5)
+    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(2)
+    await expect(f.locator('[data-tile-id="by_day"] figure[aria-label="Tokens by day"]')).toHaveCount(1)
+    const canvas = await f.locator('[data-tile-id="by_day"] wippy-chartjs canvas').boundingBox()
+    console.log('by_day canvas', JSON.stringify(canvas))
+    expect(canvas!.height).toBeGreaterThan(200)
+
+    // Keyboard: focus the select, open it, see all choices.
+    const combo = f.locator('[data-tile-id="model_picker"] [role="combobox"]')
+    await combo.focus()
+    await page.keyboard.press('Enter')
+    const options = f.locator('[role="option"]')
+    await expect(options).toHaveCount(3, { timeout: 5_000 })
+    const listBox = await f.locator('[role="listbox"]').boundingBox()
+    const panel = await f.locator('[data-tile-id="model_picker"]').boundingBox()
+    console.log('listbox', JSON.stringify(listBox), 'panel', JSON.stringify(panel))
+    await page.keyboard.press('Escape')
+
+    // Theme: dark scheme restyles the tiles.
+    const lightColor = await f.locator('.dash-kpi__value').first().evaluate(el => getComputedStyle(el).color)
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await expect.poll(async () => f.locator('.dash-kpi__value').first().evaluate(el => getComputedStyle(el).color), { timeout: 5_000 }).not.toBe(lightColor)
+    await page.emulateMedia({ colorScheme: 'light' })
+    console.log('errors', JSON.stringify(errors))
+    expect(errors).toEqual([])
+  })
+
+  test('App activity shows the real values', async ({ page }) => {
+    const errors = watchErrors(page)
+    await openInShell(page, '/ops/app-activity')
+    const f = pageFrame(page, 'app_activity')
+    await expect(f.locator('[data-tile-id="sessions"]')).toContainText('14', { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="messages"]')).toContainText('107')
+    await expect.poll(() => chartLabels(f, 'sessions_by_month'), { timeout: 10_000 }).toBe(3)
+    await expect(f.locator('[data-tile-id="message_types"] tbody tr')).toHaveCount(6)
+    console.log('errors', JSON.stringify(errors))
+    expect(errors).toEqual([])
+  })
+})
+
 test.describe('stage B: page host and dashboard-layout', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 900 })

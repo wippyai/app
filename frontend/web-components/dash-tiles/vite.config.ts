@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     vue({
       template: {
-        // <wippy-markdown> is a custom element from the hub module wippy-swiss/markdown.
+        // <wippy-markdown> and <wippy-chartjs> are custom elements from hub modules.
         compilerOptions: { isCustomElement: tag => tag.startsWith('wippy-') },
       },
     }),
@@ -21,9 +21,12 @@ export default defineConfig({
     target: 'esnext',
     lib: {
       // One entry file per tag. Each entry file owns its own define(import.meta.url, ...).
-      // Stage C4 adds dash-kpi, dash-select, dash-chart and dash-table here.
       entry: {
         'dash-text': resolve(__dirname, 'src/dash-text.ts'),
+        'dash-kpi': resolve(__dirname, 'src/dash-kpi.ts'),
+        'dash-select': resolve(__dirname, 'src/dash-select.ts'),
+        'dash-chart': resolve(__dirname, 'src/dash-chart.ts'),
+        'dash-table': resolve(__dirname, 'src/dash-table.ts'),
       },
       name: 'DashTiles',
       fileName: (_format, entryName) => `${entryName}.js`,
@@ -36,6 +39,8 @@ export default defineConfig({
         'pinia',
         '@iconify/vue',
         '@wippy-fe/proxy',
+        // PrimeVue (used by dash-select) comes from the Host import map as well.
+        /^primevue(\/.*)?$/,
       ],
       preserveEntrySignatures: false,
       output: {

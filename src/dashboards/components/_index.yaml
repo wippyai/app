@@ -5,7 +5,7 @@ namespace: wippy.dashboards.components
 # `dashboard-layout` is the board every dashboard page renders. `dash-placeholder` is a test tile
 # in the same bundle (frontend/web-components/dashboard-layout, built to static/wc/dashboard-layout).
 # Each tag has its own entry file, because each entry file owns one define(import.meta.url, ...).
-# Tile components added by later stages (C1, C4) are declared in this file too.
+# The tile components are declared in this file too.
 
 entries:
   - name: dashboard-layout
@@ -33,7 +33,7 @@ entries:
       entry_point: dash-placeholder.js
 
   # Tiles of the `dash-tiles` bundle (frontend/web-components/dash-tiles, built to static/wc/dash-tiles).
-  # Each tag has its own entry file. Stage C4 adds dash-kpi, dash-select, dash-chart and dash-table.
+  # Each tag has its own entry file.
   - name: dash-text
     kind: registry.entry
     meta:
@@ -45,6 +45,54 @@ entries:
       auto_register: true
       url: /app/wc/dash-tiles
       entry_point: dash-text.js
+
+  - name: dash-kpi
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dash-kpi
+      tag_name: dash-kpi
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/dash-tiles
+      entry_point: dash-kpi.js
+
+  - name: dash-select
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dash-select
+      tag_name: dash-select
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/dash-tiles
+      entry_point: dash-select.js
+
+  - name: dash-chart
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dash-chart
+      tag_name: dash-chart
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/dash-tiles
+      entry_point: dash-chart.js
+
+  - name: dash-table
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: dash-table
+      tag_name: dash-table
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/dash-tiles
+      entry_point: dash-table.js
 
   # Tile descriptors (contracts section 5.3). The engine and the catalogue read these.
   - name: text
