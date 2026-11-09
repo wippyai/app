@@ -59,6 +59,14 @@ local function publish(raw)
         return fail(rerr.code == "internal" and 500 or 400, rerr.code, rerr.message)
     end
 
+    -- Store the validated spec, not the request body: validation adds a plugin
+    -- tile's default points and actions to the page.
+    local stored, eerr = json.encode(spec)
+    if eerr or type(stored) ~= "string" then
+        db:release()
+        return fail(500, "internal", "Cannot encode the page spec")
+    end
+
     -- Row first inside a transaction; the registry is changed last, and the
     -- row is rolled back when the registry refuses.
     local tx, terr = db:begin()
@@ -78,7 +86,7 @@ local function publish(raw)
             published = 1,
             entry_id = excluded.entry_id,
             updated_at = strftime('%s', 'now')
-    ]], { spec.id, spec.route, spec.title, raw, entry_id })
+    ]], { spec.id, spec.route, spec.title, stored, entry_id })
     if xerr then
         tx:rollback()
         db:release()

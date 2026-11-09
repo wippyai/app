@@ -155,7 +155,7 @@ It returns the data in the declared shape, or `nil, err`. An error becomes `stat
     title: Set user status
     func: demo.user_status:set_status
     args_schema: { type: object, additionalProperties: false, required: [user_id, status],
-                   properties: { user_id: { type: string }, status: { enum: [active, disabled] } } }
+                   properties: { user_id: { type: string }, status: { enum: [active, inactive] } } }
     tile_args: [user_id, status]
     result_schema: { type: object }
     permission: { action: dash.users.set_status, resource: demo.user_status:users }
@@ -308,7 +308,7 @@ The board draws each tile's frame from `render-state`: a loading bar, the source
 ## 9. Live signal
 
 - Topic `dash.users.changed`. The message carries no data beyond its type.
-- The backend publishes through `wippy/relay` to `wippy.central`, addressed to each user who may view the page. Stage E2 confirms the exact `process.send` call with the Wippy KB and records it here.
+- The backend publishes with `process.send(process.registry.lookup("wippy.central"), "dash.users.changed", {})`. `wippy.central` forwards the message to every connected user hub; it cannot address one user. That is acceptable because the signal carries no data and every re-read checks the viewer's access. Delivery to chosen viewers only would need a loop over their `user.<id>` hubs.
 - The helper subscribes with `on()` from `@wippy-fe/proxy` and unsubscribes on disconnect.
 
 ## 10. Actions
