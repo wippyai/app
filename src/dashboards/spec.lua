@@ -467,6 +467,48 @@ local function point_with_ref(data, ref)
     return nil
 end
 
+-- A plugin tile names its default points and actions in its descriptor (spec 8.6). When the
+-- page does not declare one, add it to the page under a free local name, so a page can place
+-- the tile with only its type. The validated spec, with these additions, is what gets stored.
+local function free_name(map, preferred, fallback)
+    if map[preferred] == nil then
+        return preferred
+    end
+    if map[fallback] == nil then
+        return fallback
+    end
+    return nil
+end
+
+local function add_tile_defaults(spec)
+    for id, tile in pairs(spec.tiles) do
+        local desc = is_table(tile) and type(tile.type) == "string" and M.tile_descriptor(tile.type) or nil
+        local dmeta = desc and desc.meta or {}
+        if is_table(dmeta.default_data) then
+            for input, decl_id in pairs(dmeta.default_data) do
+                local set_by_tile = is_table(tile.data) and tile.data[input] ~= nil
+                if type(decl_id) == "string" and not set_by_tile and point_with_ref(spec.data, decl_id) == nil then
+                    local name = free_name(spec.data, id, id .. "_" .. tostring(input))
+                    if name then
+                        spec.data[name] = { kind = "function", ref = decl_id }
+                    end
+                end
+            end
+        end
+        if is_table(dmeta.default_actions) then
+            for action, decl_id in pairs(dmeta.default_actions) do
+                local set_by_tile = is_table(tile.actions) and tile.actions[action] ~= nil
+                if type(decl_id) == "string" and not set_by_tile and point_with_ref(spec.actions, decl_id) == nil then
+                    local name = free_name(spec.actions, tostring(action), id .. "_" .. tostring(action))
+                    if name then
+                        spec.actions[name] = { kind = "function", ref = decl_id }
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function validate_tile(id, tile, spec, point_decls, action_decls)
     local where = "tile '" .. id .. "'"
     if not is_name(id) then
@@ -694,6 +736,7 @@ function M.validate(spec)
     if not params then
         return nil, perr
     end
+    add_tile_defaults(spec)
     local point_decls, derr = validate_points(spec.data, spec.params)
     if not point_decls then
         return nil, derr
