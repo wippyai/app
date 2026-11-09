@@ -40,10 +40,14 @@ export function buildActions(pageUrl: string, tile: CompiledTile): Record<string
   return out
 }
 
-/** `params`: current values of the parameters the tile declares. */
+/**
+ * `params`: current values of the parameters the tile declares. A control tile (`param` set) also
+ * gets its own parameter, so it can show the selection (contracts section 6).
+ */
 export function buildTileParams(tile: CompiledTile, values: ParamValues): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  for (const name of tile.params ?? [])
+  const names = tile.param ? [...(tile.params ?? []), tile.param] : (tile.params ?? [])
+  for (const name of names)
     out[name] = Object.prototype.hasOwnProperty.call(values, name) ? values[name] : null
   return out
 }

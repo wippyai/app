@@ -4,8 +4,8 @@ import Button from 'primevue/button'
 import { loadByTagName } from '@wippy-fe/proxy'
 import { BOARD_KEY } from '../constants'
 import type { BoardContext } from '../constants'
-import type { RenderStateDetail } from '../types'
-import { buildTileAttributes } from '../lib/tile-attrs'
+import type { RenderStateDetail, TileEventDetail } from '../types'
+import { buildTileAttributes, buildTileParams } from '../lib/tile-attrs'
 import { isValidTileTag, withDeadline } from '../lib/deadline'
 import {
   COMPONENT_LOAD_DEADLINE_MS,
@@ -37,6 +37,8 @@ const frame = ref<FrameState>(initialFrame(requestId.value))
 
 let element: HTMLElement | null = null
 let mountedTag = ''
+// The request-id that the element was last configured with.
+let configuredRequestId = ''
 let timer: ReturnType<typeof setTimeout> | undefined
 // When the frame entered its current status. Each change of status gets a fresh deadline.
 let enteredAt = 0
@@ -71,6 +73,7 @@ function configure() {
   // The frame expects the new request-id before the tile sees it. A tile may report from
   // attributeChangedCallback, and that report must not be dropped as stale.
   enteredAt = Date.now()
+  configuredRequestId = requestId.value
   frame.value = restartFrame(frame.value, requestId.value, 'loading')
   for (const [name, value] of buildTileAttributes({
     pageUrl: board.pageUrl.value,
@@ -98,8 +101,16 @@ function onRenderState(event: Event) {
   armDeadline()
 }
 
+function onTileEvent(event: Event) {
+  // A tile nested inside this one bubbles its events through here too. Only the element itself counts.
+  if (event.composedPath()[0] !== element)
+    return
+  board.tileEvent(props.tileId, (event as CustomEvent<TileEventDetail>).detail)
+}
+
 function removeElement() {
   element?.removeEventListener('render-state', onRenderState)
+  element?.removeEventListener('tile-event', onTileEvent)
   element?.remove()
   element = null
   mountedTag = ''
@@ -146,6 +157,7 @@ async function mountTile() {
   element = created
   mountedTag = tag
   element.addEventListener('render-state', onRenderState)
+  element.addEventListener('tile-event', onTileEvent)
   slot.value.appendChild(element)
   configure()
 }
@@ -158,6 +170,19 @@ watch(requestId, (id, old) => {
     return
   configure()
 })
+
+// A control tile shows its own parameter. When that value changes, only the `params` attribute is
+// updated: the tile keeps its request-id and does not read again. When a new request-id is pending,
+// configure() sets `params` together with the rest of the configuration instead.
+watch(
+  () => (tile.value ? JSON.stringify(buildTileParams(tile.value, board.values.value)) : ''),
+  (serialized) => {
+    if (!element || !tile.value || requestId.value !== configuredRequestId)
+      return
+    if (element.getAttribute('params') !== serialized)
+      element.setAttribute('params', serialized)
+  },
+)
 
 // A tile that changes its tag mounts anew.
 watch(() => tile.value?.tag, (tag) => {

@@ -59,6 +59,13 @@ export interface CompiledTile {
 
 export type RenderStatus = 'loading' | 'computing' | 'ready' | 'empty' | 'denied' | 'error'
 
+/** Detail of the `tile-event` event (contracts section 8). */
+export interface TileEventDetail {
+  request_id: string
+  name: string
+  detail?: unknown
+}
+
 /** Detail of the `render-state` event (contracts section 8). */
 export interface RenderStateDetail {
   request_id: string

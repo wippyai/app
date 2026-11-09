@@ -61,6 +61,15 @@ describe('buildTileParams', () => {
     expect(buildTileParams(tile, values)).toEqual({ day: null })
     expect(buildTileParams({ tag: 'x', params: ['model'] }, values)).toEqual({ model: 'claude-sonnet-4-6' })
   })
+
+  it('gives a control tile its own parameter', () => {
+    expect(buildTileParams({ tag: 'dash-select', param: 'model' }, values)).toEqual({ model: 'claude-sonnet-4-6' })
+    expect(buildTileParams({ tag: 'dash-select', param: 'day', params: ['model'] }, values)).toEqual({ model: 'claude-sonnet-4-6', day: null })
+  })
+
+  it('gives null for a parameter that has no value', () => {
+    expect(buildTileParams({ tag: 'dash-select', param: 'model' }, {})).toEqual({ model: null })
+  })
 })
 
 describe('buildTileAttributes', () => {

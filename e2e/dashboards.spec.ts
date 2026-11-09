@@ -42,7 +42,11 @@ function watchErrors(page: Page) {
     if (r.status() >= 400)
       errors.push(`http ${r.status()}: ${new URL(r.url()).pathname}`)
   })
-  page.on('requestfailed', r => errors.push(`failed: ${new URL(r.url()).pathname} ${r.failure()?.errorText ?? ''}`))
+  page.on('requestfailed', (r) => {
+    // A navigation cancels the previous page's open requests; built-in pages show the same.
+    if (r.failure()?.errorText !== 'net::ERR_ABORTED')
+      errors.push(`failed: ${new URL(r.url()).pathname} ${r.failure()?.errorText ?? ''}`)
+  })
   return errors
 }
 
@@ -98,6 +102,110 @@ test.describe('stage C: built-in tiles with real data', () => {
     await expect(f.locator('[data-tile-id="messages"]')).toContainText('107')
     await expect.poll(() => chartLabels(f, 'sessions_by_month'), { timeout: 10_000 }).toBe(3)
     await expect(f.locator('[data-tile-id="message_types"] tbody tr')).toHaveCount(6)
+    console.log('errors', JSON.stringify(errors))
+    expect(errors).toEqual([])
+  })
+})
+
+/** Records point reads of one page as `<point>` names, in order. */
+function watchPointReads(page: Page, pageId: string) {
+  const reads: string[] = []
+  page.on('request', (r) => {
+    const m = new URL(r.url()).pathname.match(new RegExp(`/dashboards/pages/${pageId}/points/([a-z_]+)`))
+    if (m)
+      reads.push(m[1])
+  })
+  return reads
+}
+
+async function chooseModel(page: Page, f: FrameLocator, label: string) {
+  await f.locator('[data-tile-id="model_picker"] [role="combobox"]').click()
+  await f.locator('[role="option"]', { hasText: label }).first().click()
+}
+
+/** Clicks the tallest bar of the last category in a two-series bar chart. */
+async function clickLastCategoryBar(f: FrameLocator, tileId: string) {
+  const canvas = f.locator(`[data-tile-id="${tileId}"] wippy-chartjs canvas`)
+  const box = (await canvas.boundingBox())!
+  // The plot starts after the y axis (about 60 px) and has five categories; the second bar of a
+  // category sits right of its centre. Try a few points across that bar, low in the plot.
+  for (const fx of [0.68, 0.72, 0.64, 0.76]) {
+    const plotLeft = 58
+    const cat = (box.width - plotLeft) / 5
+    const x = plotLeft + cat * 4 + cat * fx
+    await canvas.click({ position: { x, y: box.height - 45 } })
+    if (await f.locator('dashboard-layout').evaluate(el => !!el.shadowRoot!.querySelector('[data-selection="day"]')))
+      return
+  }
+  throw new Error('no bar was hit')
+}
+
+test.describe('stage D: arguments and interaction', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await loginAsAdmin(page)
+  })
+
+  test('choosing a model updates only the dependent tiles, and clear restores them', async ({ page }) => {
+    const errors = watchErrors(page)
+    const reads = watchPointReads(page, 'llm_usage')
+    await openInShell(page, '/reports/llm-usage')
+    const f = pageFrame(page, 'llm_usage')
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="text"]')).toContainText('38 calls used')
+    await page.waitForTimeout(500)
+    const before = reads.length
+
+    await chooseModel(page, f, 'claude-sonnet-4-6')
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/534[,.   ]?297/, { timeout: 10_000 })
+    await expect(f.locator('[data-selection="model"] [data-selection-value]')).toContainText('claude-sonnet-4-6')
+    await page.waitForTimeout(500)
+    const afterModel = reads.slice(before)
+    console.log('reads after model', JSON.stringify(afterModel))
+    expect(afterModel).not.toContain('summary')
+    expect(afterModel).toContain('tokens')
+
+    // Clear all: every tile returns to its value for no argument.
+    await f.locator('[data-selections-clear-all]').click()
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 10_000 })
+    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(2)
+    await expect(f.locator('[data-tile-id="model_picker"] [role="combobox"]')).toContainText('All')
+    await expect(f.locator('[data-selections]')).toHaveCount(0)
+    console.log('errors', JSON.stringify(errors))
+    expect(errors).toEqual([])
+  })
+
+  test('a bar click sets the day for the table only', async ({ page }) => {
+    const errors = watchErrors(page)
+    const reads = watchPointReads(page, 'llm_usage')
+    await openInShell(page, '/reports/llm-usage')
+    const f = pageFrame(page, 'llm_usage')
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
+    await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(5)
+    await page.waitForTimeout(800)
+    const before = reads.length
+
+    await clickLastCategoryBar(f, 'by_day')
+    await expect(f.locator('[data-selection="day"] [data-selection-value]')).toContainText('2026-08-31')
+    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(2)
+    await expect(f.locator('[data-tile-id="by_model"]')).toContainText(/162[,.   ]?186/, { timeout: 10_000 })
+    await page.waitForTimeout(500)
+    const afterClick = reads.slice(before)
+    console.log('reads after bar click', JSON.stringify(afterClick))
+    expect(afterClick).toEqual(['by_model'])
+
+    await f.locator('[data-selection-clear="day"]').click()
+    await expect(f.locator('[data-tile-id="by_model"]')).toContainText(/534[,.   ]?297/, { timeout: 10_000 })
+    console.log('errors', JSON.stringify(errors))
+    expect(errors).toEqual([])
+  })
+
+  test('the model comes from the path on a direct link', async ({ page }) => {
+    const errors = watchErrors(page)
+    await page.goto('/reports/llm-usage/claude-haiku-4-5')
+    const f = pageFrame(page, 'llm_usage')
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/15[,.   ]?838/, { timeout: 30_000 })
+    await expect(f.locator('[data-selection="model"] [data-selection-value]')).toContainText('claude-haiku-4-5')
     console.log('errors', JSON.stringify(errors))
     expect(errors).toEqual([])
   })

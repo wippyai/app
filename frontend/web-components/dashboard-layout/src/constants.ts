@@ -1,6 +1,6 @@
 import type { InjectionKey, Ref } from 'vue'
 import { useProps, useEvents, usePropsErrors } from '@wippy-fe/webcomponent-vue'
-import type { ComponentProps, CompiledTile, RenderStateDetail } from './types.ts'
+import type { ComponentProps, CompiledTile, RenderStateDetail, TileEventDetail } from './types.ts'
 import type { ParamValues } from './lib/params.ts'
 
 export interface Events {
@@ -23,6 +23,8 @@ export interface BoardContext {
   requestIds: Record<string, string>
   /** Give one tile a new request-id. */
   retry: (tileId: string) => void
+  /** A `tile-event` from one tile. The board applies the tile's `change` or `on` rule. */
+  tileEvent: (tileId: string, detail: TileEventDetail) => void
 }
 
 export const BOARD_KEY: InjectionKey<BoardContext> = Symbol('dashboard-layout-board')
