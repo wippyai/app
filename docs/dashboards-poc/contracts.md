@@ -184,6 +184,8 @@ The function receives `{ args = <merged args>, action_id = "<declaration id>", i
 | `demo.run_timeline` | `run-timeline` | `schema` | none | E1 |
 | `demo.user_status` | `user-status` | `schema` | none; uses action `set_status` | E2, E3 |
 
+`dash-chart` wraps `<wippy-chartjs>`. Stage A4 adds a `chart-click` DOM event to `wippy-chartjs` with the detail `{ label, datasetLabel, datasetIndex, dataIndex, value }`, where `label` is the x label of the clicked element. A click outside any data element emits nothing. `dash-chart` turns it into its `select` event `{ x: label, series: datasetLabel, value }`.
+
 ## 6. Compiled props of `dashboard-layout`
 
 The props endpoint returns, and the page host passes as attributes:
@@ -303,7 +305,7 @@ The board draws each tile's frame from `render-state`: a loading bar, the source
 
 ## 11. Generated `view.page` entries
 
-The generator writes one entry per published page through a registry changeset under a service identity with a narrow `registry.apply` policy.
+The generator writes one entry per published page through a registry changeset, as the publisher (section 13). Before `apply()` it refuses any change outside `wippy.dashboards.pages`, and it checks the route rules of section 4 against every `view.page` in the registry, because a duplicate `mountRoute` breaks the Host for every user.
 
 ```yaml
 - name: llm_usage                      # page id
@@ -338,9 +340,12 @@ Passwords of the seeded test users live in the seed file that stage B1 writes. T
 
 ## 13. Probe results (stage A3)
 
-To be filled by the coordinator from the stage A3 report.
+Results of 2026-11-09, on this branch. The probe code was removed after the stage.
 
-- Mapping through `eval_runner` with an empty module allowlist: pending.
-- Runtime-created `view.page` with `secure: true` in `/api/public/pages/routes`, after a reload and after a restart: pending.
-- Effect of a duplicate `mountRoute` on `/api/public/pages/routes`, and recovery: pending.
-- `LayoutManagerView` in a shadow root inside a `view.component`: pending.
+- Mapping. `require("eval_runner").run({ source = <recipe text>, modules = {}, args = { input } })` runs a recipe; the recipe reads `...` and returns a table. The caller needs `eval.compile` and `eval.run`. The `usage_summary` recipe returned the plan's sentence exactly. Recipes stay Lua text run through `eval_runner`.
+- Sandbox limit. `modules = {}` blocks `require`, `io.open` and `os.execute`, but the evaluated code still sees the globals `funcs`, `security`, `workflow` and `ctx`. `funcs.new():call(...)` ran another function, and `security.actor()` returned the caller. A mapping can therefore call any function its caller may call. In the POC the recipes come from the mock actor, which is trusted code. This is a spec finding (sections 4.4 and 10).
+- Runtime `view.page`. An entry created through `registry.snapshot():changes():create(...)` and `apply()` with `secure: true` appears in `/api/public/pages/routes` and `/api/public/pages/list` for the admin at once, and its page renders in a fresh browser load. The Host still learns routes only at its own start.
+- Restart. Runtime-created entries are gone after a restart, because the registry history is in memory. After every restart, run `POST /api/v1/demo/build` again.
+- `registry.apply` scope. The check uses an empty resource, so a policy cannot limit it to a namespace, and a function keeps its caller's identity even when it declares its own actor. The generator therefore writes as the publisher and refuses, in code, any change outside `wippy.dashboards.pages`. Publication requires `dashboards.publish`, which the user group is denied. A narrow service identity (spec section 9.5) needs a broker process. This is a spec finding.
+- Duplicate `mountRoute`. The registry accepts it. `/api/public/pages/routes` then returns 500 for every caller, and the Host fails at start with a critical error and sends the user to the sign-in page. Deleting the duplicate entry restores 200 at once, with no restart. The engine must refuse a duplicate before it applies the change.
+- `LayoutManagerView` in a shadow root: moved to stage B3, which builds that component and checks it in the browser.
