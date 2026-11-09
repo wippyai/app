@@ -1,0 +1,360 @@
+version: "1.0"
+namespace: demo.actor
+
+# The mock actor of the dashboards proof of concept. In production the actor is
+# an agent, a developer or a workflow. Here it is scripted, with no LLM:
+#   sources  (sources.lua)  plain SQL against app:db, no knowledge of tiles
+#   recipes  (below)        Lua text that maps source rows into a tile format
+#   points   (below)        wippy.dashboards.point declarations, all served by demo.actor:resolve
+#   pages    (specs.lua)    the two page specs, published by demo.actor:build_pages
+# No mapping code lives in wippy.dashboards.
+
+entries:
+  # ── libraries and functions ──────────────────────────────────────────
+  - name: sources
+    kind: library.lua
+    meta:
+      comment: Raw SQL sources, one function per recipe source
+    source: file://sources.lua
+    modules:
+      - sql
+
+  - name: specs
+    kind: library.lua
+    meta:
+      comment: Page specs of the mock actor (LLM usage, App activity)
+    source: file://specs.lua
+
+  - name: resolve
+    kind: function.lua
+    meta:
+      comment: Runs a point's recipe over its source rows and returns the tile data
+    source: file://resolve.lua
+    method: resolve
+    modules:
+      - registry
+      - eval_runner
+    imports:
+      sources: demo.actor:sources
+    pool:
+      size: 4
+
+  - name: build_pages
+    kind: function.lua
+    meta:
+      comment: Publishes both page specs through wippy.dashboards:publish, as the caller
+    source: file://build.lua
+    method: build_pages
+    modules:
+      - http
+      - json
+    imports:
+      publish: wippy.dashboards:publish
+      specs: demo.actor:specs
+    pool:
+      size: 1
+
+  - name: build_handler
+    kind: function.lua
+    source: file://build.lua
+    method: handler
+    modules:
+      - http
+      - json
+    imports:
+      publish: wippy.dashboards:publish
+      specs: demo.actor:specs
+    pool:
+      size: 1
+
+  - name: build_handler.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: build_handler
+    path: /demo/build
+
+  # ── recipes ──────────────────────────────────────────────────────────
+  # meta.source names a function in sources.lua. meta.lua is the mapping. It
+  # reads `...` ({ rows = <source rows>, args = <point args> }) and returns the
+  # data in the tile's format. eval_runner runs it with an empty module list.
+  - name: recipe.usage_models
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: usage_models
+      lua: |
+        local input = ...
+        local rows = {}
+        for _, r in ipairs(input.rows) do
+          rows[#rows + 1] = { r.model_id, r.model_id .. " (" .. r.calls .. " calls)" }
+        end
+        return {
+          schema = "wippy.dashboard_frame/v1",
+          fields = {
+            { name = "value", type = "string", nullable = false },
+            { name = "label", type = "string", nullable = false },
+          },
+          rows = rows,
+        }
+
+  - name: recipe.usage_tokens
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: usage_tokens
+      lua: |
+        local input = ...
+        local r = input.rows[1]
+        local rows = {}
+        -- No call matches the filter: an empty frame, never a zero.
+        if r and r.calls > 0 then
+          rows[1] = { r.tokens, r.calls }
+        end
+        return {
+          schema = "wippy.dashboard_frame/v1",
+          fields = {
+            { name = "tokens", type = "number", role = "measure", unit = "tokens", additive = true, nullable = false },
+            { name = "calls", type = "number", role = "measure", additive = true, nullable = false },
+          },
+          rows = rows,
+        }
+
+  - name: recipe.usage_by_day
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: usage_by_day
+      lua: |
+        local input = ...
+        local rows = {}
+        for _, r in ipairs(input.rows) do
+          rows[#rows + 1] = { r.day, r.model_id, r.tokens }
+        end
+        return {
+          schema = "wippy.dashboard_frame/v1",
+          fields = {
+            { name = "day", type = "date", role = "dimension", nullable = false },
+            { name = "model", type = "string", role = "dimension", nullable = false },
+            { name = "tokens", type = "number", role = "measure", unit = "tokens", additive = true, nullable = false },
+          },
+          rows = rows,
+        }
+
+  - name: recipe.usage_by_model
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: usage_by_model
+      lua: |
+        local input = ...
+        local rows = {}
+        for _, r in ipairs(input.rows) do
+          rows[#rows + 1] = { r.model_id, r.calls, r.tokens }
+        end
+        return {
+          schema = "wippy.dashboard_frame/v1",
+          fields = {
+            { name = "model_id", type = "string", role = "dimension", nullable = false },
+            { name = "calls", type = "number", role = "measure", additive = true, nullable = false },
+            { name = "tokens", type = "number", role = "measure", unit = "tokens", additive = true, nullable = false },
+          },
+          rows = rows,
+        }
+
+  # Reads the by-model rows (source usage_by_model, called with no filter) and
+  # writes one sentence, which is what an agent analysis page would do.
+  - name: recipe.usage_summary
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: usage_by_model
+      lua: |
+        local input = ...
+        if #input.rows == 0 then
+          return {}
+        end
+        local total, calls = 0, 0
+        for _, r in ipairs(input.rows) do
+          total = total + r.tokens
+          calls = calls + r.calls
+        end
+        local top = input.rows[1]
+        local share = math.floor(top.tokens / total * 1000 + 0.5) / 10
+        return { text = calls .. " calls used " .. total .. " tokens. "
+          .. top.model_id .. " used " .. share .. "% of them." }
+
+  - name: recipe.app_sessions
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: app_sessions
+      lua: |
+        local input = ...
+        return {
+          schema = "wippy.dashboard_frame/v1",
+          fields = {
+            { name = "sessions", type = "number", role = "measure", additive = true, nullable = false },
+          },
+          rows = { { input.rows[1].sessions } },
+        }
+
+  - name: recipe.app_messages
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: app_messages
+      lua: |
+        local input = ...
+        return {
+          schema = "wippy.dashboard_frame/v1",
+          fields = {
+            { name = "messages", type = "number", role = "measure", additive = true, nullable = false },
+          },
+          rows = { { input.rows[1].messages } },
+        }
+
+  - name: recipe.sessions_by_month
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: sessions_by_month
+      lua: |
+        local input = ...
+        local rows = {}
+        for _, r in ipairs(input.rows) do
+          rows[#rows + 1] = { r.month, r.sessions }
+        end
+        return {
+          schema = "wippy.dashboard_frame/v1",
+          fields = {
+            { name = "month", type = "string", role = "dimension", nullable = false },
+            { name = "sessions", type = "number", role = "measure", additive = true, nullable = false },
+          },
+          rows = rows,
+        }
+
+  - name: recipe.message_types
+    kind: registry.entry
+    meta:
+      type: demo.actor.recipe
+      source: message_types
+      lua: |
+        local input = ...
+        local rows = {}
+        for _, r in ipairs(input.rows) do
+          rows[#rows + 1] = { r.type, r.messages }
+        end
+        return {
+          schema = "wippy.dashboard_frame/v1",
+          fields = {
+            { name = "type", type = "string", role = "dimension", nullable = false },
+            { name = "messages", type = "number", role = "measure", additive = true, nullable = false },
+          },
+          rows = rows,
+        }
+
+  # ── points (contracts section 5.1) ───────────────────────────────────
+  - name: usage_models
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Models in use
+      func: demo.actor:resolve
+      recipe: usage_models
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: options }
+
+  - name: usage_tokens
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Token use
+      func: demo.actor:resolve
+      recipe: usage_tokens
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties:
+          model: { type: [string, "null"] }
+      output: { shape: scalar }
+
+  - name: usage_by_day
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Token use by day
+      func: demo.actor:resolve
+      recipe: usage_by_day
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties:
+          model: { type: [string, "null"] }
+      output: { shape: series }
+
+  - name: usage_by_model
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Token use by model
+      func: demo.actor:resolve
+      recipe: usage_by_model
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties:
+          model: { type: [string, "null"] }
+          day: { type: [string, "null"], pattern: '^\d{4}-\d{2}-\d{2}$' }
+      output: { shape: table }
+
+  - name: usage_summary
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Token use summary
+      func: demo.actor:resolve
+      recipe: usage_summary
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: record }
+
+  - name: app_sessions
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Sessions
+      func: demo.actor:resolve
+      recipe: app_sessions
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: scalar }
+
+  - name: app_messages
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Messages
+      func: demo.actor:resolve
+      recipe: app_messages
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: scalar }
+
+  - name: sessions_by_month
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Sessions by month
+      func: demo.actor:resolve
+      recipe: sessions_by_month
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: category }
+
+  - name: message_types
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Messages by type
+      func: demo.actor:resolve
+      recipe: message_types
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: table }

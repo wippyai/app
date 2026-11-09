@@ -96,6 +96,11 @@ end
 -- Returns the props table, or nil plus an error string when a declaration the
 -- stored page names has gone from the registry.
 function M.compile(spec, page_id, revision)
+    -- The stored spec is the request body, so optional maps may be absent.
+    spec.params = spec.params or {}
+    spec.data = spec.data or {}
+    spec.actions = spec.actions or {}
+    spec.tiles = spec.tiles or {}
     local tiles = {}
     for tile_id, tile in pairs(spec.tiles) do
         local desc = spec_lib.tile_descriptor(tile.type)

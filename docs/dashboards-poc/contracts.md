@@ -24,6 +24,7 @@ The POC is thrown away. It proves the frame, so these contracts stay small. Anyt
 | `src/dashboards/pages/` (generated entries only, never hand-written) | `wippy.dashboards.pages` | B1 |
 | `src/dashboards/components/` (the `view.component` entries of `dashboard-layout` and the tiles) | `wippy.dashboards.components` | B3, C1, C4 |
 | `src/demo_seed/` (test users) | `demo.seed` | B1 |
+| `src/dashboards/tiles/` (tile descriptors of `kpi`, `control.select`, `chart`, `table`) | `wippy.dashboards.tiles` | C3, C4 |
 | `src/demo_actor/` | `demo.actor` | C3 |
 | `src/demo_run_timeline/` | `demo.run_timeline` | E1 |
 | `src/demo_user_status/` | `demo.user_status` | E2, E3 |
@@ -185,15 +186,15 @@ The function receives `{ args = <merged args>, action_id = "<declaration id>", i
     default_size: { w: 25%, h: 140px }
 ```
 
-| `tile_type` | Tag | Input shape | Events | Stage |
-|---|---|---|---|---|
-| `text` | `dash-text` | `record` (field `text`) | none | C1 |
-| `control.select` | `dash-select` | `options` | `change` `{ value }` | C4 |
-| `kpi` | `dash-kpi` | `scalar` | none | C4 |
-| `chart` | `dash-chart` | `series` or `category` | `select` `{ x, series, value }` | C4, D1 |
-| `table` | `dash-table` | `table` | none | C4 |
-| `demo.run_timeline` | `run-timeline` | `schema` | none | E1 |
-| `demo.user_status` | `user-status` | `schema` | none; uses action `set_status` | E2, E3 |
+| `tile_type` | Tag | Input shape | `fields` | Events | Stage |
+|---|---|---|---|---|---|
+| `text` | `dash-text` | `record` | `text` | none | C1 |
+| `control.select` | `dash-select` | `options` | `value`, `label` | `change` `{ value }` | C3 descriptor, C4 tile |
+| `kpi` | `dash-kpi` | `scalar` | `value` | none | C3 descriptor, C4 tile |
+| `chart` | `dash-chart` | `series` or `category` (the descriptor allows both) | `x`, `y` (list), `series` | `select` `{ x, series, value }` | C3 descriptor, C4 tile, D1 |
+| `table` | `dash-table` | `table` | `columns` (list) | none | C3 descriptor, C4 tile |
+| `demo.run_timeline` | `run-timeline` | `schema` | none | none | E1 |
+| `demo.user_status` | `user-status` | `schema` | none | none; uses action `set_status` | E2, E3 |
 
 `dash-chart` wraps `<wippy-chartjs>`. Stage A4 adds a `chart-click` DOM event to `wippy-chartjs` with the detail `{ label, datasetLabel, datasetIndex, dataIndex, value }`, where `label` is the x label of the clicked element. A click outside any data element emits nothing. `dash-chart` turns it into its `select` event `{ x: label, series: datasetLabel, value }`.
 

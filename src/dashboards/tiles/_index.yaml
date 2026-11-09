@@ -1,0 +1,97 @@
+version: "1.0"
+namespace: wippy.dashboards.tiles
+
+# Tile descriptors of the built-in tiles (contracts section 5.3). Stage C4
+# implements the custom elements named by `tag`. The `text` descriptor lives
+# with its component in wippy.dashboards.components.
+
+entries:
+  - name: kpi
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      title: Number
+      tile_type: kpi
+      tag: dash-kpi
+      inputs:
+        main:
+          shape: scalar
+      fields: [value]
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size: { w: 160px, h: 96px }
+      default_size: { w: 25%, h: 140px }
+
+  - name: control_select
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      title: Dropdown
+      tile_type: control.select
+      tag: dash-select
+      inputs:
+        main:
+          shape: options
+      fields: [value, label]
+      options_schema:
+        type: object
+      events:
+        change:
+          type: object
+          properties:
+            value: { type: [string, "null"] }
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size: { w: 160px, h: 96px }
+      default_size: { w: 25%, h: 96px }
+
+  - name: chart
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      title: Chart
+      tile_type: chart
+      tag: dash-chart
+      inputs:
+        main:
+          shape: [series, category]
+      fields: [x, y, series]
+      options_schema:
+        type: object
+      events:
+        select:
+          type: object
+          properties:
+            x: { type: string }
+            series: { type: string }
+            value: { type: number }
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size: { w: 240px, h: 180px }
+      default_size: { w: 50%, h: 320px }
+
+  - name: table
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      title: Table
+      tile_type: table
+      tag: dash-table
+      inputs:
+        main:
+          shape: table
+      fields: [columns]
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size: { w: 240px, h: 160px }
+      default_size: { w: 50%, h: 320px }

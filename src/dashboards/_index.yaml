@@ -80,19 +80,27 @@ entries:
       spec: wippy.dashboards:spec
 
   # ── endpoints ────────────────────────────────────────────────────────
+  - name: publish
+    kind: library.lua
+    meta:
+      comment: Validates, stores and publishes one page spec; used by the publish endpoint and by Lua callers
+    source: file://publish.lua
+    modules:
+      - json
+      - security
+      - sql
+    imports:
+      spec: wippy.dashboards:spec
+      generator: wippy.dashboards:generator
+
   - name: publish_page
     kind: function.lua
     source: file://publish_page.lua
     method: handler
     modules:
       - http
-      - json
-      - security
-      - sql
-      - registry
     imports:
-      spec: wippy.dashboards:spec
-      generator: wippy.dashboards:generator
+      publish: wippy.dashboards:publish
     pool:
       size: 2
 
