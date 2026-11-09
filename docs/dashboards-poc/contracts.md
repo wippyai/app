@@ -55,7 +55,8 @@ All endpoints sit on `app:api`, take the viewer's token and return JSON.
 | Case | Status | Body |
 |---|---|---|
 | Read or action handled, any envelope state except below | 200 | Result envelope (section 7) |
-| `args` fail the schema, or a field outside `tile_args` | 400 | Envelope with `state: failed`, `error.code: invalid_args`. The function does not run. |
+| `args` fail the schema, name a key the page does not bind, or (actions) a field outside `tile_args` | 400 | Envelope with `state: failed`, `error.code: invalid_args`. The function does not run. A key the page binds to a constant is accepted and replaced by the page's value, because the board sends every argument. |
+| The page names a declaration that is gone or has another type | 400 | Envelope with `state: failed`, `error.code: undeclared`. Nothing runs. |
 | Viewer may not see the page, or lacks the action's permission | 403 | Envelope with `state: denied`, `error.code: denied` or the action's permission code |
 | Unknown page, point or action | 404 | `{ "error": { "code": "not_found" } }` |
 | Invalid page spec at publication | 400 | `{ "error": { "code": "...", "message": "..." } }` |
@@ -106,6 +107,8 @@ Publication error codes: `invalid_spec`, `invalid_route`, `reserved_route`, `dup
 - `data.<name>.ref` is the id of a point declaration (section 5.1). `actions.<name>.ref` is the id of an action declaration (section 5.2).
 - A tile `type` names a tile descriptor (section 5.3). A plugin tile can omit `data` and `actions`, and the engine fills them from the descriptor's defaults.
 - `$param` references are typed values, never string interpolation. `{ "$event": "x" }` reads a field of an event detail inside `on`.
+- Each value in `data.<point>.args` and `actions.<name>.args` is either a constant with no `$param` inside it, or exactly `{ "$param": "<declared parameter>" }`. Mixed values are refused, so a request can never replace part of a constant.
+- Every point and action declaration has an `args_schema`. The engine validates the merged arguments against it on every call.
 - `layout` holds `@wippy-fe/layout` `breakpoints` and `layouts`. Each panel id is a tile id. `default` is required and applies below the smallest breakpoint, and each declared breakpoint needs its own layout. Every layout places each tile exactly once. Sizes use `Nfr`, `Npx` or `N%` (`auto` is refused). A nested tree may carry `size` (stage A2 patch).
 - Limits: 30 tiles, 12 data points, 8 parameters per page.
 
@@ -259,7 +262,7 @@ Table frame (shapes `scalar`, `series`, `category`, `table`, `options`):
   "rows": [ ["2026-06-10"] ] }
 ```
 
-Field types: `time`, `date`, `number`, `decimal`, `string`, `boolean`. Every field sets `nullable`. `decimal`, and integers above 2^53, travel as strings. Shape rules the engine checks after each read:
+Field types: `time`, `date`, `number`, `decimal`, `string`, `boolean`. Every field sets `nullable`. POC limit: the runtime JSON encoder cannot write a null cell inside a row, so the engine refuses any missing cell as `format_mismatch`, even in a nullable field. The POC's real data has no nulls. This is a spec finding. `decimal`, and integers above 2^53, travel as strings. Shape rules the engine checks after each read:
 
 | Shape | Rule |
 |---|---|

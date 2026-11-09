@@ -61,6 +61,14 @@ entries:
     imports:
       spec: wippy.dashboards:spec
 
+  - name: shape
+    kind: library.lua
+    meta:
+      comment: Checks a point's output against its declared shape (contracts section 7)
+    source: file://shape.lua
+    modules:
+      - json
+
   - name: generator
     kind: library.lua
     meta:
@@ -119,3 +127,29 @@ entries:
     method: GET
     func: page_props
     path: /dashboards/pages/{id}/props
+
+  - name: read_point
+    kind: function.lua
+    source: file://read_point.lua
+    method: handler
+    modules:
+      - http
+      - json
+      - security
+      - sql
+      - registry
+      - funcs
+      - logger
+    imports:
+      spec: wippy.dashboards:spec
+      shape: wippy.dashboards:shape
+    pool:
+      size: 4
+
+  - name: read_point.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: GET
+    func: read_point
+    path: /dashboards/pages/{id}/points/{point}

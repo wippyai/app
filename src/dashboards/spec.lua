@@ -61,12 +61,18 @@ end
 
 -- ── registry lookups (also used by compile.lua) ───────────────────────
 
+-- A declaration must have the wanted type and an args_schema (a non-empty JSON
+-- schema table). Without a schema the engine could not validate request values.
 local function get_decl(id, wanted_type)
     if type(id) ~= "string" or id == "" then
         return nil
     end
     local entry, err = registry.get(id)
     if err or not entry or type(entry.meta) ~= "table" or entry.meta.type ~= wanted_type then
+        return nil
+    end
+    local schema = entry.meta.args_schema
+    if type(schema) ~= "table" or next(schema) == nil then
         return nil
     end
     return entry
@@ -315,28 +321,42 @@ end
 
 -- ── parts of the spec ─────────────────────────────────────────────────
 
--- Walks a value for { "$param": "name" } references.
-local function check_param_refs(value, params, where, depth)
-    if depth > 8 then
-        return fail("invalid_spec", where .. ": args are nested too deeply")
-    end
+-- True when a $param or $event reference sits anywhere inside the value (or
+-- the value is nested too deeply to check).
+local function holds_reference(value, depth)
     if type(value) ~= "table" then
-        return true
+        return false
     end
-    if value["$param"] ~= nil then
-        local name = value["$param"]
-        if type(name) ~= "string" or params[name] == nil then
-            return fail("invalid_spec", where .. ": $param names an undeclared parameter")
-        end
+    if depth > 8 or value["$param"] ~= nil or value["$event"] ~= nil then
         return true
-    end
-    if value["$event"] ~= nil then
-        return fail("invalid_spec", where .. ": $event is only valid inside a tile 'on' handler")
     end
     for _, v in pairs(value) do
-        local ok, err = check_param_refs(v, params, where, depth + 1)
-        if not ok then
-            return nil, err
+        if holds_reference(v, depth + 1) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Each value in a point or action args table is either a constant with no
+-- reference inside it, or exactly { "$param": "<declared parameter>" }. A mix
+-- would let a request replace the constant part of a structured value.
+local function check_args(args, params, where)
+    for key, value in pairs(args) do
+        if type(key) ~= "string" then
+            return fail("invalid_spec", where .. ": args must be an object")
+        end
+        if is_table(value) and value["$param"] ~= nil then
+            local count = 0
+            for _ in pairs(value) do
+                count = count + 1
+            end
+            local name = value["$param"]
+            if count ~= 1 or type(name) ~= "string" or params[name] == nil then
+                return fail("invalid_spec", where .. ": arg '" .. key .. "' must be exactly { \"$param\": <declared parameter> }")
+            end
+        elseif holds_reference(value, 1) then
+            return fail("invalid_spec", where .. ": arg '" .. key .. "' mixes a constant with a $param or $event; a $param must be the whole value")
         end
     end
     return true
@@ -378,13 +398,13 @@ local function validate_points(data, params)
         end
         local decl = M.point_decl(p.ref)
         if not decl then
-            return fail("undeclared_point", "data point '" .. name .. "' does not name a point declaration")
+            return fail("undeclared_point", "data point '" .. name .. "' does not name a point declaration with an args_schema")
         end
         if p.args ~= nil then
             if not is_table(p.args) then
                 return fail("invalid_spec", "data point '" .. name .. "' args must be an object")
             end
-            local ok, err = check_param_refs(p.args, params, "data point '" .. name .. "'", 1)
+            local ok, err = check_args(p.args, params, "data point '" .. name .. "'")
             if not ok then
                 return nil, err
             end
@@ -397,7 +417,7 @@ local function validate_points(data, params)
     return decls
 end
 
-local function validate_actions(actions)
+local function validate_actions(actions, params)
     local decls = {}
     for name, a in pairs(actions) do
         if not is_name(name) then
@@ -408,7 +428,16 @@ local function validate_actions(actions)
         end
         local decl = M.action_decl(a.ref)
         if not decl then
-            return fail("undeclared_action", "action '" .. name .. "' does not name an action declaration")
+            return fail("undeclared_action", "action '" .. name .. "' does not name an action declaration with an args_schema")
+        end
+        if a.args ~= nil then
+            if not is_table(a.args) then
+                return fail("invalid_spec", "action '" .. name .. "' args must be an object")
+            end
+            local ok, err = check_args(a.args, params, "action '" .. name .. "'")
+            if not ok then
+                return nil, err
+            end
         end
         decls[name] = decl
     end
@@ -669,7 +698,7 @@ function M.validate(spec)
     if not point_decls then
         return nil, derr
     end
-    local action_decls, aerr = validate_actions(spec.actions)
+    local action_decls, aerr = validate_actions(spec.actions, spec.params)
     if not action_decls then
         return nil, aerr
     end
