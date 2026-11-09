@@ -211,6 +211,145 @@ test.describe('stage D: arguments and interaction', () => {
   })
 })
 
+/** Reads a seeded test account's password from src/demo_seed/_index.yaml (local test values). */
+function seededPassword(email: string): string {
+  // eslint-disable-next-line ts/no-require-imports
+  const fs = require('node:fs') as typeof import('node:fs')
+  const text = fs.readFileSync('src/demo_seed/_index.yaml', 'utf8')
+  const at = text.indexOf(`email: ${email}`)
+  const m = at >= 0 ? text.slice(at).match(/password:\s*(\S+)/) : null
+  if (!m)
+    throw new Error(`no seeded password for ${email}`)
+  return m[1].replace(/^["']|["']$/g, '')
+}
+
+/** Signs in through the form as a seeded account, reusing the admin helper's flow. */
+async function loginAs(page: Page, email: string) {
+  const saved = [process.env.USERSPACE_USER_DEFAULT_ADMIN_EMAIL, process.env.USERSPACE_USER_DEFAULT_ADMIN_PASSWORD]
+  process.env.USERSPACE_USER_DEFAULT_ADMIN_EMAIL = email
+  process.env.USERSPACE_USER_DEFAULT_ADMIN_PASSWORD = seededPassword(email)
+  try {
+    await loginAsAdmin(page)
+  }
+  finally {
+    process.env.USERSPACE_USER_DEFAULT_ADMIN_EMAIL = saved[0]
+    process.env.USERSPACE_USER_DEFAULT_ADMIN_PASSWORD = saved[1]
+  }
+}
+
+/** Calls the app API from a signed-in page with that page's token. */
+async function api(page: Page, method: string, path: string, body?: unknown) {
+  return page.evaluate(async ({ method, path, body }) => {
+    const token = JSON.parse(localStorage.getItem('@wippy_token_info') || 'null')?.token
+    const r = await fetch(path, {
+      method,
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    return { status: r.status, body: await r.text() }
+  }, { method, path, body })
+}
+
+test.describe('stage E: plugins and live data', () => {
+  test('plugin 1 shows the latest run as a tree', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 })
+    const errors = watchErrors(page)
+    await loginAsAdmin(page)
+    await openInShell(page, '/ops/app-activity')
+    const run = pageFrame(page, 'app_activity').locator('[data-tile-id="run"]')
+    await expect(run).toContainText('9.14 s', { timeout: 20_000 })
+    // innerText stops at shadow roots, so collect the text through them.
+    const text = (await run.evaluate((root) => {
+      const parts: string[] = []
+      const walk = (n: Node) => {
+        const el = n as Element
+        if (el.tagName === 'STYLE' || el.tagName === 'SCRIPT')
+          return
+        if (n.nodeType === Node.TEXT_NODE)
+          parts.push(n.textContent ?? '')
+        if (el.shadowRoot)
+          walk(el.shadowRoot)
+        for (const c of Array.from(n.childNodes)) walk(c)
+      }
+      walk(root)
+      return parts.join(' ')
+    })).replace(/\s+/g, ' ')
+    console.log('run tile', text.slice(0, 300))
+    expect(text).toMatch(/workflow/)
+    expect(text).toMatch(/completed/)
+    // The tree order is agent, its child tool.call, then func.
+    const order = ['agent', 'tool.call', 'func'].map(t => text.indexOf(t))
+    expect(order.every(i => i >= 0)).toBe(true)
+    expect(order[0] < order[1] && order[1] < order[2]).toBe(true)
+    expect(text).toMatch(/7\.17 s/)
+    expect(text).toMatch(/1 ms/)
+    expect(errors).toEqual([])
+  })
+
+  // The engine checks every read against the point's declared schema, so a plugin function whose
+  // output stops matching its tile's schema turns these reads into `failed` / `format_mismatch`.
+  test('plugin functions pass the engine schema check on a live read', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await loginAsAdmin(page)
+    const run = JSON.parse((await api(page, 'GET', '/api/v1/dashboards/pages/app_activity/points/run')).body)
+    expect(run.state).toBe('ready')
+    expect(run.data.run.duration_ms).toBe(9139)
+    expect(run.data.nodes).toHaveLength(2)
+    expect(run.data.nodes[0].children).toHaveLength(1)
+    expect(run.data.nodes[1].children).toEqual([])
+    const users = JSON.parse((await api(page, 'GET', '/api/v1/dashboards/pages/app_activity/points/users')).body)
+    expect(users.state).toBe('ready')
+    expect(users.data.users).toHaveLength(3)
+    expect(users.live_topic).toBe('dash.users.changed')
+  })
+
+  test('plugin 2 updates in another browser through the live signal', async ({ browser }) => {
+    const admin = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
+    const viewer = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
+    const errors = watchErrors(viewer)
+    await loginAsAdmin(admin)
+    await loginAs(viewer, 'viewer@wippy.local')
+    const reads = watchPointReads(viewer, 'app_activity')
+    await openInShell(viewer, '/ops/app-activity')
+    const users = pageFrame(viewer, 'app_activity').locator('[data-tile-id="users"]')
+    await expect(users.locator('tr[data-user-id]')).toHaveCount(3, { timeout: 20_000 })
+    const target = users.locator('tr[data-user-id="target@wippy.local"]')
+    await expect(target).toContainText('active')
+    await viewer.evaluate(() => { (window as any).__noReload = 1 })
+    await viewer.waitForTimeout(1000)
+
+    try {
+      // A change with no signal does not show: the point has no timed refresh.
+      expect((await api(admin, 'PUT', '/api/v1/users/target%40wippy.local', { status: 'inactive' })).status).toBe(200)
+      await viewer.waitForTimeout(1500)
+      await expect(target).not.toContainText('inactive')
+      const before = reads.length
+      expect((await api(admin, 'POST', '/api/v1/demo/signal/users', {})).status).toBe(200)
+      await expect(target).toContainText('inactive', { timeout: 10_000 })
+      await viewer.waitForTimeout(800)
+      console.log('reads after signal', JSON.stringify(reads.slice(before)))
+      expect(reads.slice(before)).toEqual(['users'])
+      expect(await viewer.evaluate(() => (window as any).__noReload)).toBe(1)
+
+      // Five signals in one burst cause one read.
+      const burstStart = reads.length
+      await admin.evaluate(async () => {
+        const token = JSON.parse(localStorage.getItem('@wippy_token_info') || 'null')?.token
+        await Promise.all([1, 2, 3, 4, 5].map(() => fetch('/api/v1/demo/signal/users', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })))
+      })
+      await viewer.waitForTimeout(1500)
+      console.log('reads after burst', JSON.stringify(reads.slice(burstStart)))
+      expect(reads.slice(burstStart)).toEqual(['users'])
+    }
+    finally {
+      await api(admin, 'PUT', '/api/v1/users/target%40wippy.local', { status: 'active' })
+      await api(admin, 'POST', '/api/v1/demo/signal/users', {})
+    }
+    console.log('errors', JSON.stringify(errors))
+    expect(errors).toEqual([])
+  })
+})
+
 test.describe('stage B: page host and dashboard-layout', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 900 })

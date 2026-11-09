@@ -1,0 +1,71 @@
+{
+  "name": "@example/user-status",
+  "version": "0.0.68",
+  "specification": "wippy-component-1.0",
+  "title": "User Status Tile",
+  "description": "Plugin tile of the dashboards proof of concept (stage E2): lists the users with status and groups. It uses @example/dash-tile-helper for the tile protocol and writes only its rendering.",
+  "browser": "dist/user-status.js",
+  "files": [
+    "dist/",
+    "src/",
+    "package.json"
+  ],
+  "dependencies": {
+    "@example/dash-tile-helper": "file:../../packages/dash-tile-helper",
+    "@wippy-fe/theme": "^0.0.68",
+    "@wippy-fe/webcomponent-core": "^0.0.68",
+    "@wippy-fe/webcomponent-vue": "^0.0.68"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "@wippy-fe/proxy": "^0.0.68",
+    "@wippy-fe/vite-plugin": "^0.0.68",
+    "ajv": "^8.17.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0",
+    "vue": "^3.5.0",
+    "vue-eslint-parser": "^9.4.3",
+    "vue-tsc": "^2.0.0",
+    "yaml": "^2.5.0"
+  },
+  "peerDependencies": {
+    "@wippy-fe/proxy": "^0.0.68",
+    "vue": "^3.5.0"
+  },
+  "wippy": {
+    "tagName": "user-status",
+    "type": "widget",
+    "description": "Dashboard tile (plugin 2 of the dashboards proof of concept) that lists every user with name, status and groups. It is not used by hand: the dashboard board (dashboard-layout) creates it and sets the tile_v1 attributes (tile-id, data-sources, actions, fields, options, params, mode) and, last, request-id. Input `main` has the shape `schema`: { users: [ { user_id, name, status, groups } ] }. The tile reads the data itself, reads it again when the live signal dash.users.changed arrives, and reports render-state (loading, computing, ready, empty, denied, error) to the board. Data that does not match the schema is reported as an error, never drawn.",
+    "props": {
+      "type": "object",
+      "properties": {
+        "tile-id": { "type": "string", "default": "", "description": "Tile id in the page." },
+        "request-id": { "type": "string", "default": "", "description": "A new id for each configuration. The board sets it last, and the tile starts work only when it is set." },
+        "data-sources": { "type": "object", "description": "Map from input name to { url, args, refresh_ms, live_topic }. user-status reads the input main." },
+        "actions": { "type": "object", "description": "Map from action name to { url, confirm }. Stage E3 adds the action set_status." },
+        "fields": { "type": "object", "description": "Map from the tile field names to data field names. user-status has none." },
+        "options": { "type": "object", "description": "Tile options. user-status has none." },
+        "params": { "type": "object", "description": "Current values of the page parameters the tile declares." },
+        "mode": { "type": "string", "default": "view", "description": "view (the POC has no edit mode)." }
+      }
+    },
+    "scripts": {
+      "build": "build",
+      "debug": "build:debug",
+      "test": "lint"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "build:debug": "vite build --mode development",
+    "dev": "vite build --watch",
+    "lint": "eslint src --ext .ts,.vue",
+    "lint:fix": "eslint src --ext .ts,.vue --fix",
+    "test": "vitest run"
+  }
+}

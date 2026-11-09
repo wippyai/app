@@ -135,6 +135,8 @@ function M.app_activity()
                 options = { label = "Sessions by month" },
             },
             message_types = { type = "table", data = { main = "message_types" } },
+            run = { type = "demo.run_timeline" },
+            users = { type = "demo.user_status" },
         },
         layout = {
             breakpoints = { lg = 1024 },
@@ -143,13 +145,15 @@ function M.app_activity()
                     { "sessions", "140px" },
                     { "messages", "140px" },
                     { "sessions_by_month", "320px" },
-                    { "message_types", "340px" }
+                    { "message_types", "340px" },
+                    { "run", "340px" },
+                    { "users", "340px" }
                 ),
                 lg = {
                     direction = "vertical",
                     children = {
                         row("320px", { "sessions", "25%" }, { "messages", "25%" }, { "sessions_by_month", "50%" }),
-                        row("340px", { "message_types", "100%" }),
+                        row("340px", { "message_types", "33%" }, { "run", "34%" }, { "users", "33%" }),
                     },
                 },
             },
