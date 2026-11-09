@@ -1,0 +1,121 @@
+version: "1.0"
+namespace: wippy.dashboards
+
+entries:
+  # ── storage ──────────────────────────────────────────────────────────
+  - name: 01_create_dash_pages
+    kind: function.lua
+    meta:
+      description: Create the dash_pages table (stored page specs)
+      type: migration
+      target_db: app:db
+      tags:
+        - dashboards
+      timestamp: "2026-11-09T12:00:00Z"
+    source: file://migrations/01_create_dash_pages.lua
+    imports:
+      migration: wippy.migration:migration
+    method: migrate
+
+  # ── security ─────────────────────────────────────────────────────────
+  # The registry.apply check cannot be scoped to a namespace (contracts
+  # section 13), so publication is gated by this action, and the generator
+  # refuses in code any change outside wippy.dashboards.pages.
+  - name: deny_publish_user
+    kind: security.policy
+    meta:
+      comment: app.security:user may not publish dashboard pages
+    groups:
+      - app.security:user
+    policy:
+      resources: wippy.dashboards:pages
+      actions: dashboards.publish
+      effect: deny
+
+  # Test page for denial checks (stage B1 acceptance 4).
+  - name: deny_view_check
+    kind: security.policy
+    meta:
+      comment: app.security:user may not view the page deny_check
+    groups:
+      - app.security:user
+    policy:
+      resources: page:wippy.dashboards.pages:deny_check
+      actions: view
+      effect: deny
+
+  # ── libraries ────────────────────────────────────────────────────────
+  - name: spec
+    kind: library.lua
+    meta:
+      comment: Page spec validation (contracts sections 3, 4, 5) and route rules
+    source: file://spec.lua
+    modules:
+      - registry
+
+  - name: compile
+    kind: library.lua
+    meta:
+      comment: Compiles a stored page spec into the props of dashboard-layout (contracts section 6)
+    source: file://compile.lua
+    imports:
+      spec: wippy.dashboards:spec
+
+  - name: generator
+    kind: library.lua
+    meta:
+      comment: Writes the view.page entry of a published page, only inside wippy.dashboards.pages
+    source: file://generator.lua
+    modules:
+      - registry
+    imports:
+      spec: wippy.dashboards:spec
+
+  # ── endpoints ────────────────────────────────────────────────────────
+  - name: publish_page
+    kind: function.lua
+    source: file://publish_page.lua
+    method: handler
+    modules:
+      - http
+      - json
+      - security
+      - sql
+      - registry
+    imports:
+      spec: wippy.dashboards:spec
+      generator: wippy.dashboards:generator
+    pool:
+      size: 2
+
+  - name: publish_page.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: publish_page
+    path: /dashboards/pages
+
+  - name: page_props
+    kind: function.lua
+    source: file://page_props.lua
+    method: handler
+    modules:
+      - http
+      - json
+      - security
+      - sql
+      - registry
+    imports:
+      compile: wippy.dashboards:compile
+      spec: wippy.dashboards:spec
+    pool:
+      size: 4
+
+  - name: page_props.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: GET
+    func: page_props
+    path: /dashboards/pages/{id}/props

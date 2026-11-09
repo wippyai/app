@@ -1,0 +1,176 @@
+version: "1.0"
+namespace: wippy.dashboards.fixtures
+
+# Test fixtures for the dashboards proof of concept: declarations that let a
+# page be published and compiled before the mock actor and the real tiles
+# exist. The tile 'placeholder' is implemented by stage B3 (dash-placeholder).
+
+entries:
+  # ── functions ────────────────────────────────────────────────────────
+  - name: numbers_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: numbers
+    pool:
+      size: 1
+
+  - name: series_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: series
+    pool:
+      size: 1
+
+  - name: options_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: options
+    pool:
+      size: 1
+
+  - name: noop_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: noop
+    pool:
+      size: 1
+
+  # ── point declarations (contracts section 5.1) ───────────────────────
+  - name: numbers
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Fixture numbers
+      func: wippy.dashboards.fixtures:numbers_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties: {}
+      output:
+        shape: scalar
+      refresh_ms: 60000
+      live_topic: dash.fixtures.changed
+
+  - name: series
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Fixture series
+      func: wippy.dashboards.fixtures:series_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties:
+          model:
+            type: [string, "null"]
+      output:
+        shape: series
+
+  - name: options
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Fixture options
+      func: wippy.dashboards.fixtures:options_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties: {}
+      output:
+        shape: options
+
+  # ── action declaration (contracts section 5.2) ───────────────────────
+  - name: noop
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.action
+      title: Fixture action
+      func: wippy.dashboards.fixtures:noop_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties: {}
+      tile_args: []
+      result_schema:
+        type: object
+      permission:
+        action: dash.fixtures.noop
+        resource: wippy.dashboards.fixtures:noop
+      confirm: true
+      sensitive_fields: []
+      refreshes:
+        - numbers
+
+  # ── tile descriptors (contracts section 5.3) ─────────────────────────
+  - name: placeholder
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      tile_type: placeholder
+      tag: dash-placeholder
+      inputs:
+        main:
+          shape: none
+      fields: []
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size:
+        w: 160px
+        h: 96px
+      default_size:
+        w: 25%
+        h: 140px
+
+  # Variants for publication tests: a tile that needs a scalar, and a control.
+  - name: placeholder_scalar
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      tile_type: placeholder.scalar
+      tag: dash-placeholder
+      inputs:
+        main:
+          shape: scalar
+      fields:
+        - value
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size:
+        w: 160px
+        h: 96px
+      default_size:
+        w: 25%
+        h: 140px
+
+  - name: placeholder_select
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      tile_type: placeholder.select
+      tag: dash-placeholder
+      inputs:
+        main:
+          shape: options
+      fields: []
+      options_schema:
+        type: object
+      events:
+        change:
+          type: object
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size:
+        w: 160px
+        h: 96px
+      default_size:
+        w: 25%
+        h: 140px

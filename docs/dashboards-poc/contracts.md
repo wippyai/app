@@ -22,6 +22,8 @@ The POC is thrown away. It proves the frame, so these contracts stay small. Anyt
 |---|---|---|
 | `src/dashboards/` | `wippy.dashboards` | B1, C2, E3 |
 | `src/dashboards/pages/` (generated entries only, never hand-written) | `wippy.dashboards.pages` | B1 |
+| `src/dashboards/components/` (the `view.component` entries of `dashboard-layout` and the tiles) | `wippy.dashboards.components` | B3, C1, C4 |
+| `src/demo_seed/` (test users) | `demo.seed` | B1 |
 | `src/demo_actor/` | `demo.actor` | C3 |
 | `src/demo_run_timeline/` | `demo.run_timeline` | E1 |
 | `src/demo_user_status/` | `demo.user_status` | E2, E3 |
@@ -44,6 +46,7 @@ All endpoints sit on `app:api`, take the viewer's token and return JSON.
 | `GET /api/v1/dashboards/pages/{id}/props` | viewer with `view` on the page's entry | B1 | Compiled props of the published revision |
 | `GET /api/v1/dashboards/pages/{id}/points/{point}` | viewer with `view` on the page's entry | C2 | One read. Query: `args` (one JSON value, URL-encoded) and optional `operation` |
 | `POST /api/v1/dashboards/pages/{id}/actions/{action}` | viewer with `view` on the page's entry and the action's permission | E3 | One action. Body: `{ "args": {}, "idempotency_key": "..." }` |
+| `POST /api/v1/demo/seed-users` | `app.security:admin` | B1 | Creates the test users of section 12 if they are missing. Safe to repeat. |
 | `POST /api/v1/demo/build` | `app.security:admin` | C3 | Runs `demo.actor:build_pages` |
 | `POST /api/v1/demo/signal/users` | `app.security:admin` | E2 | Publishes `dash.users.changed` once, for tests |
 
@@ -88,7 +91,12 @@ Publication error codes: `invalid_spec`, `invalid_route`, `reserved_route`, `dup
   },
   "layout": {
     "breakpoints": { "lg": 1024 },
-    "layouts": { "default": { "direction": "vertical", "children": [] }, "lg": { } }
+    "layouts": {
+      "default": { "direction": "vertical", "children": [
+        { "panel": "model_picker", "size": "96px" }, { "panel": "tokens", "size": "140px" } ] },
+      "lg": { "direction": "vertical", "children": [
+        { "direction": "horizontal", "size": "140px", "children": [
+          { "panel": "model_picker", "size": "50%" }, { "panel": "tokens", "size": "50%" } ] } ] } }
   }
 }
 ```
@@ -98,7 +106,7 @@ Publication error codes: `invalid_spec`, `invalid_route`, `reserved_route`, `dup
 - `data.<name>.ref` is the id of a point declaration (section 5.1). `actions.<name>.ref` is the id of an action declaration (section 5.2).
 - A tile `type` names a tile descriptor (section 5.3). A plugin tile can omit `data` and `actions`, and the engine fills them from the descriptor's defaults.
 - `$param` references are typed values, never string interpolation. `{ "$event": "x" }` reads a field of an event detail inside `on`.
-- `layout` holds `@wippy-fe/layout` `breakpoints` and `layouts`. Each panel id is a tile id. `default` is required and applies below the smallest breakpoint. Sizes use `Nfr`, `Npx` or `N%`. A nested tree may carry `size` (stage A2 patch). Every tile appears in every breakpoint.
+- `layout` holds `@wippy-fe/layout` `breakpoints` and `layouts`. Each panel id is a tile id. `default` is required and applies below the smallest breakpoint, and each declared breakpoint needs its own layout. Every layout places each tile exactly once. Sizes use `Nfr`, `Npx` or `N%` (`auto` is refused). A nested tree may carry `size` (stage A2 patch).
 - Limits: 30 tiles, 12 data points, 8 parameters per page.
 
 ## 5. Registry declarations
@@ -188,7 +196,9 @@ The function receives `{ args = <merged args>, action_id = "<declaration id>", i
 
 ## 6. Compiled props of `dashboard-layout`
 
-The props endpoint returns, and the page host passes as attributes:
+The props endpoint returns `id`, `title`, `revision`, `page-url`, `layout`, `tiles` and `params`. The page host adds `sub-path` from `config.context.route` and passes these as attributes:
+
+JSON note: the runtime's JSON encoder cannot write `null` inside an object, so the server leaves null keys out (for example `default`, `param`, `refresh_ms`, `live_topic`). Every reader treats a missing key as null.
 
 | Attribute | JSON | Content |
 |---|---|---|
@@ -336,7 +346,7 @@ Entry ids live in `wippy.dashboards.pages`. Access uses `view` on `page:<entry i
 | `viewer@wippy.local` | `app.security:user` | Active viewer for denial tests |
 | `target@wippy.local` | `app.security:user` | Safe target of `set_status` |
 
-Passwords of the seeded test users live in the seed file that stage B1 writes. They are local test values. Stage B1 adds a deny policy for `view` on one test page for `app.security:user`. Stage E3 adds a deny policy for `dash.users.set_status` for `app.security:user`.
+The test users are declared in the registry entry `demo.seed:test_users` in `src/demo_seed/_index.yaml`, as `meta.users`, a list of `{ email, password, name, group }`. The passwords are generated local test values, stored only there. Stage B1 adds a deny policy for `view` on the test page `page:wippy.dashboards.pages:deny_check` for `app.security:user`, and a deny policy for `dashboards.publish` for `app.security:user`. Stage E3 adds a deny policy for `dash.users.set_status` for `app.security:user`.
 
 ## 13. Probe results (stage A3)
 
