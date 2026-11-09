@@ -20,6 +20,10 @@
   height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
+  /* The layout package measures the canvas inside this scroller. Reserving the scrollbar space
+     keeps that width the same whether or not a scrollbar shows, so the breakpoint cannot flip
+     when the page gets taller or shorter than the container. */
+  scrollbar-gutter: stable;
   box-sizing: border-box;
   color: var(--p-text-color);
 }

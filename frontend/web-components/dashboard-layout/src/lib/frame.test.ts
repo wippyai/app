@@ -6,7 +6,9 @@ import {
   applyLoadFailure,
   applyRenderState,
   applyTimeout,
+  canTimeOut,
   coversTile,
+  deadlineAt,
   createRequestIds,
   deadlineMs,
   initialFrame,
@@ -106,6 +108,32 @@ describe('deadlines', () => {
     expect(deadlineMs('loading')).toBe(10_000)
     expect(deadlineMs('loading-component')).toBe(10_000)
     expect(deadlineMs('computing')).toBe(60_000)
+  })
+})
+
+describe('deadlineAt', () => {
+  it('counts from the moment the status was entered', () => {
+    expect(deadlineAt('loading', 1_000)).toBe(11_000)
+    expect(deadlineAt('computing', 1_000)).toBe(61_000)
+  })
+
+  it('gives a fresh 10 seconds to a tile that goes from computing back to loading', () => {
+    // Request starts at 0 and the tile reports computing at 3 s. It reports loading at 70 s.
+    const computingEntered = 3_000
+    const loadingEntered = 70_000
+    expect(deadlineAt('computing', computingEntered)).toBe(63_000)
+    // Counting from the request start (the old rule) would give 10 000, already past.
+    expect(deadlineAt('loading', loadingEntered)).toBe(80_000)
+    expect(deadlineAt('loading', loadingEntered)).toBeGreaterThan(loadingEntered)
+  })
+
+  it('applies the late timer of the earlier state only while the frame is still unsettled', () => {
+    let f = applyRenderState(initialFrame('r1:t', 'loading'), state('r1:t', 'computing'))
+    f = applyRenderState(f, state('r1:t', 'loading'))
+    expect(f.status).toBe('loading')
+    expect(canTimeOut(f)).toBe(true)
+    expect(canTimeOut(applyTimeout(f, 'r1:t'))).toBe(false)
+    expect(canTimeOut(applyRenderState(f, state('r1:t', 'ready')))).toBe(false)
   })
 })
 

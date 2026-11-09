@@ -96,16 +96,28 @@ export function applyRenderState(state: FrameState, detail: RenderStateDetail): 
   }
 }
 
-/** Milliseconds after the request starts at which the frame times out, for the tile's last status. */
+/** Milliseconds a frame may stay in `status` before it times out: 60 seconds while computing, else 10. */
 export function deadlineMs(status: FrameStatus): number {
   return status === 'computing' ? COMPUTING_DEADLINE_MS : FIRST_STATE_DEADLINE_MS
 }
 
+/**
+ * Time (milliseconds) at which a frame that entered `status` at `enteredAt` times out.
+ * Every change of status gives a fresh deadline, counted from the moment of the change. So a tile
+ * that reports `computing` and, much later, `loading` again gets a full 10 seconds, not none.
+ */
+export function deadlineAt(status: FrameStatus, enteredAt: number): number {
+  return enteredAt + deadlineMs(status)
+}
+
+/** Whether a frame can still time out: it has no terminal state yet, and it is not already failed. */
+export function canTimeOut(state: FrameState): boolean {
+  return !state.settled && state.status !== 'timeout' && state.status !== 'load-failed'
+}
+
 /** The frame after its deadline passed. Only an unsettled frame times out. */
 export function applyTimeout(state: FrameState, requestId: string): FrameState {
-  if (state.requestId !== requestId || state.settled)
-    return state
-  if (state.status === 'timeout' || state.status === 'load-failed')
+  if (state.requestId !== requestId || !canTimeOut(state))
     return state
   return { ...state, status: 'timeout', timedOutWhileComputing: state.status === 'computing' }
 }

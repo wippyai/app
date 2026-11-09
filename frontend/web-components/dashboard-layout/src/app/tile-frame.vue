@@ -6,12 +6,15 @@ import { BOARD_KEY } from '../constants'
 import type { BoardContext } from '../constants'
 import type { RenderStateDetail } from '../types'
 import { buildTileAttributes } from '../lib/tile-attrs'
+import { isValidTileTag, withDeadline } from '../lib/deadline'
 import {
   COMPONENT_LOAD_DEADLINE_MS,
   applyLoadFailure,
   applyRenderState,
   applyTimeout,
+  canTimeOut,
   coversTile,
+  deadlineAt,
   deadlineMs,
   initialFrame,
   restartFrame,
@@ -35,8 +38,11 @@ const frame = ref<FrameState>(initialFrame(requestId.value))
 let element: HTMLElement | null = null
 let mountedTag = ''
 let timer: ReturnType<typeof setTimeout> | undefined
-let startedAt = 0
+// When the frame entered its current status. Each change of status gets a fresh deadline.
+let enteredAt = 0
 let alive = true
+// Counts mounts, so a slow load of an older mount cannot attach its element.
+let mountSerial = 0
 
 function clearTimer() {
   if (timer !== undefined) {
@@ -45,13 +51,13 @@ function clearTimer() {
   }
 }
 
-/** Arm the deadline for the current request-id. Counted from the start of that request. */
+/** Arm the deadline for the frame's current status, counted from the moment it entered that status. */
 function armDeadline() {
   clearTimer()
-  if (frame.value.settled || frame.value.status === 'load-failed')
+  if (!canTimeOut(frame.value))
     return
   const id = frame.value.requestId
-  const wait = Math.max(0, startedAt + deadlineMs(frame.value.status) - Date.now())
+  const wait = Math.max(0, deadlineAt(frame.value.status, enteredAt) - Date.now())
   timer = setTimeout(() => {
     frame.value = applyTimeout(frame.value, id)
   }, wait)
@@ -62,6 +68,10 @@ function configure() {
   const current = tile.value
   if (!element || !current)
     return
+  // The frame expects the new request-id before the tile sees it. A tile may report from
+  // attributeChangedCallback, and that report must not be dropped as stale.
+  enteredAt = Date.now()
+  frame.value = restartFrame(frame.value, requestId.value, 'loading')
   for (const [name, value] of buildTileAttributes({
     pageUrl: board.pageUrl.value,
     tileId: props.tileId,
@@ -71,8 +81,6 @@ function configure() {
   })) {
     element.setAttribute(name, value)
   }
-  startedAt = Date.now()
-  frame.value = restartFrame(frame.value, requestId.value, 'loading')
   armDeadline()
 }
 
@@ -84,6 +92,8 @@ function onRenderState(event: Event) {
   const next = applyRenderState(frame.value, detail)
   if (next === frame.value)
     return
+  if (next.status !== frame.value.status)
+    enteredAt = Date.now()
   frame.value = next
   armDeadline()
 }
@@ -95,26 +105,45 @@ function removeElement() {
   mountedTag = ''
 }
 
+function failLoad(id: string, message: string) {
+  clearTimer()
+  frame.value = applyLoadFailure(frame.value, id, message)
+}
+
 async function mountTile() {
   const current = tile.value
   if (!current || !slot.value)
     return
-  const tag = current.tag
+  const tag: unknown = current.tag
   const id = requestId.value
-  startedAt = Date.now()
+  const serial = ++mountSerial
+  clearTimer()
+  removeElement()
+  enteredAt = Date.now()
   frame.value = restartFrame(frame.value, id, 'loading-component')
+  // The tag comes from the page spec. Only a custom element name is loaded or created.
+  if (!isValidTileTag(tag)) {
+    failLoad(id, `${String(tag)} is not a valid tile tag.`)
+    return
+  }
+  let created: HTMLElement
   try {
-    await loadByTagName(tag, { timeoutMs: COMPONENT_LOAD_DEADLINE_MS })
+    // loadByTagName bounds only the wait for customElements.define, so the board bounds the whole load.
+    await withDeadline(
+      () => loadByTagName(tag, { timeoutMs: COMPONENT_LOAD_DEADLINE_MS }),
+      COMPONENT_LOAD_DEADLINE_MS,
+      `The component did not load within ${COMPONENT_LOAD_DEADLINE_MS / 1000} seconds.`,
+    )
+    if (!alive || serial !== mountSerial || !slot.value || tile.value?.tag !== tag)
+      return
+    created = document.createElement(tag)
   }
   catch (err) {
-    if (alive)
-      frame.value = applyLoadFailure(frame.value, id, err instanceof Error ? err.message : String(err))
+    if (alive && serial === mountSerial)
+      failLoad(id, err instanceof Error ? err.message : String(err))
     return
   }
-  if (!alive || !slot.value || tile.value?.tag !== tag)
-    return
-  removeElement()
-  element = document.createElement(tag)
+  element = created
   mountedTag = tag
   element.addEventListener('render-state', onRenderState)
   slot.value.appendChild(element)
