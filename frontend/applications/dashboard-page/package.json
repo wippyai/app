@@ -1,0 +1,69 @@
+{
+  "name": "@example/dashboard-page",
+  "version": "0.0.68",
+  "specification": "wippy-component-1.0",
+  "title": "Dashboard Page",
+  "description": "The page host that every generated dashboard page shares. Loads the page's compiled props and renders dashboard-layout.",
+  "files": [
+    "dist/",
+    "src/",
+    "package.json"
+  ],
+  "browser": "dist/app.js",
+  "wippy": {
+    "type": "page",
+    "title": "Dashboard Page",
+    "icon": "tabler:layout-dashboard",
+    "path": "dist/app.html",
+    "proxy": {
+      "enabled": true,
+      "injections": {
+        "css": {
+          "fonts": true,
+          "themeConfig": true,
+          "iframe": true,
+          "primevue": true,
+          "markdown": false,
+          "customCss": true,
+          "customVariables": true
+        },
+        "tailwindConfig": false,
+        "resizeObserver": false,
+        "preventLinkClicks": false,
+        "iconifyIcons": false,
+        "errorCapture": true
+      }
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "build:debug": "vite build --mode development",
+    "dev": "vite build --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.vue",
+    "lint:fix": "eslint src --ext .ts,.vue --fix"
+  },
+  "dependencies": {
+    "@wippy-fe/theme": "^0.0.68"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@wippy-fe/router": "^0.0.68",
+    "@wippy-fe/types-global-proxy": "^0.0.68",
+    "@wippy-fe/vite-plugin": "^0.0.68",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0",
+    "vue": "^3.5.0",
+    "vue-eslint-parser": "^9.4.3",
+    "vue-router": "^4.6.4"
+  },
+  "peerDependencies": {
+    "@wippy-fe/proxy": "^0.0.68",
+    "axios": "^1.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.0.0"
+  }
+}

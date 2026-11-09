@@ -22,6 +22,7 @@ Set-Location $PSScriptRoot
 $apps = @(
     @{ name = 'main';        dir = 'frontend/applications/main';        out = 'static/app/main' }
     @{ name = 'iframe-demo'; dir = 'frontend/applications/iframe-demo'; out = 'static/app/iframe-demo' }
+    @{ name = 'dashboard-page'; dir = 'frontend/applications/dashboard-page'; out = 'static/app/dashboard-page' }
 )
 
 $wcs = @(
@@ -38,6 +39,7 @@ $wcs = @(
 # Subset that runs `npm run lint` - mirrors Makefile's `lint:` recipe.
 $lintDirs = @(
     'frontend/applications/main'
+    'frontend/applications/dashboard-page'
     'frontend/web-components/reaction-bar'
     'frontend/web-components/websocket-log'
     'frontend/web-components/chart-circle'

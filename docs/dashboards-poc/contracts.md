@@ -202,7 +202,7 @@ JSON note: the runtime's JSON encoder cannot write `null` inside an object, so t
 
 | Attribute | JSON | Content |
 |---|---|---|
-| `sub-path` | string | The path below the page's mount route, from `config.context.route`, without the query |
+| `sub-path` | string | The path below the page's mount route, from `config.context.route`, without the query and without a trailing slash: `""` at the page root, `/claude-haiku-4-5` at `/reports/llm-usage/claude-haiku-4-5` |
 | `page-url` | string | `/api/v1/dashboards/pages/<id>` |
 | `layout` | object | `{ "breakpoints": {...}, "layouts": {...} }` |
 | `tiles` | object | Tile id to compiled tile (below) |
@@ -231,6 +231,8 @@ The board, before each tile update, replaces each `$param` with the current valu
 - `actions`: `{ "<name>": { "url": "<page-url>/actions/<name>", "confirm": true } }`
 
 Current values: default first, then `from_path` (segment N of `sub-path`, decoded), then user changes. Clearing a selection returns a parameter to its default. A tile depends on a parameter when the parameter appears in its `data` args or in its `params` list. Only dependent tiles get a new `request-id`.
+
+A control tile (with `param`) also receives its own parameter's current value in its `params` attribute, under the parameter's name, so it can show the selection. A change of that value updates the control's `params` attribute, but it is not a data dependency: the control keeps its `request-id` and does not read its options again.
 
 ## 7. Result envelope
 
@@ -332,11 +334,11 @@ The generator writes one entry per published page through a registry changeset, 
     base_path: app/dashboard-page
     entry_point: app.html
     mountRoute: /reports/llm-usage/:part(.*)*
-    resource_id: llm_usage             # becomes config.context.resourceId
+    resource_id: llm_usage             # kept for clarity; Host 1.0.68 does not use it
     managed_by: wippy.dashboards
 ```
 
-Entry ids live in `wippy.dashboards.pages`. Access uses `view` on `page:<entry id>`.
+Entry ids live in `wippy.dashboards.pages`. Access uses `view` on `page:<entry id>`. Host 1.0.68 passes the entry id (`wippy.dashboards.pages:llm_usage`) as `config.context.resourceId`, not `meta.resource_id`, so the page host keeps the part after the last `:` as the page id. The Wippy KB said otherwise; the running app showed this on 2026-11-09.
 
 ## 12. Seeded users and test policies
 
