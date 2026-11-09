@@ -3,8 +3,8 @@ directories:
     src: ./src
 modules:
     - name: keeper/keeper
-      version: 0.5.112
-      hash: c0ddeada875a2e8c1b8cc51de4e59a97c1c0f87feb1e962f67bbc88f1a95c1c3
+      version: 0.5.113
+      hash: a7b9455c3c83d8db0bf65da4518cc4d20aa18f070ab4916c322358717071dbd4
     - name: userspace/contract
       version: 0.4.1
       hash: c154e2cc11ca94ddd368307aced96cfbbd411a58e74e46339d50b4a9befc1d65
@@ -27,8 +27,8 @@ modules:
       version: 0.1.3
       hash: f8851bd7aa73638712e9d545a95abcea29a62ba4329c56237e1658641844b048
     - name: wippy/agent
-      version: 0.5.11
-      hash: 09667b33edc815b7e9e904e57d64d50db96ebace931a11a2ea899223d7b36117
+      version: 0.5.12
+      hash: 06c8a69d8ad27f26d3c7667c5b96c165fe5bc74f4134429176ccba5be96bb082
     - name: wippy/bootloader
       version: 0.3.18
       hash: c7e71b358539b450b49b55e725f60f2dac8218e1c596cf3a473ce71e36b10a9b
@@ -36,11 +36,11 @@ modules:
       version: 0.7.35
       hash: 5fcb01e1f5a8b379e167fbf2349bd237fa749c917c24fd54c35f01060b4953ae
     - name: wippy/facade
-      version: 0.6.49
-      hash: aabaacf8741c15e95009c31e9264a66c05ecb5465a95e7dd361329e1ae5a6cb0
+      version: 0.6.51
+      hash: 26140080570d7ebbdec284e3a5b98b03665405aa56d3c3be112c45d34b2d05ad
     - name: wippy/llm
-      version: 0.5.14
-      hash: d7c1fb6c01657105b14f2a04d7a45774b69328de2a72d4ff0462ab6f7398785b
+      version: 0.5.15
+      hash: 854fe7dd620354ea1db7f8d7e8781e7baf52b83b9d787690bc1452a95eb4d69f
     - name: wippy/migration
       version: 0.3.26
       hash: cf4848ad3f8ba8d31d944b2f3a7274bc2b7cf2888dd80f0db63b2c71a85f89c1
@@ -60,10 +60,10 @@ modules:
       version: 0.4.24
       hash: b118903b3a239b3cd423169c64f17d89b8b920b5fefbf79f94789cf49f9341b5
     - name: wippy/usage
-      version: 0.3.26
-      hash: 94481ca0cfc0aa25246ad64f13724f73f3c9facfe3a5516f92efbebb71aa0ee4
+      version: 0.3.27
+      hash: 13151b16893bc035f4fc0b1aa5a9ce4628958d2c1630350891481e45e39fae33
     - name: wippy/views
-      version: 0.5.13
-      hash: b98c1733dfd5aafa628d81a5f587f2a47f78246d55e60ae3d4fd8d2b90853488
+      version: 0.5.14
+      hash: bef6c33c26c9b098b3f2b6ddfc2602341b2d16763030051b693cba466bc6b40c
 options:
     unpack_modules: true
