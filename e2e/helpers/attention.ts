@@ -254,6 +254,7 @@ export interface PersistedMessage {
   message_id: string
   metadata?: {
     context_attachments?: ContextAttachment[]
+    file_uuids?: string[]
     call_id?: string
     error_code?: string
     registry_id?: string
@@ -1360,6 +1361,11 @@ interface ComposerDiagnostic {
 // are absent from the production bundles used by the release smoke tests.
 const activeSessionComposers = new WeakMap<Page, { sessionId: string, composer: Locator }>()
 
+// The Host 1.0.64 chat names its Stop control "Stop generating" ("Stopping..." while
+// the stop settles). Hosts before it used "Stop session", which the compatibility
+// cells for those Hosts still run against, so the selector accepts both.
+export const STOP_CONTROL_SELECTOR = 'button[aria-label="Stop generating"], button[aria-label="Stopping…"], button[aria-label="Stop session"]'
+
 export async function composerDiagnostics(page: Page): Promise<ComposerDiagnostic[]> {
   const diagnostics: ComposerDiagnostic[] = []
   for (const frame of page.frames()) {
@@ -1368,16 +1374,16 @@ export async function composerDiagnostics(page: Page): Promise<ComposerDiagnosti
     for (let index = 0; index < count; index++) {
       const composer = composers.nth(index)
       const visible = await composer.isVisible().catch(() => false)
-      const detail = await composer.evaluate((element) => {
+      const detail = await composer.evaluate((element, stopSelector) => {
         const root = element.closest('.chat-input')
         return {
           connected: element.isConnected,
           editable: !(element as HTMLTextAreaElement).disabled && !(element as HTMLTextAreaElement).readOnly,
           frame: (window as typeof window & { __wippyAttentionE2ERealmId?: string }).__wippyAttentionE2ERealmId ?? 'unidentified',
           sendVisible: Boolean(root?.querySelector('button[aria-label="Send message"]:not(:disabled)')?.getClientRects().length),
-          stopVisible: Boolean(root?.querySelector('button[aria-label="Stop session"]')?.getClientRects().length),
+          stopVisible: Boolean(root?.querySelector(stopSelector)?.getClientRects().length),
         }
-      }).catch(() => undefined)
+      }, STOP_CONTROL_SELECTOR).catch(() => undefined)
       const owner = activeSessionComposers.get(page)
       const handle = await composer.elementHandle()
       const isOwner = owner && handle

@@ -27,6 +27,7 @@
  *  - Run: WIPPY_URL=http://localhost:8080 npx playwright test e2e/fragment-poc.spec.ts
  */
 import { expect, test } from '@playwright/test'
+import { collectConsoleErrors } from './helpers/console'
 import { loginAsAdmin } from './helpers/login'
 
 // Errors that occur on the pre-login facade shell (before auth) are expected.
@@ -37,12 +38,7 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
   test.skip(process.env.WIPPY_ENGINE === 'iframe', 'fragment engine only')
 
   test('A–G: fragment renders with API, WS, theming, routing, isolation', async ({ page }) => {
-    const errors: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error' && !PRELOGIN_NOISE.test(m.text()))
-        errors.push(m.text())
-    })
-    page.on('pageerror', e => errors.push(`pageerror: ${e.message}`))
+    const errors = collectConsoleErrors(page, PRELOGIN_NOISE)
 
     await loginAsAdmin(page)
 
@@ -166,12 +162,7 @@ test.describe('Web Fragments PoC (EE2-2313)', () => {
   })
 
   test('H-I: host CSS survives the reframed stream + nested <w-artifact> embeds render', async ({ page }) => {
-    const errors: string[] = []
-    page.on('console', (m) => {
-      if (m.type() === 'error' && !PRELOGIN_NOISE.test(m.text()))
-        errors.push(m.text())
-    })
-    page.on('pageerror', e => errors.push(`pageerror: ${e.message}`))
+    const errors = collectConsoleErrors(page, PRELOGIN_NOISE)
 
     await loginAsAdmin(page)
     await expect(page.locator('web-fragment').first()).toBeAttached({ timeout: 20_000 })

@@ -576,7 +576,28 @@ static get wippyConfig(): WippyElementConfig<ComponentProps> {
 </example-mermaid>
 ```
 
-Uses `<template>` instead of `<script>` because Vue templates strip script tags. The native `<template>` element is inert (not rendered) and works in both raw HTML and Vue SFC templates.
+Uses `<template>` instead of `<script>` because Vue templates strip script tags. The native `<template>` element is inert (not rendered), and in raw HTML the text inside it reaches the component as written.
+
+In a Vue SFC, the template compiler condenses whitespace in static text, so multi-line text written inside the `<template>` arrives on one line and a format such as Mermaid can't parse it. Keep the text in a script string and pass it with `v-text`, which sets it at runtime and keeps the newlines:
+
+```vue
+<script setup lang="ts">
+const diagram = `sequenceDiagram
+    participant H as Host
+    participant C as Component
+    H->>C: Register tag`
+</script>
+
+<template>
+  <example-mermaid>
+    <!-- eslint-disable-next-line vue/no-lone-template -- native inert template, not a Vue slot template -->
+    <template
+      data-type="text/vnd.mermaid"
+      v-text="diagram"
+    />
+  </example-mermaid>
+</template>
+```
 
 ### Reading content in Vue
 

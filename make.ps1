@@ -20,8 +20,9 @@ Set-Location $PSScriptRoot
 # (name, dir, out) tuples - single source of truth for every build-app-* /
 # build-wc-* target. Keep in sync with the Makefile when adding apps.
 $apps = @(
-    @{ name = 'main';        dir = 'frontend/applications/main';        out = 'static/app/main' }
-    @{ name = 'iframe-demo'; dir = 'frontend/applications/iframe-demo'; out = 'static/app/iframe-demo' }
+    @{ name = 'main';               dir = 'frontend/applications/main';               out = 'static/app/main' }
+    @{ name = 'iframe-demo';        dir = 'frontend/applications/iframe-demo';        out = 'static/app/iframe-demo' }
+    @{ name = 'session-forms-demo'; dir = 'frontend/applications/session-forms-demo'; out = 'static/app/session-forms-demo' }
 )
 
 $wcs = @(
@@ -37,6 +38,7 @@ $wcs = @(
 # Subset that runs `npm run lint` - mirrors Makefile's `lint:` recipe.
 $lintDirs = @(
     'frontend/applications/main'
+    'frontend/applications/session-forms-demo'
     'frontend/web-components/reaction-bar'
     'frontend/web-components/websocket-log'
     'frontend/web-components/chart-circle'
@@ -86,9 +88,7 @@ function Invoke-Lint {
     Push-Location $Dir
     try {
         Write-Host "==> lint $Dir" -ForegroundColor Cyan
-        # These packages intentionally use local .eslintrc.cjs files. The
-        # candidate worktree can live under a repository with a flat config,
-        # so select legacy mode explicitly instead of inheriting that parent.
+        # Lint in eslintrc mode, as the Makefile does (see the comment there).
         $env:ESLINT_USE_FLAT_CONFIG = 'false'
         npm run lint
         if ($LASTEXITCODE -ne 0) { throw "npm run lint failed in $Dir (exit $LASTEXITCODE)" }
@@ -110,6 +110,24 @@ function Invoke-BuildAll {
     }
 }
 
+# Same lookup as resolveWippyBinary() in scripts/run-dev.mjs: $env:WIPPY, then
+# ./wippy.exe, then wippy on PATH.
+function Resolve-WippyBinary {
+    if ($env:WIPPY) { return $env:WIPPY }
+    if (Test-Path './wippy.exe') { return './wippy.exe' }
+    return 'wippy'
+}
+
+function Invoke-WippyLint {
+    $wippyBin = Resolve-WippyBinary
+    # Two runs, as in the Makefile. See the comment there.
+    foreach ($profileArgs in @(@(), @('--profile', 'session-forms-fixtures'))) {
+        Write-Host "==> $wippyBin lint --level error --ns app,app.* $profileArgs" -ForegroundColor Cyan
+        & $wippyBin lint --level error --ns 'app,app.*' @profileArgs
+        if ($LASTEXITCODE -ne 0) { throw "wippy lint failed (exit $LASTEXITCODE)" }
+    }
+}
+
 function Show-Help {
     Write-Host "make - Windows mirror of the Makefile (via make.bat -> make.ps1)`n"
     Write-Host "Targets:"
@@ -118,12 +136,14 @@ function Show-Help {
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
+    Write-Host "  verify             build + lint + wippy lint --level error for app, app.*"
     Write-Host "  test-attention     Run Attention acceptance in Chromium"
     Write-Host "  test-attention-touch Run Attention touch acceptance in Chromium"
     Write-Host "  test-attention-helpers Run Attention codec and helper checks"
     Write-Host "  clean-build        Wipe node_modules + reinstall + rebuild"
     Write-Host "  dev                npm run dev in frontend/applications/main"
     Write-Host "  run                build, then ./wippy.exe run -c"
+    Write-Host "  run-dev            build, then node scripts/run-dev.mjs (generic local launcher)"
     Write-Host "  prepare-e2e        Prepare an isolated app with test agents"
     Write-Host "  run-e2e            build, prepare-e2e, then run the isolated app"
     Write-Host "  help               Show this message`n"
@@ -161,6 +181,13 @@ try {
         }
         '^lint$' {
             foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            break
+        }
+        '^verify$' {
+            # Same steps as the Makefile's verify target.
+            Invoke-BuildAll
+            foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            Invoke-WippyLint
             break
         }
         '^test-attention$' {
@@ -217,6 +244,12 @@ try {
             finally {
                 Pop-Location
             }
+            break
+        }
+        '^run-dev$' {
+            Invoke-BuildAll
+            node scripts/run-dev.mjs
+            if ($LASTEXITCODE -ne 0) { throw "run-dev.mjs failed (exit $LASTEXITCODE)" }
             break
         }
         default {

@@ -1,7 +1,7 @@
 # app-template e2e tests
 
-End-to-end tests for the proxy bridge API + `<w-iframe>` / `<w-artifact>`
-custom elements introduced in Wippy FE Host 1.0.33.
+Playwright tests that drive the app through the facade login flow. The
+Coverage section lists what each spec checks.
 
 ## Prerequisites
 
@@ -37,6 +37,32 @@ URL.
    ```sh
    wippy run -c -o app:gateway:addr=:8086 -o wippy.facade:fe_facade_url:default=http://localhost:5173
    ```
+
+   Equivalent via the generic local launcher (`scripts/run-dev.mjs`), which
+   also keeps the `.env`-derived URLs (`WIPPY_URL` / `APP_BASE_URL` /
+   `PUBLIC_API_URL`) in sync with the port. It does not edit your `.env`: it
+   writes a per-run copy of `.env` with those keys and `APP_PORT` replaced under
+   `.local/run-dev/`, points the runtime at it, and deletes it when the runtime
+   exits. A dry run (`RUN_DEV_DRY_RUN=1`) writes nothing. The launcher refuses
+   to start when `.env` has no `ENCRYPTION_KEY`, because a key the runtime
+   generated into the per-run copy would be lost; run `make run` once first so
+   the runtime writes the key to `.env`. The launcher passes the
+   same four values to the runtime's process environment; for the Playwright run
+   in another shell, set `WIPPY_URL` to the app origin yourself (the launcher
+   prints it and writes it to the `RUN_DEV_MANIFEST` file when you set one):
+   ```sh
+   APP_PORT=8086 FACADE_URL=http://localhost:5173 make run-dev
+   # Windows:
+   set APP_PORT=8086&& set FACADE_URL=http://localhost:5173&& make.bat run-dev
+   ```
+   Other supported env vars: `WIPPY` (path to the runtime binary),
+   `WIPPY_CONFIG` (extra `--config` files, delimited by `;` on Windows / `:`
+   elsewhere) and `WIPPY_OVERRIDES` (extra `entry:path=value` overrides,
+   delimited by `;`). Leave `APP_PORT` unset (or `auto`) to pick a free port.
+
+   `session-forms.spec.ts` needs the Session Forms dev fixtures, which are off
+   by default. See [Session Forms demo](../README.md#session-forms-demo) for how
+   to turn them on.
 
 ## Run
 
@@ -78,7 +104,7 @@ Wippy runtime:
 
 | Variable | Values | Matches in the runtime |
 |---|---|---|
-| `WIPPY_URL` | `http://127.0.0.1:8086` | The gateway address. Use `127.0.0.1`, because the WebSocket origin check rejects `localhost`. |
+| `WIPPY_URL` | `http://127.0.0.1:8086` | The gateway address. Spell it the way `PUBLIC_API_URL` does (`127.0.0.1` here). The WebSocket origin check accepts an Origin with the same host and port as the socket, and the `allow_origins` list in `src/app/_index.yaml`; it answers 403 when the page uses `localhost` and the socket uses `127.0.0.1`, and the other way round. |
 | `WIPPY_LAYOUT` | `compat` or `managed` | `wippy.facade:fe_mode` |
 | `WIPPY_ENGINE` | `iframe` or `fragment` | `wippy.facade:render_engine` |
 | `WIPPY_ATTENTION_MODE` | `enabled` (default) or `disabled` | `enabled` in `wippy.facade:attention` |
@@ -252,46 +278,44 @@ pnpm test:e2e:headed
 
 ## Coverage
 
-- `warn-suppressor.spec.ts` — seven test cases for `@wippy-fe/proxy`'s
-  `installVueWarnSuppressor`:
-  1. **No false-positive warnings during route traversal.** Visits every
-     iframe-demo route (Chart / Counter / Mermaid / Bridge) and asserts
-     ZERO `[Vue warn]: Failed to resolve component:` console messages.
-  2. **Suppressor installed + marker set.** Drills into `__vue_app__` and
-     asserts both `warnHandler` is a function and the
-     `Symbol.for('@wippy-fe/proxy/vue-warn-suppressor-installed')` marker
-     is on `app.config`.
-  3. **PascalCase typo passes through (synthetic).** Invokes the live
-     handler with `'Failed to resolve component: UsreCard'`; asserts the
-     warning reaches `console.warn`.
-  4. **Second install is a true no-op.** Dynamic-imports
-     `@wippy-fe/proxy` from inside the iframe, calls
-     `installVueWarnSuppressor(app)` a second time, asserts handler
-     reference is unchanged.
-  5. **Exported marker constant equals planted symbol.** Reads
-     `VUE_WARN_SUPPRESSOR_INSTALLED_MARKER` from the bundle and asserts
-     `app.config[exportedMarker] === true`.
-  6. **Coexistence.** `/home/iframe-demo` mounts default + themed
-     `<w-artifact>` side-by-side; each Vue app has its own marker.
-  7. **Vue app instance stable across routes.** Captures `__vue_app__`
-     via `evaluateHandle`, traverses all routes, asserts the same
-     reference — guards against re-mount regressions that would silently
-     lose the suppressor.
-
-- `bridge.spec.ts` — three test cases:
-  1. `all four bridge interactions over the demo page` — drives the
-     iframe-demo `/bridge` route. Clicks the parent buttons to exercise
-     `parent → child request('add')` and `parent → child post('parent-fire')`;
-     drills into the child srcdoc to click its own buttons for
-     `child → parent post('child-fire')` and `child → parent request('echo')`.
-     Asserts every interaction lands in the parent event log AND in the
-     window-scoped `window.__bridgeLog` history array.
-  2. `<w-iframe> registered inside the host frame` — drills into the
-     iframe-demo (child) Window and asserts `customElements.get('w-iframe')`
-     resolves to a function. Proves the proxy registers the element in
-     child-iframe contexts.
-  3. `<w-artifact> registered inside the host frame` — same shape, but for
-     the host-side `<w-artifact>` wrapper that mounts iframe-demo.
+- `bridge.spec.ts` checks the proxy bridge on the iframe-demo `/bridge` page. The
+  first test exercises four interactions: parent to child `request('add')` and
+  `post('parent-fire')`, and child to parent `post('child-fire')` and
+  `request('echo')`. It checks each one in the parent event log and in
+  `window.__bridgeLog`. The other two tests check that `<w-iframe>` and
+  `<w-artifact>` are registered as custom elements.
+- `session-forms.spec.ts` has six tests against the scripted fixture agents. In
+  the first, the agent asks for a form, the test answers it, and the form stays
+  answered after a reload. In the second, the test answers a form after the
+  conversation has moved on, and the agent replies with the late-answer notice.
+  The third presses Enter on the required several-answer form (`ask me several`)
+  with nothing ticked and expects the tick-one message. The last four run the
+  job phrases: `fail after text` and `limit after text` (Limit Fixture agent) as
+  the Other text of a form, where the text and tool call stay, the error follows
+  and the card reads interrupted, and `artifact and ask`, where the note shows
+  once before and after the answer. The 25 second `slow tool` phrase has no
+  test. All fail on a console error. Needs the Session Forms dev fixtures. The suite
+  skips itself unless `SESSION_FORMS_DEV_FIXTURES=true` is set in the
+  environment or `.env` of the test run.
+- `iframe-engine.spec.ts` checks the default iframe render engine. A page renders
+  as a srcdoc iframe, the fragment gateway is never requested, and `$W` and
+  state work. It is skipped when `WIPPY_ENGINE=fragment`.
+- `fragment-poc.spec.ts` and `fragment-parity.spec.ts` check the fragment render
+  engine (`-o wippy.facade:render_engine:default=fragment`). The first covers
+  API, WebSocket, theming, routing, isolation, host CSS and nested
+  `<w-artifact>` embeds. The second covers state, global error capture and
+  title propagation. Both are skipped when `WIPPY_ENGINE=iframe`.
+- `managed-layout.spec.ts` checks the managed layout shell through the facade
+  login flow. The default config ignores it. Start the app with
+  `-o wippy.facade:fe_mode:default=managed` and run `pnpm test:e2e:managed`.
+- `theming.spec.ts` checks that `/api/public/facade/variables.css` and
+  `/api/public/facade/config` resolve the `fs://` references in the facade
+  `css_variables` and `custom_css` settings.
+- `theme-persistence.spec.ts` checks the facade theme cookie. It covers the
+  `theme-persist.js` script, the config values, the theme class that the server
+  renders on `<html>`, and the theme switchers on both login pages.
+- `version-leak.spec.ts` checks that only the Web Host version in
+  `WIPPY_HOST_VERSION` loads from the CDN.
 
 - `attention-tracer.spec.ts`: five tests, run once for each layout and engine cell.
   1. Keeps nested navigation in sync through tab clicks, browser history and
