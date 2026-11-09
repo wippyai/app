@@ -67,3 +67,6 @@ modules:
       hash: ee41fb927091dc3873752f97291080889a4d56fe610a540b910c01b98afffbe3
 options:
     unpack_modules: true
+replacements:
+    - from: wippy-swiss/chartjs
+      to: ../../../../web-components/.local/worktrees/chartjs-click/src/chartjs
