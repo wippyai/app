@@ -285,6 +285,10 @@ async function retry() {
     >
       <span v-if="frame.sourceTitle">{{ frame.sourceTitle }}</span>
       <span v-if="frame.computedAt">Computed {{ formatTime(frame.computedAt) }}</span>
+      <span
+        v-if="frame.computedAt"
+        data-as-of
+      >Data as of {{ frame.dataAsOf ? formatTime(frame.dataAsOf) : 'unknown' }}</span>
       <span v-if="frame.status === 'computing'">Computing</span>
       <span v-if="frame.stale">Stale</span>
       <span v-if="frame.completeness === 'partial'">Partial</span>

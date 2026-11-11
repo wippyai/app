@@ -1,12 +1,33 @@
-import type { FrameLocator, Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import type { Browser, BrowserContext, FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 
 /**
- * Dashboards POC checks. Needs the POC pages published first:
- * stage B pages `coord_ph_one` (/coord/ph-one, five placeholder tiles, t5 silent)
- * and `coord_ph_two` (/coord/ph-two, two placeholder tiles).
+ * Dashboards POC checks. Generated pages are lost when the app restarts, so the suite publishes
+ * them before the first test: the two demo pages through `POST /api/v1/demo/build`, and the
+ * stage B pages from e2e/fixtures/dashboards: `coord_ph_one` (/coord/ph-one, five placeholder
+ * tiles, t5 silent) and `coord_ph_two` (/coord/ph-two, two placeholder tiles). Each test signs
+ * in afterwards in its own context, so the shell loads the routes of the published pages.
  */
+
+test.beforeAll(async ({ browser }) => {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  try {
+    await loginAsAdmin(page)
+    const build = await api(page, 'POST', '/api/v1/demo/build', {})
+    expect(build.status, build.body).toBe(200)
+    for (const name of ['coord_ph_one', 'coord_ph_two']) {
+      const spec: unknown = JSON.parse(readFileSync(`e2e/fixtures/dashboards/${name}.json`, 'utf8'))
+      const published = await api(page, 'POST', '/api/v1/dashboards/pages', spec)
+      expect(published.status, published.body).toBe(200)
+    }
+  }
+  finally {
+    await context.close()
+  }
+})
 
 function pageFrame(page: Page, id: string): FrameLocator {
   return page.frameLocator(`iframe[name="wippy:page:wippy.dashboards.pages:${id}"]`)
@@ -30,24 +51,165 @@ async function boxes(frame: FrameLocator, ids: string[]) {
   return out
 }
 
-/** Collects console errors and failed requests from the page and all its frames. */
-function watchErrors(page: Page) {
-  const errors: string[] = []
+/** One problem a page reported. `status` and `path` are set when it concerns one HTTP response. */
+interface Problem {
+  text: string
+  status?: number
+  path?: string
+}
+
+/** A failure that a test causes on purpose: this status on a path that contains `path`. */
+interface ExpectedFailure {
+  status: number
+  path: string
+}
+
+interface Watch {
+  name: string
+  problems: Problem[]
+  aborted: string[]
+  expected: ExpectedFailure[]
+}
+
+const watches = new Map<Page, Watch>()
+const contexts: BrowserContext[] = []
+
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname
+  }
+  catch {
+    return url
+  }
+}
+
+/**
+ * Turns off the HTTP cache (plan section 7) and records console errors, page errors, error
+ * responses and failed requests from the page and all its frames. It runs before the page signs
+ * in, so sign-in problems count too. `afterEach` fails the test on any problem it did not expect.
+ */
+async function monitor(page: Page, name: string): Promise<void> {
+  // Playwright turns off the HTTP cache of a page that routes its requests.
+  await page.route('**/*', route => route.continue().catch(() => {}))
+  const watch: Watch = { name, problems: [], aborted: [], expected: [] }
   page.on('console', (m) => {
-    if (m.type() === 'error')
-      errors.push(`console: ${m.text().slice(0, 200)}`)
+    if (m.type() !== 'error')
+      return
+    const status = /status of (\d{3})/.exec(m.text())
+    watch.problems.push({
+      text: `console: ${m.text().slice(0, 200)} @ ${pathOf(m.location().url)}`,
+      status: status ? Number(status[1]) : undefined,
+      path: status ? pathOf(m.location().url) : undefined,
+    })
   })
-  page.on('pageerror', e => errors.push(`pageerror: ${e.message.slice(0, 200)}`))
+  page.on('pageerror', e => watch.problems.push({ text: `pageerror: ${e.message.slice(0, 200)}` }))
   page.on('response', (r) => {
     if (r.status() >= 400)
-      errors.push(`http ${r.status()}: ${new URL(r.url()).pathname}`)
+      watch.problems.push({ text: `http ${r.status()} ${r.request().method()} ${pathOf(r.url())}`, status: r.status(), path: pathOf(r.url()) })
   })
   page.on('requestfailed', (r) => {
-    // A navigation cancels the previous page's open requests; built-in pages show the same.
-    if (r.failure()?.errorText !== 'net::ERR_ABORTED')
-      errors.push(`failed: ${new URL(r.url()).pathname} ${r.failure()?.errorText ?? ''}`)
+    const reason = r.failure()?.errorText ?? ''
+    const path = pathOf(r.url())
+    const line = `${r.method()} ${path} ${reason}`
+    // The one expected failure: a navigation (sign-in, a direct link) cancels the Host's own module
+    // loads under /webcomponents-<version>/. Any other aborted request, such as a point read, an API
+    // call or a tile bundle, is a problem.
+    if (reason === 'net::ERR_ABORTED' && r.method() === 'GET' && /^\/webcomponents-[\d.]+\//.test(path))
+      watch.aborted.push(line)
+    else
+      watch.problems.push({ text: `failed: ${line}` })
   })
-  return errors
+  watches.set(page, watch)
+}
+
+/** Declares failures the test causes on purpose, such as a refused call. */
+function expectFailures(page: Page, ...failures: ExpectedFailure[]) {
+  watches.get(page)?.expected.push(...failures)
+}
+
+/** A new signed-out browser context and page, monitored from the start. */
+async function newPage(browser: Browser, name: string): Promise<Page> {
+  const context = await browser.newContext({ viewport: { width: 1400, height: 900 } })
+  contexts.push(context)
+  const page = await context.newPage()
+  await monitor(page, name)
+  return page
+}
+
+test.beforeEach(async ({ page }) => {
+  await monitor(page, 'page')
+})
+
+test.afterEach(async () => {
+  const unexpected: string[] = []
+  for (const watch of watches.values()) {
+    if (watch.aborted.length > 0)
+      console.log(`${watch.name} aborted`, JSON.stringify(watch.aborted))
+    for (const p of watch.problems) {
+      const allowed = p.status !== undefined && p.path !== undefined
+        && watch.expected.some(e => e.status === p.status && p.path!.includes(e.path))
+      if (!allowed)
+        unexpected.push(`${watch.name}: ${p.text}`)
+    }
+  }
+  watches.clear()
+  for (const context of contexts.splice(0))
+    await context.close()
+  expect(unexpected).toEqual([])
+})
+
+/**
+ * Counts the bars a chart drew: the coloured runs along one pixel row just above the bars' base
+ * line. Grid lines and text are grey, so they do not count. A chart with labels but no bars counts 0.
+ */
+async function drawnBars(frame: FrameLocator, tileId: string): Promise<number> {
+  return frame.locator(`[data-tile-id="${tileId}"] wippy-chartjs canvas`).evaluate((el) => {
+    const canvas = el as HTMLCanvasElement
+    const ctx = canvas.getContext('2d')
+    if (!ctx || canvas.width === 0 || canvas.height === 0)
+      return -1
+    const { width, height } = canvas
+    const px = ctx.getImageData(0, 0, width, height).data
+    const coloured = (x: number, y: number) => {
+      const i = (y * width + x) * 4
+      return px[i + 3] > 200 && Math.max(px[i], px[i + 1], px[i + 2]) - Math.min(px[i], px[i + 1], px[i + 2]) > 80
+    }
+    let base = -1
+    for (let y = height - 1; y >= 0 && base < 0; y--) {
+      for (let x = 0; x < width; x++) {
+        if (coloured(x, y)) {
+          base = y
+          break
+        }
+      }
+    }
+    if (base < 0)
+      return 0
+    // 12 CSS pixels above the base: above the tiny bars of a small series, below every real bar here.
+    const y = base - Math.round(12 * height / canvas.clientHeight)
+    let runs = 0
+    let inRun = false
+    for (let x = 0; x < width; x++) {
+      const on = coloured(x, y)
+      if (on && !inRun)
+        runs++
+      inRun = on
+    }
+    return runs
+  })
+}
+
+/** The status cell of one user row, for an exact text check ("active" is inside "inactive"). */
+function statusCell(frame: FrameLocator, userId: string) {
+  return frame.locator(`[data-tile-id="users"] tr[data-user-id="${userId}"] [data-field="status"]`)
+}
+
+/** Waits until the action confirmation shows in the Host page or, as the fallback, in the frame. */
+async function confirmation(page: Page, frame: FrameLocator) {
+  const inPage = page.getByText('Please confirm').first()
+  const inFrame = frame.getByText('Please confirm').first()
+  await expect.poll(async () => (await inPage.isVisible()) || (await inFrame.isVisible()), { timeout: 10_000 }).toBe(true)
+  return (await inPage.isVisible()) ? page : frame
 }
 
 async function chartLabels(frame: FrameLocator, tileId: string): Promise<number> {
@@ -62,12 +224,15 @@ test.describe('stage C: built-in tiles with real data', () => {
   })
 
   test('LLM usage shows the real values', async ({ page }) => {
-    const errors = watchErrors(page)
     await openInShell(page, '/reports/llm-usage')
     const f = pageFrame(page, 'llm_usage')
     await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
     await expect(f.locator('[data-tile-id="text"]')).toContainText('38 calls used 550135 tokens. claude-sonnet-4-6 used 97.1% of them.')
+    // Five days: five labels, and five bars drawn on the canvas (one per day of the larger series).
     await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(5)
+    await expect.poll(() => drawnBars(f, 'by_day'), { timeout: 10_000 }).toBe(5)
+    // The points send no data_as_of, so every frame says it is unknown (contracts section 7).
+    await expect(f.locator('[data-tile-id="tokens"] [data-as-of]')).toHaveText('Data as of unknown')
     await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(2)
     await expect(f.locator('[data-tile-id="by_day"] figure[aria-label="Tokens by day"]')).toHaveCount(1)
     const canvas = await f.locator('[data-tile-id="by_day"] wippy-chartjs canvas').boundingBox()
@@ -90,20 +255,16 @@ test.describe('stage C: built-in tiles with real data', () => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await expect.poll(async () => f.locator('.dash-kpi__value').first().evaluate(el => getComputedStyle(el).color), { timeout: 5_000 }).not.toBe(lightColor)
     await page.emulateMedia({ colorScheme: 'light' })
-    console.log('errors', JSON.stringify(errors))
-    expect(errors).toEqual([])
   })
 
   test('App activity shows the real values', async ({ page }) => {
-    const errors = watchErrors(page)
     await openInShell(page, '/ops/app-activity')
     const f = pageFrame(page, 'app_activity')
-    await expect(f.locator('[data-tile-id="sessions"]')).toContainText('14', { timeout: 20_000 })
-    await expect(f.locator('[data-tile-id="messages"]')).toContainText('107')
+    await expect(f.locator('[data-tile-id="sessions"] .dash-kpi__value')).toHaveText('14', { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="messages"] .dash-kpi__value')).toHaveText('107')
     await expect.poll(() => chartLabels(f, 'sessions_by_month'), { timeout: 10_000 }).toBe(3)
+    await expect.poll(() => drawnBars(f, 'sessions_by_month'), { timeout: 10_000 }).toBe(3)
     await expect(f.locator('[data-tile-id="message_types"] tbody tr')).toHaveCount(6)
-    console.log('errors', JSON.stringify(errors))
-    expect(errors).toEqual([])
   })
 })
 
@@ -147,7 +308,6 @@ test.describe('stage D: arguments and interaction', () => {
   })
 
   test('choosing a model updates only the dependent tiles, and clear restores them', async ({ page }) => {
-    const errors = watchErrors(page)
     const reads = watchPointReads(page, 'llm_usage')
     await openInShell(page, '/reports/llm-usage')
     const f = pageFrame(page, 'llm_usage')
@@ -171,12 +331,9 @@ test.describe('stage D: arguments and interaction', () => {
     await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(2)
     await expect(f.locator('[data-tile-id="model_picker"] [role="combobox"]')).toContainText('All')
     await expect(f.locator('[data-selections]')).toHaveCount(0)
-    console.log('errors', JSON.stringify(errors))
-    expect(errors).toEqual([])
   })
 
   test('a bar click sets the day for the table only', async ({ page }) => {
-    const errors = watchErrors(page)
     const reads = watchPointReads(page, 'llm_usage')
     await openInShell(page, '/reports/llm-usage')
     const f = pageFrame(page, 'llm_usage')
@@ -196,26 +353,21 @@ test.describe('stage D: arguments and interaction', () => {
 
     await f.locator('[data-selection-clear="day"]').click()
     await expect(f.locator('[data-tile-id="by_model"]')).toContainText(/534[,.   ]?297/, { timeout: 10_000 })
-    console.log('errors', JSON.stringify(errors))
-    expect(errors).toEqual([])
   })
 
   test('the model comes from the path on a direct link', async ({ page }) => {
-    const errors = watchErrors(page)
+    // Let the shell that sign-in opened finish loading, so this navigation cancels none of its loads.
+    await page.waitForLoadState('networkidle')
     await page.goto('/reports/llm-usage/claude-haiku-4-5')
     const f = pageFrame(page, 'llm_usage')
     await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/15[,.   ]?838/, { timeout: 30_000 })
     await expect(f.locator('[data-selection="model"] [data-selection-value]')).toContainText('claude-haiku-4-5')
-    console.log('errors', JSON.stringify(errors))
-    expect(errors).toEqual([])
   })
 })
 
 /** Reads a seeded test account's password from src/demo_seed/_index.yaml (local test values). */
 function seededPassword(email: string): string {
-  // eslint-disable-next-line ts/no-require-imports
-  const fs = require('node:fs') as typeof import('node:fs')
-  const text = fs.readFileSync('src/demo_seed/_index.yaml', 'utf8')
+  const text = readFileSync('src/demo_seed/_index.yaml', 'utf8')
   const at = text.indexOf(`email: ${email}`)
   const m = at >= 0 ? text.slice(at).match(/password:\s*(\S+)/) : null
   if (!m)
@@ -253,7 +405,6 @@ async function api(page: Page, method: string, path: string, body?: unknown) {
 test.describe('stage E: plugins and live data', () => {
   test('plugin 1 shows the latest run as a tree', async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 900 })
-    const errors = watchErrors(page)
     await loginAsAdmin(page)
     await openInShell(page, '/ops/app-activity')
     const run = pageFrame(page, 'app_activity').locator('[data-tile-id="run"]')
@@ -277,13 +428,14 @@ test.describe('stage E: plugins and live data', () => {
     console.log('run tile', text.slice(0, 300))
     expect(text).toMatch(/workflow/)
     expect(text).toMatch(/completed/)
-    // The tree order is agent, its child tool.call, then func.
-    const order = ['agent', 'tool.call', 'func'].map(t => text.indexOf(t))
-    expect(order.every(i => i >= 0)).toBe(true)
-    expect(order[0] < order[1] && order[1] < order[2]).toBe(true)
     expect(text).toMatch(/7\.17 s/)
     expect(text).toMatch(/1 ms/)
-    expect(errors).toEqual([])
+    // The rendered tree: two top-level nodes, agent and func, and one child of agent, tool.call.
+    const rows = await run.locator('.run-timeline__node').evaluateAll(nodes => nodes.map(n => [
+      n.querySelector('.run-timeline__name')?.textContent?.trim() ?? '',
+      getComputedStyle(n).getPropertyValue('--depth').trim(),
+    ]))
+    expect(rows).toEqual([['agent', '0'], ['tool.call', '1'], ['func', '0']])
   })
 
   // The engine checks every read against the point's declared schema, so a plugin function whose
@@ -304,17 +456,16 @@ test.describe('stage E: plugins and live data', () => {
   })
 
   test('plugin 2 updates in another browser through the live signal', async ({ browser }) => {
-    const admin = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
-    const viewer = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
-    const errors = watchErrors(viewer)
+    const admin = await newPage(browser, 'admin')
+    const viewer = await newPage(browser, 'viewer')
     await loginAsAdmin(admin)
     await loginAs(viewer, 'viewer@wippy.local')
     const reads = watchPointReads(viewer, 'app_activity')
     await openInShell(viewer, '/ops/app-activity')
-    const users = pageFrame(viewer, 'app_activity').locator('[data-tile-id="users"]')
-    await expect(users.locator('tr[data-user-id]')).toHaveCount(3, { timeout: 20_000 })
-    const target = users.locator('tr[data-user-id="target@wippy.local"]')
-    await expect(target).toContainText('active')
+    const vf = pageFrame(viewer, 'app_activity')
+    await expect(vf.locator('[data-tile-id="users"] tr[data-user-id]')).toHaveCount(3, { timeout: 20_000 })
+    const target = statusCell(vf, 'target@wippy.local')
+    await expect(target).toHaveText('active')
     await viewer.evaluate(() => { (window as any).__noReload = 1 })
     await viewer.waitForTimeout(1000)
 
@@ -322,10 +473,10 @@ test.describe('stage E: plugins and live data', () => {
       // A change with no signal does not show: the point has no timed refresh.
       expect((await api(admin, 'PUT', '/api/v1/users/target%40wippy.local', { status: 'inactive' })).status).toBe(200)
       await viewer.waitForTimeout(1500)
-      await expect(target).not.toContainText('inactive')
+      await expect(target).toHaveText('active')
       const before = reads.length
       expect((await api(admin, 'POST', '/api/v1/demo/signal/users', {})).status).toBe(200)
-      await expect(target).toContainText('inactive', { timeout: 10_000 })
+      await expect(target).toHaveText('inactive', { timeout: 10_000 })
       await viewer.waitForTimeout(800)
       console.log('reads after signal', JSON.stringify(reads.slice(before)))
       expect(reads.slice(before)).toEqual(['users'])
@@ -345,8 +496,6 @@ test.describe('stage E: plugins and live data', () => {
       await api(admin, 'PUT', '/api/v1/users/target%40wippy.local', { status: 'active' })
       await api(admin, 'POST', '/api/v1/demo/signal/users', {})
     }
-    console.log('errors', JSON.stringify(errors))
-    expect(errors).toEqual([])
   })
 })
 
@@ -382,34 +531,52 @@ test.describe('stage F: plan section 7 checks not covered above', () => {
     expect(reads.slice(before)).toEqual([])
   })
 
-  test('an action by the admin reaches the open viewer browser through the live signal', async ({ browser }) => {
-    const admin = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
-    const viewer = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
-    const errors = watchErrors(viewer)
+  test('the admin changes a status in the page, and the open viewer browser updates through the live signal', async ({ browser }) => {
+    const admin = await newPage(browser, 'admin')
+    const viewer = await newPage(browser, 'viewer')
     await loginAsAdmin(admin)
     await loginAs(viewer, 'viewer@wippy.local')
     await openInShell(viewer, '/ops/app-activity')
-    const target = pageFrame(viewer, 'app_activity').locator('[data-tile-id="users"] tr[data-user-id="target@wippy.local"]')
-    await expect(target).toContainText('active', { timeout: 20_000 })
+    const viewerStatus = statusCell(pageFrame(viewer, 'app_activity'), 'target@wippy.local')
+    await expect(viewerStatus).toHaveText('active', { timeout: 20_000 })
     await viewer.evaluate(() => { (window as any).__noReload = 1 })
+
+    await openInShell(admin, '/ops/app-activity')
+    const af = pageFrame(admin, 'app_activity')
+    const adminStatus = statusCell(af, 'target@wippy.local')
+    await expect(adminStatus).toHaveText('active', { timeout: 20_000 })
+    const button = af.locator('[data-tile-id="users"] tr[data-user-id="target@wippy.local"] [data-action="set_status"]')
+    const posts: string[] = []
+    admin.on('request', (r) => {
+      if (r.method() === 'POST' && r.url().includes('/actions/'))
+        posts.push(pathOf(r.url()))
+    })
     try {
-      const r = await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'inactive' }, idempotency_key: newKey() })
-      expect(r.status).toBe(200)
-      expect(JSON.parse(r.body).state).toBe('done')
-      await expect(target).toContainText('inactive', { timeout: 10_000 })
+      // Cancel sends nothing and changes nothing.
+      await button.click()
+      await (await confirmation(admin, af)).getByRole('button', { name: 'Cancel' }).click()
+      await admin.waitForTimeout(1000)
+      expect(posts).toEqual([])
+      await expect(adminStatus).toHaveText('active')
+
+      // Confirm sends one call. The admin's tile reads again, and the viewer's open page follows
+      // through the live signal with no reload.
+      await button.click()
+      await (await confirmation(admin, af)).getByRole('button', { name: 'Confirm' }).click()
+      await expect(adminStatus).toHaveText('inactive', { timeout: 10_000 })
+      expect(posts).toEqual([ACTION])
+      await expect(viewerStatus).toHaveText('inactive', { timeout: 10_000 })
       expect(await viewer.evaluate(() => (window as any).__noReload)).toBe(1)
     }
     finally {
       await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'active' }, idempotency_key: newKey() })
     }
-    await expect(target).not.toContainText('inactive', { timeout: 10_000 })
-    expect(errors).toEqual([])
+    await expect(viewerStatus).toHaveText('active', { timeout: 10_000 })
   })
 
   test('the admin sees the status controls and the viewer without the permission does not', async ({ browser }) => {
-    const admin = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
-    const viewer = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
-    const errors = [watchErrors(admin), watchErrors(viewer)]
+    const admin = await newPage(browser, 'admin')
+    const viewer = await newPage(browser, 'viewer')
     await loginAsAdmin(admin)
     await loginAs(viewer, 'viewer@wippy.local')
 
@@ -428,31 +595,50 @@ test.describe('stage F: plan section 7 checks not covered above', () => {
     await expect(viewerUsers.locator('tr[data-user-id]')).toHaveCount(3, { timeout: 20_000 })
     await expect(viewerUsers.locator('[data-action="set_status"]')).toHaveCount(0)
     await expect(viewerUsers.locator('.user-status__actions-head')).toHaveCount(0)
-    expect(errors.flat()).toEqual([])
   })
 
   test('one key runs once, another value with that key is refused, the viewer is refused', async ({ browser }) => {
-    const admin = await (await browser.newContext()).newPage()
-    const viewer = await (await browser.newContext()).newPage()
+    const admin = await newPage(browser, 'admin')
+    const viewer = await newPage(browser, 'viewer')
+    expectFailures(admin, { status: 409, path: ACTION })
+    expectFailures(viewer, { status: 403, path: ACTION })
     await loginAsAdmin(admin)
     await loginAs(viewer, 'viewer@wippy.local')
+    // The viewer can read the users point but may not run the action.
+    expect((await api(viewer, 'GET', '/api/v1/dashboards/pages/app_activity/points/users')).status).toBe(200)
+
+    // Each run of the action sends the live signal, and the viewer's open page reads users once per
+    // signal (signals within 250 ms join). So the viewer's reads count the runs.
+    const reads = watchPointReads(viewer, 'app_activity')
+    await openInShell(viewer, '/ops/app-activity')
+    await expect(pageFrame(viewer, 'app_activity').locator('[data-tile-id="users"] tr[data-user-id]')).toHaveCount(3, { timeout: 20_000 })
+    await viewer.waitForTimeout(1000)
+    const runsSince = (mark: number) => reads.slice(mark).filter(point => point === 'users').length
+
     const key = newKey()
     try {
+      let mark = reads.length
       const first = JSON.parse((await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'inactive' }, idempotency_key: key })).body)
-      const again = JSON.parse((await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'inactive' }, idempotency_key: key })).body)
       expect(first.state).toBe('done')
+      await expect.poll(() => runsSince(mark), { timeout: 10_000 }).toBe(1)
+      await viewer.waitForTimeout(1500)
+      expect(runsSince(mark)).toBe(1)
+
+      // The same key again: the stored result comes back, and the action does not run.
+      mark = reads.length
+      const again = JSON.parse((await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'inactive' }, idempotency_key: key })).body)
       expect(again.state).toBe('done')
       expect(again.replayed).toBe(true)
+      // Another value with the same key: refused, and the action does not run.
       const other = await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'active' }, idempotency_key: key })
       expect(other.status).toBe(409)
       expect(JSON.parse(other.body).error.code).toBe('idempotency_conflict')
-      expect(await targetStatus(admin)).toBe('inactive')
-
-      // The viewer can read the users point but may not run the action.
-      expect((await api(viewer, 'GET', '/api/v1/dashboards/pages/app_activity/points/users')).status).toBe(200)
+      // The viewer is refused with the permission code, and the action does not run.
       const denied = await api(viewer, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'active' }, idempotency_key: newKey() })
       expect(denied.status).toBe(403)
       expect(JSON.parse(denied.body).error.code).toBe('dash.users.set_status')
+      await viewer.waitForTimeout(2000)
+      expect(runsSince(mark)).toBe(0)
       expect(await targetStatus(admin)).toBe('inactive')
     }
     finally {
@@ -462,6 +648,7 @@ test.describe('stage F: plan section 7 checks not covered above', () => {
   })
 
   test('reserved, malformed and duplicate routes are refused and routes stay up', async ({ page }) => {
+    expectFailures(page, { status: 400, path: '/api/v1/dashboards/pages' })
     await loginAsAdmin(page)
     const spec = (id: string, route: string) => ({
       spec: 'wippy.dashboard_page/v1',
@@ -482,6 +669,13 @@ test.describe('stage F: plan section 7 checks not covered above', () => {
       expect(r.status, route).toBe(400)
       expect(JSON.parse(r.body).error.code, route).toBe(code)
     }
+    // Parameter types are the board's names; `text` is not one (the fixture coord_ph_two uses `string`).
+    const textParam = await api(page, 'POST', '/api/v1/dashboards/pages', {
+      ...spec('e2e_param_text', '/e2e/param-text'),
+      params: { q: { type: 'text', from_path: 0 } },
+    })
+    expect(textParam.status).toBe(400)
+    expect(JSON.parse(textParam.body).error.code).toBe('invalid_spec')
     const routes = await api(page, 'GET', '/api/public/pages/routes')
     expect(routes.status).toBe(200)
     expect(JSON.parse(routes.body).routes['/reports/llm-usage/:part(.*)*']).toBe('wippy.dashboards.pages:llm_usage')

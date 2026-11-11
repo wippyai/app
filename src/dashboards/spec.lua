@@ -16,7 +16,8 @@ local RESERVED = {
     web = true, page = true, app = true, api = true, wc = true,
 }
 
-local PARAM_TYPES = { select = true, date = true, text = true, number = true, boolean = true }
+-- The same names as the board's parameter handling (params.ts) and spec section 5.2.
+local PARAM_TYPES = { select = true, date = true, string = true, number = true, boolean = true }
 
 local function fail(code, message)
     return nil, { code = code, message = message }
@@ -370,7 +371,7 @@ local function validate_params(params)
             return fail("invalid_spec", "bad parameter name")
         end
         if not is_table(p) or not PARAM_TYPES[p.type] then
-            return fail("invalid_spec", "parameter '" .. name .. "' needs a type: select, date, text, number or boolean")
+            return fail("invalid_spec", "parameter '" .. name .. "' needs a type: select, date, string, number or boolean")
         end
         if p.label ~= nil and (type(p.label) ~= "string" or #p.label > 120) then
             return fail("invalid_spec", "parameter '" .. name .. "' has a bad label")

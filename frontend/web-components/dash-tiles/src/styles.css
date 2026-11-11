@@ -64,11 +64,12 @@
   border: 0;
 }
 
-/* dash-kpi. */
+/* dash-kpi. Top-aligned: in a row made tall by a chart, the label lines up with the titles of the
+   tiles beside it instead of floating in the middle of the tile. */
 .dash-kpi {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.25rem;
   height: 100%;
   padding: 0.75rem 1rem;

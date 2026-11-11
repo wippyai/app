@@ -210,7 +210,7 @@ JSON note: the runtime's JSON encoder cannot write `null` inside an object, so t
 | `page-url` | string | `/api/v1/dashboards/pages/<id>` |
 | `layout` | object | `{ "breakpoints": {...}, "layouts": {...} }` |
 | `tiles` | object | Tile id to compiled tile (below) |
-| `params` | object | Parameter declarations: `type`, `label`, `default`, optional `from_path`. No options source. |
+| `params` | object | Parameter declarations: `type`, `label`, `default`, optional `from_path`. No options source. Types: `select`, `date`, `string`, `number`, `boolean`. |
 
 ```json
 { "by_day": {
@@ -255,7 +255,7 @@ A control tile (with `param`) also receives its own parameter's current value in
 - `computing` adds `operation` (opaque token) and `retry_after_ms`. The tile sends `operation` back in its next read with the same `args`. The POC engine returns `computing` only from fixtures and tests.
 - `failed` and `denied` add `error: { code, message, input?, field? }`. `message` is a fixed safe text. Codes: `invalid_args`, `format_mismatch`, `source_error`, `denied`, `not_found`, `expired`, `undeclared`.
 - `empty`: a frame with no rows, or a `record` with no fields. Never a zero.
-- `data_as_of` is null when unknown, and the tile shows "unknown".
+- `data_as_of` is null when unknown, and the tile shows "unknown". The board's tile frame shows it in the footer after each finished read: "Data as of <time>" or "Data as of unknown".
 
 Table frame (shapes `scalar`, `series`, `category`, `table`, `options`):
 
