@@ -124,3 +124,42 @@ describe('a broken copy of the output', () => {
     expect(readUsers(broken).error).not.toBeNull()
   })
 })
+
+// The action set_status (stage E3): the declaration is the contract of section 5.2, the descriptor
+// gives it to the tile, and the arguments the tile sends are exactly the ones the declaration lets it send.
+describe('set_status action', () => {
+  const action = entry('set_status').meta
+  const argsSchema = action.args_schema as { properties: Record<string, unknown>, required: string[] }
+
+  it('is declared as an action with the permission, the confirmation and the refreshed point', () => {
+    expect(action.type).toBe('wippy.dashboards.action')
+    expect(action.func).toBe('demo.user_status:set_user_status')
+    expect(action.permission).toEqual({ action: 'dash.users.set_status', resource: 'demo.user_status:users' })
+    expect(action.confirm).toBe(true)
+    expect(action.sensitive_fields).toEqual([])
+    expect(action.refreshes).toEqual(['users'])
+    expect(action.tile_args).toEqual(['user_id', 'status'])
+  })
+
+  it('lets the tile send exactly the declared arguments', () => {
+    expect(Object.keys(argsSchema.properties).sort()).toEqual([...(action.tile_args as string[])].sort())
+    const check = validator(action.args_schema as object)
+    expect(check({ user_id: 'u1', status: 'inactive' })).toBe(true)
+    expect(check({ user_id: 'u1', status: 'active' })).toBe(true)
+    expect(check({ user_id: 'u1', status: 'suspended' })).toBe(false)
+    expect(check({ user_id: 'u1' })).toBe(false)
+    expect(check({ user_id: 'u1', status: 'active', role: 'admin' })).toBe(false)
+  })
+
+  it('is given to the tile by its descriptor, so a page needs no change', () => {
+    expect(tile.default_actions).toEqual({ set_status: 'demo.user_status:set_status' })
+  })
+
+  it('has a deny policy for the user group', () => {
+    const policy = entry('deny_set_status')
+    expect(policy.meta).toBeDefined()
+    const raw = index.entries.find(e => e.name === 'deny_set_status') as unknown as { groups: string[], policy: Record<string, string> }
+    expect(raw.groups).toEqual(['app.security:user'])
+    expect(raw.policy).toEqual({ resources: 'demo.user_status:users', actions: 'dash.users.set_status', effect: 'deny' })
+  })
+})

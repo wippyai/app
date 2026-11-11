@@ -13,6 +13,7 @@ import {
   changesAfterPathChange,
   clearedChanges,
   currentParamValues,
+  tilesToRefreshAfterAction,
   tilesToRefreshFor,
 } from '../lib/params'
 import type { ParamValues } from '../lib/params'
@@ -49,6 +50,11 @@ const context: BoardContext = {
     const changes = acceptTileEvent(tiles.value[tileId], requestIds[tileId], detail, props.value.params)
     if (Object.keys(changes).length > 0)
       userChanges.value = { ...userChanges.value, ...changes }
+    // A finished action gives the tiles that use the points it refreshes a new request-id.
+    for (const id of tilesToRefreshAfterAction(tiles.value, tileId, requestIds[tileId], detail)) {
+      if (id in requestIds)
+        requestIds[id] = ids.next(id)
+    }
   },
 }
 provide(BOARD_KEY, context)

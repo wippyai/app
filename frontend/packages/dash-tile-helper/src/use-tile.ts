@@ -4,12 +4,14 @@ import { mappedField, parseTileAttributes } from './attrs.ts'
 import { createTileController } from './controller.ts'
 import type { InputValidator, TileController, TileSnapshot } from './controller.ts'
 import { createDefaultDeps } from './default-deps.ts'
+import { createConfirm } from './host-confirm.ts'
 import type {
   ActionResult,
   ConfirmRequest,
   EmitFn,
   InputState,
   RenderStatus,
+  RunActionOptions,
   TileDeps,
 } from './types.ts'
 
@@ -57,7 +59,8 @@ export function useTile(options: UseTileOptions) {
     resolve?.(confirmed)
   }
 
-  const confirm = (request: ConfirmRequest): Promise<boolean> => {
+  /** The helper's own dialog (`<TileConfirm>`). It answers only when the Host has no `host.confirm`. */
+  const shadowConfirm = (request: ConfirmRequest): Promise<boolean> => {
     settleConfirm(false)
     return new Promise<boolean>((resolve) => {
       answer = resolve
@@ -65,6 +68,7 @@ export function useTile(options: UseTileOptions) {
     })
   }
 
+  const confirm = createConfirm(shadowConfirm)
   const deps: TileDeps = { ...createDefaultDeps(confirm), ...options.deps }
 
   watch(
@@ -110,12 +114,12 @@ export function useTile(options: UseTileOptions) {
     options: computed(() => config.value.options),
     params: computed(() => config.value.params),
     fields: computed(() => config.value.fields),
-    /** The pending confirmation, for `<TileConfirm>`. */
+    /** The pending confirmation of the fallback dialog, for `<TileConfirm>`. The Host's `host.confirm()` is used first. */
     confirmRequest,
     answerConfirm: settleConfirm,
-    runAction: (name: string, tileArgs: Record<string, unknown> = {}): Promise<ActionResult> =>
+    runAction: (name: string, tileArgs: Record<string, unknown> = {}, runOptions: RunActionOptions = {}): Promise<ActionResult> =>
       controller
-        ? controller.runAction(name, tileArgs)
+        ? controller.runAction(name, tileArgs, runOptions)
         : Promise.resolve({ action: name, status: 'failed', error: { code: 'not_started', message: 'The tile has no configuration yet.' }, envelope: null }),
     emitTileEvent: (name: string, detail: unknown) => controller?.emitTileEvent(name, detail),
     refresh: (input?: string) => controller?.refresh(input),

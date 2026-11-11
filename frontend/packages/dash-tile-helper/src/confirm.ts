@@ -53,7 +53,8 @@ const CONFIRM_CSS = `
 let counter = 0
 
 /**
- * A small accessible confirmation (role alertdialog) that covers the tile. Put it in the tile
+ * The fallback confirmation (role alertdialog) that covers the tile. The helper asks the Host first
+ * (`host.confirm()`, see host-confirm.ts) and shows this only when the Host has no `confirm`. Put it in the tile
  * template when the tile has actions: `<TileConfirm :request="confirmRequest" @answer="answerConfirm" />`.
  * Focus starts on Cancel, Escape cancels, and Tab stays between the two buttons.
  */
@@ -115,7 +116,7 @@ export const TileConfirm = defineComponent({
           'aria-describedby': `${id}-text`,
         }, [
           h('h2', { class: 'dash-confirm__title', id: `${id}-title` }, props.title),
-          h('p', { class: 'dash-confirm__text', id: `${id}-text` }, `Run the action "${request.action}"?`),
+          h('p', { class: 'dash-confirm__text', id: `${id}-text` }, request.message ?? `Run the action "${request.action}"?`),
           h('div', { class: 'dash-confirm__buttons' }, [
             h('button', { ref: cancel, type: 'button', class: 'dash-confirm__button', onClick: () => emit('answer', false) }, 'Cancel'),
             h('button', { ref: accept, type: 'button', class: 'dash-confirm__button dash-confirm__button--primary', onClick: () => emit('answer', true) }, 'Confirm'),

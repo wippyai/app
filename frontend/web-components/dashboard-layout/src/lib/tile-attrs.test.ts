@@ -54,6 +54,13 @@ describe('buildActions', () => {
       ping: { url: '/p/x/actions/ping', confirm: false },
     })
   })
+
+  it('names the page action in the url when the page maps the tile action to another name', () => {
+    const aliased: CompiledTile = { tag: 'user-status', actions: { set_status: { action: 'disable_user', confirm: true } } }
+    expect(buildActions('/p/x', aliased)).toEqual({
+      set_status: { url: '/p/x/actions/disable_user', confirm: true },
+    })
+  })
 })
 
 describe('buildTileParams', () => {

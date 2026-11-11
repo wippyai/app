@@ -12,6 +12,7 @@ local funcs = require("funcs")
 local logger = require("logger")
 local spec_lib = require("spec")
 local shape = require("shape")
+local args_lib = require("args")
 
 local MAX_ARGS_BYTES = 8192
 
@@ -79,22 +80,6 @@ local function error_envelope(point, state, code, ctx, input, field)
     return env
 end
 
--- True when a value holds a { "$param": name } reference at any depth.
-local function holds_param(value, depth)
-    if type(value) ~= "table" or depth > 8 then
-        return false
-    end
-    if value["$param"] ~= nil then
-        return true
-    end
-    for _, v in pairs(value) do
-        if holds_param(v, depth + 1) then
-            return true
-        end
-    end
-    return false
-end
-
 -- Parses the query value `args`. Absent means {}. Returns a table of string
 -- keys, or nil plus a reason.
 local function parse_args(raw)
@@ -123,28 +108,10 @@ end
 -- Publication allows a bound value only as exactly { "$param": name }. A stored
 -- page that still holds a value with a $param inside something else fails closed:
 -- merge_args returns nil, nil, "mixed" and the handler answers 500.
-local function is_whole_param(value)
-    if type(value) ~= "table" or type(value["$param"]) ~= "string" then
-        return false
-    end
-    for k in pairs(value) do
-        if k ~= "$param" then
-            return false
-        end
-    end
-    return true
-end
-
 local function merge_args(page_args, requested)
-    local constants, bound = {}, {}
-    for key, value in pairs(page_args or {}) do
-        if is_whole_param(value) then
-            bound[key] = true
-        elseif holds_param(value, 1) then
-            return nil, nil, "mixed"
-        else
-            constants[key] = value
-        end
+    local constants, bound, problem = args_lib.classify(page_args)
+    if not constants then
+        return nil, nil, problem
     end
     local merged = {}
     for key, value in pairs(requested) do

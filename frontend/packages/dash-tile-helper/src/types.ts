@@ -81,6 +81,14 @@ export type SubscribeFn = (topic: string, callback: () => void) => () => void
 export interface ConfirmRequest {
   action: string
   args: Record<string, unknown>
+  /** The question to show. A default names the action. */
+  message?: string
+}
+
+/** Options of one action run. */
+export interface RunActionOptions {
+  /** The question of the confirmation, when the action has `confirm: true`. */
+  confirmMessage?: string
 }
 
 /** Everything that touches the outside world, so unit tests run without a server. */

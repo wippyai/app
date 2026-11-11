@@ -7,6 +7,9 @@ import type { CompiledTile, ParamDecl } from '../types'
  * Everything here is pure, so it runs in unit tests without a DOM.
  */
 
+/** The event name that the tile helper reserves for a finished action (contracts section 8). */
+export const ACTION_DONE_EVENT = 'action-done'
+
 export type ParamValues = Record<string, unknown>
 type Decls = Record<string, ParamDecl> | undefined
 
@@ -202,6 +205,35 @@ export function acceptTileEvent(
   if (!currentRequestId || event.request_id !== currentRequestId)
     return {}
   return eventChanges(tile, event.name, event.detail, decls)
+}
+
+/**
+ * The tiles that get a new request-id after a `tile-event` `action-done` (contracts section 8): the tiles
+ * whose `data` uses a point that the finished action `refreshes`. Only `status: done` refreshes anything;
+ * a failed, denied, unknown or cancelled action changed nothing the board knows of. An event with another
+ * request-id than the tile's current one is stale and refreshes nothing.
+ */
+export function tilesToRefreshAfterAction(
+  tiles: Record<string, CompiledTile>,
+  tileId: string,
+  currentRequestId: string | undefined,
+  event: { request_id?: unknown, name?: unknown, detail?: unknown } | null | undefined,
+): string[] {
+  const tile = has(tiles, tileId) ? tiles[tileId] : undefined
+  if (!tile || !event || event.name !== ACTION_DONE_EVENT)
+    return []
+  if (!currentRequestId || event.request_id !== currentRequestId)
+    return []
+  const detail = event.detail !== null && typeof event.detail === 'object' ? event.detail as { action?: unknown, status?: unknown } : {}
+  if (detail.status !== 'done' || typeof detail.action !== 'string')
+    return []
+  const action = tile.actions && has(tile.actions, detail.action) ? tile.actions[detail.action] : undefined
+  const points = new Set((action?.refreshes ?? []).filter((p): p is string => typeof p === 'string'))
+  if (points.size === 0)
+    return []
+  return Object.entries(tiles)
+    .filter(([, other]) => Object.values(other.data ?? {}).some(source => points.has(source.point)))
+    .map(([id]) => id)
 }
 
 function isParamRef(value: unknown): value is { $param: string } {

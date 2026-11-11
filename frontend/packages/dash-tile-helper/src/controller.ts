@@ -7,6 +7,7 @@ import type {
   InputState,
   RenderStateDetail,
   RenderStatus,
+  RunActionOptions,
   TileConfig,
   TileDeps,
   TileError,
@@ -30,7 +31,7 @@ export interface TileController {
   /** Read one input (or all) again now. */
   refresh: (input?: string) => void
   /** Run a declared action (contracts sections 8 and 10). Never throws. */
-  runAction: (name: string, tileArgs?: Record<string, unknown>) => Promise<ActionResult>
+  runAction: (name: string, tileArgs?: Record<string, unknown>, options?: RunActionOptions) => Promise<ActionResult>
   /** Dispatch a declared tile event as `tile-event` `{ request_id, name, detail }`. */
   emitTileEvent: (name: string, detail: unknown) => void
 }
@@ -202,7 +203,7 @@ export function createTileController(
     emit('tile-event', { request_id: config.requestId, name, detail })
   }
 
-  async function runAction(name: string, tileArgs: Record<string, unknown> = {}): Promise<ActionResult> {
+  async function runAction(name: string, tileArgs: Record<string, unknown> = {}, options: RunActionOptions = {}): Promise<ActionResult> {
     const decl = config.actions[name]
     const finish = (status: ActionStatus, error: TileError | null, envelope: unknown, announce = true): ActionResult => {
       if (announce)
@@ -212,7 +213,7 @@ export function createTileController(
     if (!decl || !decl.url)
       return finish('failed', { code: 'undeclared', message: 'This action is not declared for the tile.' }, null)
     if (decl.confirm) {
-      const confirmed = await deps.confirm({ action: name, args: tileArgs })
+      const confirmed = await deps.confirm({ action: name, args: tileArgs, ...(options.confirmMessage ? { message: options.confirmMessage } : {}) })
       if (!confirmed)
         return finish('cancelled', null, null, false)
     }

@@ -1,5 +1,7 @@
 export { buildReadUrl, mappedField, parseTileAttributes, tilePropsSchema } from './attrs.ts'
 export { TileConfirm } from './confirm.ts'
+export { confirmOptions, createConfirm } from './host-confirm.ts'
+export type { HostConfirmOptions, HostLike, HostLoader } from './host-confirm.ts'
 export { aggregateStatus, buildRenderState, createTileController } from './controller.ts'
 export type { InputValidator, TileController, TileSnapshot } from './controller.ts'
 export { classifyResponse, createInputReader, DEFAULT_RETRY_MS, LIVE_JOIN_MS } from './reader.ts'

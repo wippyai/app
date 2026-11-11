@@ -298,6 +298,13 @@ function M.wire_data(output, data)
     return data
 end
 
+-- The data converted to a JSON schema: each empty table becomes a list or an object as
+-- the schema says at that place. Callers that store or send a validated value use this
+-- copy, because it is the value validates() checks.
+function M.conform(schema, data)
+    return convert_data(data, schema, 1)
+end
+
 -- Validates a Lua value against a JSON schema. Returns true, or false plus a
 -- short reason ("data" when the value cannot be encoded, "schema" otherwise).
 function M.validates(schema, data)

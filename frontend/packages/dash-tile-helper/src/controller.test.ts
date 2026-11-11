@@ -15,7 +15,7 @@ function ready(data: unknown = { text: 'hello' }, extra: Record<string, unknown>
 function setup(opts: {
   get?: Array<HttpResponse | Error>
   post?: Array<HttpResponse | Error>
-  confirm?: (a: string) => boolean
+  confirm?: (a: string, message?: string) => boolean
   sources?: Record<string, unknown>
   actions?: Record<string, unknown>
 } = {}) {
@@ -44,7 +44,7 @@ function setup(opts: {
   const deps: TileDeps = {
     http,
     subscribe: () => () => {},
-    confirm: async request => (opts.confirm ? opts.confirm(request.action) : true),
+    confirm: async request => (opts.confirm ? opts.confirm(request.action, request.message) : true),
     uuid: () => `uuid-${++uuidCounter}`,
     isVisible: () => true,
   }
@@ -238,6 +238,14 @@ describe('actions', () => {
     expect(result.status).toBe('cancelled')
     expect(posts).toHaveLength(0)
     expect(emitted).toHaveLength(0)
+  })
+
+  it('passes the question of the call to the confirmation', async () => {
+    const messages: Array<string | undefined> = []
+    const { controller } = setup({ actions, post: [done, done], confirm: (_a, message) => { messages.push(message); return true } })
+    await controller.runAction('set_status', { user_id: 'u1' }, { confirmMessage: 'Disable Test Target?' })
+    await controller.runAction('set_status', { user_id: 'u1' })
+    expect(messages).toEqual(['Disable Test Target?', undefined])
   })
 
   it('runs after a confirmation', async () => {

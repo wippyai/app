@@ -151,6 +151,7 @@ entries:
     imports:
       spec: wippy.dashboards:spec
       shape: wippy.dashboards:shape
+      args: wippy.dashboards:args
     pool:
       size: 4
 
@@ -161,3 +162,64 @@ entries:
     method: GET
     func: read_point
     path: /dashboards/pages/{id}/points/{point}
+
+  # ── stage E3: actions ────────────────────────────────────────────────
+  - name: 02_create_dash_action_log
+    kind: function.lua
+    meta:
+      description: Create the dash_action_log table (idempotency and audit record of actions)
+      type: migration
+      target_db: app:db
+      tags:
+        - dashboards
+      timestamp: "2026-11-09T18:00:00Z"
+    source: file://migrations/02_create_dash_action_log.lua
+    imports:
+      migration: wippy.migration:migration
+    method: migrate
+
+  - name: args
+    kind: library.lua
+    meta:
+      comment: Splits a page's declared args into constants and $param-bound keys (contracts section 4)
+    source: file://args.lua
+
+  - name: action_log
+    kind: library.lua
+    meta:
+      comment: dash_action_log rows (contracts section 10); begin() stores the record before an action runs
+    source: file://action_log.lua
+    modules:
+      - json
+      - hash
+
+  - name: run_action
+    kind: function.lua
+    source: file://run_action.lua
+    method: handler
+    modules:
+      - http
+      - json
+      - security
+      - sql
+      - registry
+      - funcs
+      - logger
+    imports:
+      spec: wippy.dashboards:spec
+      shape: wippy.dashboards:shape
+      args: wippy.dashboards:args
+      action_log: wippy.dashboards:action_log
+    # A lazy pool runs calls side by side. The default pool is inline, so one slow action would make every
+    # other request wait, and two calls with one key could never overlap.
+    pool:
+      type: lazy
+      max_size: 8
+
+  - name: run_action.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: run_action
+    path: /dashboards/pages/{id}/actions/{action}

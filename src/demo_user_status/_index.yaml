@@ -7,7 +7,7 @@ namespace: demo.user_status
 #   tile        demo.user_status:user_status  wippy.dashboards.tile (tile_type demo.user_status)
 #   component   demo.user_status:user-status  view.component, frontend/web-components/user-status
 #   signal      topic dash.users.changed      sent by publish_signal; POST /api/v1/demo/signal/users
-# Stage E3 adds the action set_status to this module.
+#   action      demo.user_status:set_status   wippy.dashboards.action, served by set_user_status (stage E3)
 #
 # The JSON schema of the users object appears twice below: as the point's output
 # schema and as the tile's input schema. The unit test in
@@ -90,7 +90,8 @@ entries:
       params: []
       default_data:
         main: demo.user_status:users
-      default_actions: {}
+      default_actions:
+        set_status: demo.user_status:set_status
       min_size: { w: 320px, h: 160px }
       default_size: { w: 50%, h: 280px }
 
@@ -152,4 +153,56 @@ entries:
     policy:
       resources: demo.user_status:signal
       actions: demo.signal_users
+      effect: deny
+
+  # ── action (stage E3, contracts section 5.2) ─────────────────────────
+  # The declaration is demo.user_status:set_status; its function is set_user_status.
+  - name: set_user_status
+    kind: function.lua
+    meta:
+      comment: Sets the status of a user (active or inactive); refuses the caller's own account
+    source: file://set_status.lua
+    method: set_status
+    modules:
+      - security
+      - funcs
+      - logger
+    imports:
+      user_repo: userspace.user.persist:user_repo
+    pool:
+      size: 2
+
+  - name: set_status
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.action
+      title: Set user status
+      func: demo.user_status:set_user_status
+      args_schema:
+        type: object
+        additionalProperties: false
+        required: [user_id, status]
+        properties:
+          user_id: { type: string }
+          status: { enum: [active, inactive] }
+      tile_args: [user_id, status]
+      result_schema:
+        type: object
+      permission:
+        action: dash.users.set_status
+        resource: demo.user_status:users
+      confirm: true
+      sensitive_fields: []
+      refreshes: [users]
+
+  # Only the admin group may set a user status. The user group is denied.
+  - name: deny_set_status
+    kind: security.policy
+    meta:
+      comment: app.security:user may not set a user status
+    groups:
+      - app.security:user
+    policy:
+      resources: demo.user_status:users
+      actions: dash.users.set_status
       effect: deny

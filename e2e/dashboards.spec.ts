@@ -350,6 +350,119 @@ test.describe('stage E: plugins and live data', () => {
   })
 })
 
+function newKey() {
+  return `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const ACTION = '/api/v1/dashboards/pages/app_activity/actions/set_status'
+
+async function targetStatus(page: Page): Promise<string> {
+  const r = JSON.parse((await api(page, 'GET', '/api/v1/dashboards/pages/app_activity/points/users')).body)
+  return r.data.users.find((u: { user_id: string }) => u.user_id === 'target@wippy.local').status
+}
+
+test.describe('stage F: plan section 7 checks not covered above', () => {
+  test('a width change across 1024 changes the layout and sends no read', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await loginAsAdmin(page)
+    const reads = watchPointReads(page, 'llm_usage')
+    await openInShell(page, '/reports/llm-usage')
+    const f = pageFrame(page, 'llm_usage')
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
+    await page.waitForTimeout(800)
+    const wide = await boxes(f, ['text', 'model_picker'])
+    expect(wide.text.y).toBe(wide.model_picker.y)
+    const before = reads.length
+    await page.setViewportSize({ width: 900, height: 900 })
+    await expect.poll(async () => {
+      const b = await boxes(f, ['text', 'model_picker'])
+      return b.model_picker.y > b.text.y
+    }, { timeout: 10_000 }).toBe(true)
+    await page.waitForTimeout(800)
+    expect(reads.slice(before)).toEqual([])
+  })
+
+  test('an action by the admin reaches the open viewer browser through the live signal', async ({ browser }) => {
+    const admin = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
+    const viewer = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
+    const errors = watchErrors(viewer)
+    await loginAsAdmin(admin)
+    await loginAs(viewer, 'viewer@wippy.local')
+    await openInShell(viewer, '/ops/app-activity')
+    const target = pageFrame(viewer, 'app_activity').locator('[data-tile-id="users"] tr[data-user-id="target@wippy.local"]')
+    await expect(target).toContainText('active', { timeout: 20_000 })
+    await viewer.evaluate(() => { (window as any).__noReload = 1 })
+    try {
+      const r = await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'inactive' }, idempotency_key: newKey() })
+      expect(r.status).toBe(200)
+      expect(JSON.parse(r.body).state).toBe('done')
+      await expect(target).toContainText('inactive', { timeout: 10_000 })
+      expect(await viewer.evaluate(() => (window as any).__noReload)).toBe(1)
+    }
+    finally {
+      await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'active' }, idempotency_key: newKey() })
+    }
+    await expect(target).not.toContainText('inactive', { timeout: 10_000 })
+    expect(errors).toEqual([])
+  })
+
+  test('one key runs once, another value with that key is refused, the viewer is refused', async ({ browser }) => {
+    const admin = await (await browser.newContext()).newPage()
+    const viewer = await (await browser.newContext()).newPage()
+    await loginAsAdmin(admin)
+    await loginAs(viewer, 'viewer@wippy.local')
+    const key = newKey()
+    try {
+      const first = JSON.parse((await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'inactive' }, idempotency_key: key })).body)
+      const again = JSON.parse((await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'inactive' }, idempotency_key: key })).body)
+      expect(first.state).toBe('done')
+      expect(again.state).toBe('done')
+      expect(again.replayed).toBe(true)
+      const other = await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'active' }, idempotency_key: key })
+      expect(other.status).toBe(409)
+      expect(JSON.parse(other.body).error.code).toBe('idempotency_conflict')
+      expect(await targetStatus(admin)).toBe('inactive')
+
+      // The viewer can read the users point but may not run the action.
+      expect((await api(viewer, 'GET', '/api/v1/dashboards/pages/app_activity/points/users')).status).toBe(200)
+      const denied = await api(viewer, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'active' }, idempotency_key: newKey() })
+      expect(denied.status).toBe(403)
+      expect(JSON.parse(denied.body).error.code).toBe('dash.users.set_status')
+      expect(await targetStatus(admin)).toBe('inactive')
+    }
+    finally {
+      await api(admin, 'POST', ACTION, { args: { user_id: 'target@wippy.local', status: 'active' }, idempotency_key: newKey() })
+    }
+    expect(await targetStatus(admin)).toBe('active')
+  })
+
+  test('reserved, malformed and duplicate routes are refused and routes stay up', async ({ page }) => {
+    await loginAsAdmin(page)
+    const spec = (id: string, route: string) => ({
+      spec: 'wippy.dashboard_page/v1',
+      id,
+      title: 'Route check',
+      route,
+      tiles: { a: { type: 'placeholder' } },
+      layout: { layouts: { default: { direction: 'vertical', children: [{ panel: 'a', size: '200px' }] } } },
+      publish: true,
+    })
+    const cases: Array<[string, string, string]> = [
+      ['e2e_route_login', '/login/x', 'reserved_route'],
+      ['e2e_route_upper', '/Reports/x', 'invalid_route'],
+      ['e2e_route_dup', '/reports/llm-usage', 'duplicate_route'],
+    ]
+    for (const [id, route, code] of cases) {
+      const r = await api(page, 'POST', '/api/v1/dashboards/pages', spec(id, route))
+      expect(r.status, route).toBe(400)
+      expect(JSON.parse(r.body).error.code, route).toBe(code)
+    }
+    const routes = await api(page, 'GET', '/api/public/pages/routes')
+    expect(routes.status).toBe(200)
+    expect(JSON.parse(routes.body).routes['/reports/llm-usage/:part(.*)*']).toBe('wippy.dashboards.pages:llm_usage')
+  })
+})
+
 test.describe('stage B: page host and dashboard-layout', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 900 })

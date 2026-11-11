@@ -42,6 +42,8 @@ export interface CompiledDataSource {
 }
 
 export interface CompiledAction {
+  /** The page's action name. The tile may know the action under another, local name. */
+  action?: string
   confirm?: boolean
   refreshes?: string[]
 }

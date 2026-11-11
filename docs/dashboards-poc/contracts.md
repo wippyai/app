@@ -56,7 +56,7 @@ All endpoints sit on `app:api`, take the viewer's token and return JSON.
 | Case | Status | Body |
 |---|---|---|
 | Read or action handled, any envelope state except below | 200 | Result envelope (section 7) |
-| `args` fail the schema, name a key the page does not bind, or (actions) a field outside `tile_args` | 400 | Envelope with `state: failed`, `error.code: invalid_args`. The function does not run. A key the page binds to a constant is accepted and replaced by the page's value, because the board sends every argument. |
+| `args` fail the schema, name a key the page does not bind, or (actions) a field outside `tile_args` | 400 | Envelope with `state: failed`, `error.code: invalid_args`. The function does not run. A key the page binds to a constant always takes the page's value, whether or not the request sends it and whether or not it is in `tile_args`. A key bound to `$param` (and, for actions, a key in `tile_args`) takes the request's value. |
 | The page names a declaration that is gone or has another type | 400 | Envelope with `state: failed`, `error.code: undeclared`. Nothing runs. |
 | Viewer may not see the page, or lacks the action's permission | 403 | Envelope with `state: denied`, `error.code: denied` or the action's permission code |
 | Unknown page, point or action | 404 | `{ "error": { "code": "not_found" } }` |
@@ -153,7 +153,7 @@ It returns the data in the declared shape, or `nil, err`. An error becomes `stat
   meta:
     type: wippy.dashboards.action
     title: Set user status
-    func: demo.user_status:set_status
+    func: demo.user_status:set_user_status   # the function; the declaration id is demo.user_status:set_status
     args_schema: { type: object, additionalProperties: false, required: [user_id, status],
                    properties: { user_id: { type: string }, status: { enum: [active, inactive] } } }
     tile_args: [user_id, status]
@@ -232,7 +232,7 @@ JSON note: the runtime's JSON encoder cannot write `null` inside an object, so t
 The board, before each tile update, replaces each `$param` with the current value and builds the tile attributes:
 
 - `data-sources`: `{ "main": { "url": "<page-url>/points/<point>", "args": {...}, "refresh_ms": ..., "live_topic": ... } }`
-- `actions`: `{ "<name>": { "url": "<page-url>/actions/<name>", "confirm": true } }`
+- `actions`: `{ "<name>": { "url": "<page-url>/actions/<page action>", "confirm": true } }`. `<name>` is the tile's own name for the action, and `<page action>` is the page's action that the tile's name maps to (the compiled `action` field). The two differ when a page maps a tile action to another name.
 
 Current values: default first, then `from_path` (segment N of `sub-path`, decoded), then user changes. Clearing a selection returns a parameter to its default. A tile depends on a parameter when the parameter appears in its `data` args or in its `params` list. Only dependent tiles get a new `request-id`.
 
@@ -314,7 +314,10 @@ The board draws each tile's frame from `render-state`: a loading bar, the source
 ## 10. Actions
 
 - Before it runs an action, the engine stores a row in `dash_action_log`: `key`, `viewer_id`, `page_id`, `revision`, `action`, `args_hash`, `args_redacted` (sensitive fields removed), `state`, `result`, `created_at`, `updated_at`. The pair (`viewer_id`, `key`) is unique.
+- `args_redacted` drops every field whose name is in `sensitive_fields`, at every level: in nested objects and in objects inside arrays.
+- Merged `args` may nest tables at most 8 levels deep, the top-level object being level 1. Deeper `args` get 400 with `error.code: invalid_args` and `error.field: args`, and no row is stored. So `args_hash` always covers the whole value.
 - A retry with the same key and the same `args_hash` returns the stored result. The same key with another hash returns 409 with `error.code: idempotency_conflict`.
+- The engine stores and returns the result as converted to `result_schema`, the same value it validated, so an empty object stays an object in the first answer and in every replay.
 - A row in state `running` with no result returns `state: unknown`, and the action does not run again.
 - Server-bound `args` always win over `tile_args`.
 - `demo.user_status:set_status` refuses the caller's own account with `error.code: self_target`.

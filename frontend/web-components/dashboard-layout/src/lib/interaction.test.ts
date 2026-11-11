@@ -11,6 +11,7 @@ import {
   fromPathValues,
   isValidParamValue,
   pathSegment,
+  tilesToRefreshAfterAction,
   tilesToRefreshFor,
 } from './params'
 
@@ -235,5 +236,53 @@ describe('dependent tiles after a change', () => {
   it('lists a tile once for several parameters, and none for no change', () => {
     expect(tilesToRefreshFor(usageTiles, ['model', 'day'])).toEqual(['tokens', 'by_day', 'by_model'])
     expect(tilesToRefreshFor(usageTiles, [])).toEqual([])
+  })
+})
+
+describe('tilesToRefreshAfterAction', () => {
+  const tiles: Record<string, CompiledTile> = {
+    users: {
+      tag: 'user-status',
+      data: { main: { point: 'users' } },
+      actions: { set_status: { confirm: true, refreshes: ['users'] } },
+    },
+    other_users: { tag: 'dash-table', data: { main: { point: 'users' } } },
+    tokens: { tag: 'dash-kpi', data: { main: { point: 'tokens', args: { model: { $param: 'model' } } } } },
+    mixed: { tag: 'dash-chart', data: { main: { point: 'tokens' }, extra: { point: 'users' } } },
+    plain: { tag: 'dash-text', data: { main: { point: 'summary' } } },
+    norefresh: { tag: 'x', data: { main: { point: 'summary' } }, actions: { go: { confirm: false, refreshes: [] } } },
+  }
+  const done = { request_id: 'r4:users', name: 'action-done', detail: { action: 'set_status', status: 'done' } }
+
+  it('gives every tile that uses a refreshed point a new request-id, the acting tile included', () => {
+    expect(tilesToRefreshAfterAction(tiles, 'users', 'r4:users', done)).toEqual(['users', 'other_users', 'mixed'])
+  })
+
+  it('refreshes nothing unless the status is done', () => {
+    for (const status of ['failed', 'denied', 'unknown', 'cancelled', undefined]) {
+      const event = { ...done, detail: { action: 'set_status', status } }
+      expect(tilesToRefreshAfterAction(tiles, 'users', 'r4:users', event)).toEqual([])
+    }
+  })
+
+  it('ignores an event of another request-id, another name or a malformed detail', () => {
+    expect(tilesToRefreshAfterAction(tiles, 'users', 'r5:users', done)).toEqual([])
+    expect(tilesToRefreshAfterAction(tiles, 'users', undefined, done)).toEqual([])
+    expect(tilesToRefreshAfterAction(tiles, 'users', 'r4:users', { ...done, name: 'change' })).toEqual([])
+    expect(tilesToRefreshAfterAction(tiles, 'users', 'r4:users', { ...done, detail: null })).toEqual([])
+    expect(tilesToRefreshAfterAction(tiles, 'users', 'r4:users', { ...done, detail: { status: 'done' } })).toEqual([])
+    expect(tilesToRefreshAfterAction(tiles, 'users', 'r4:users', null)).toEqual([])
+  })
+
+  it('refreshes nothing for an unknown tile, an undeclared action or an action without refreshes', () => {
+    expect(tilesToRefreshAfterAction(tiles, 'nope', 'r4:users', done)).toEqual([])
+    expect(tilesToRefreshAfterAction(tiles, 'plain', 'r4:plain', { ...done, request_id: 'r4:plain' })).toEqual([])
+    const event = { request_id: 'r1:norefresh', name: 'action-done', detail: { action: 'go', status: 'done' } }
+    expect(tilesToRefreshAfterAction(tiles, 'norefresh', 'r1:norefresh', event)).toEqual([])
+    expect(tilesToRefreshAfterAction(tiles, 'users', 'r4:users', { ...done, detail: { action: '__proto__', status: 'done' } })).toEqual([])
+  })
+
+  it('does not read inherited tile ids', () => {
+    expect(tilesToRefreshAfterAction(tiles, 'toString', 'r4:users', done)).toEqual([])
   })
 })
