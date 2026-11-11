@@ -21,6 +21,8 @@ export interface DataSource {
 export interface ActionDecl {
   url: string
   confirm: boolean
+  /** True when the viewer may run the action. A tile hides the controls of an action that is not allowed. */
+  allowed: boolean
 }
 
 /** The tile attributes, parsed. A missing key is null (or empty), never undefined. */

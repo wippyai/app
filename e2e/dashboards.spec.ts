@@ -406,6 +406,31 @@ test.describe('stage F: plan section 7 checks not covered above', () => {
     expect(errors).toEqual([])
   })
 
+  test('the admin sees the status controls and the viewer without the permission does not', async ({ browser }) => {
+    const admin = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
+    const viewer = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage()
+    const errors = [watchErrors(admin), watchErrors(viewer)]
+    await loginAsAdmin(admin)
+    await loginAs(viewer, 'viewer@wippy.local')
+
+    // The props say per viewer whether the action may run.
+    const adminProps = JSON.parse((await api(admin, 'GET', '/api/v1/dashboards/pages/app_activity/props')).body)
+    const viewerProps = JSON.parse((await api(viewer, 'GET', '/api/v1/dashboards/pages/app_activity/props')).body)
+    expect(adminProps.tiles.users.actions.set_status.allowed).toBe(true)
+    expect(viewerProps.tiles.users.actions.set_status.allowed).toBe(false)
+
+    await openInShell(admin, '/ops/app-activity')
+    const adminUsers = pageFrame(admin, 'app_activity').locator('[data-tile-id="users"]')
+    await expect(adminUsers.locator('tr[data-user-id="target@wippy.local"] [data-action="set_status"]')).toBeVisible({ timeout: 20_000 })
+
+    await openInShell(viewer, '/ops/app-activity')
+    const viewerUsers = pageFrame(viewer, 'app_activity').locator('[data-tile-id="users"]')
+    await expect(viewerUsers.locator('tr[data-user-id]')).toHaveCount(3, { timeout: 20_000 })
+    await expect(viewerUsers.locator('[data-action="set_status"]')).toHaveCount(0)
+    await expect(viewerUsers.locator('.user-status__actions-head')).toHaveCount(0)
+    expect(errors.flat()).toEqual([])
+  })
+
   test('one key runs once, another value with that key is refused, the viewer is refused', async ({ browser }) => {
     const admin = await (await browser.newContext()).newPage()
     const viewer = await (await browser.newContext()).newPage()

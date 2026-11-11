@@ -45,6 +45,8 @@ export interface CompiledAction {
   /** The page's action name. The tile may know the action under another, local name. */
   action?: string
   confirm?: boolean
+  /** True when the viewer who read the props may run the action. The endpoint still checks each call. */
+  allowed?: boolean
   refreshes?: string[]
 }
 

@@ -7,7 +7,7 @@ export const tilePropsSchema = {
     'tile-id': { type: 'string', default: '', description: 'Tile id in the page.' },
     'request-id': { type: 'string', default: '', description: 'A new id for each configuration. The board sets it last, and the tile starts work only when it is set.' },
     'data-sources': { type: 'object', description: 'Map from input name to { url, args, refresh_ms, live_topic }.' },
-    'actions': { type: 'object', description: 'Map from action name to { url, confirm }.' },
+    'actions': { type: 'object', description: 'Map from action name to { url, confirm, allowed }.' },
     'fields': { type: 'object', description: 'Map from the tile field names to data field names.' },
     'options': { type: 'object', description: 'Tile options.' },
     'params': { type: 'object', description: 'Current values of the page parameters the tile declares.' },
@@ -64,6 +64,7 @@ function readAction(value: unknown): ActionDecl {
   return {
     url: typeof action.url === 'string' ? action.url : '',
     confirm: action.confirm === true,
+    allowed: action.allowed === true,
   }
 }
 

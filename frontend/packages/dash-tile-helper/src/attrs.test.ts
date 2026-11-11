@@ -7,7 +7,7 @@ describe('parseTileAttributes', () => {
       'tile-id': 'tokens',
       'request-id': 'r1:tokens',
       'data-sources': JSON.stringify({ main: { url: '/u', args: { a: 1 }, refresh_ms: 5000, live_topic: 't' } }),
-      'actions': JSON.stringify({ go: { url: '/a', confirm: true } }),
+      'actions': JSON.stringify({ go: { url: '/a', confirm: true, allowed: true } }),
       'fields': '{"text":"body"}',
       'options': '{"label":"L"}',
       'params': '{"model":"m"}',
@@ -17,7 +17,7 @@ describe('parseTileAttributes', () => {
       tileId: 'tokens',
       requestId: 'r1:tokens',
       dataSources: { main: { url: '/u', args: { a: 1 }, refresh_ms: 5000, live_topic: 't' } },
-      actions: { go: { url: '/a', confirm: true } },
+      actions: { go: { url: '/a', confirm: true, allowed: true } },
       fields: { text: 'body' },
       options: { label: 'L' },
       params: { model: 'm' },
@@ -25,7 +25,7 @@ describe('parseTileAttributes', () => {
     })
     expect(fromStrings).toEqual(fromProps)
     expect(fromProps.dataSources.main).toEqual({ url: '/u', args: { a: 1 }, refresh_ms: 5000, live_topic: 't' })
-    expect(fromProps.actions.go).toEqual({ url: '/a', confirm: true })
+    expect(fromProps.actions.go).toEqual({ url: '/a', confirm: true, allowed: true })
   })
 
   it('treats missing keys as null or empty', () => {
@@ -51,6 +51,13 @@ describe('parseTileAttributes', () => {
     const config = parseTileAttributes({ actions: { a: { url: '/a', confirm: 'yes' }, b: { url: '/b' } } })
     expect(config.actions.a.confirm).toBe(false)
     expect(config.actions.b.confirm).toBe(false)
+  })
+
+  it('treats an allowed that is not true as false', () => {
+    const config = parseTileAttributes({ actions: { a: { url: '/a', allowed: 'yes' }, b: { url: '/b' }, c: { url: '/c', allowed: true } } })
+    expect(config.actions.a.allowed).toBe(false)
+    expect(config.actions.b.allowed).toBe(false)
+    expect(config.actions.c.allowed).toBe(true)
   })
 })
 

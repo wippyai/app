@@ -10,7 +10,7 @@ const tile: CompiledTile = {
     main: { point: 'by_day', args: { model: { $param: 'model' } }, refresh_ms: 30000, live_topic: 'dash.users.changed' },
     extra: { point: 'with space', args: {} },
   },
-  actions: { set_status: { confirm: true, refreshes: ['users'] }, ping: {} },
+  actions: { set_status: { confirm: true, allowed: true, refreshes: ['users'] }, ping: {} },
   params: ['day'],
 }
 
@@ -48,17 +48,24 @@ describe('buildDataSources', () => {
 })
 
 describe('buildActions', () => {
-  it('builds each url from page-url and the action name, with confirm as a boolean', () => {
+  it('builds each url from page-url and the action name, with confirm and allowed as booleans', () => {
     expect(buildActions('/p/x', tile)).toEqual({
-      set_status: { url: '/p/x/actions/set_status', confirm: true },
-      ping: { url: '/p/x/actions/ping', confirm: false },
+      set_status: { url: '/p/x/actions/set_status', confirm: true, allowed: true },
+      ping: { url: '/p/x/actions/ping', confirm: false, allowed: false },
+    })
+  })
+
+  it('passes allowed false when the server says the viewer may not run the action', () => {
+    const refused: CompiledTile = { tag: 'user-status', actions: { set_status: { confirm: true, allowed: false } } }
+    expect(buildActions('/p/x', refused)).toEqual({
+      set_status: { url: '/p/x/actions/set_status', confirm: true, allowed: false },
     })
   })
 
   it('names the page action in the url when the page maps the tile action to another name', () => {
-    const aliased: CompiledTile = { tag: 'user-status', actions: { set_status: { action: 'disable_user', confirm: true } } }
+    const aliased: CompiledTile = { tag: 'user-status', actions: { set_status: { action: 'disable_user', confirm: true, allowed: true } } }
     expect(buildActions('/p/x', aliased)).toEqual({
-      set_status: { url: '/p/x/actions/disable_user', confirm: true },
+      set_status: { url: '/p/x/actions/disable_user', confirm: true, allowed: true },
     })
   })
 })

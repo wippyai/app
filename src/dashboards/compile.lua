@@ -2,6 +2,7 @@
 -- section 6). The output is built field by field from an allowlist. It never
 -- holds a function id, a declaration id, a workflow reference, point_meta or
 -- the raw spec. Page-local point and action names stay.
+local security = require("security")
 local spec_lib = require("spec")
 
 local M = {}
@@ -93,8 +94,22 @@ local function point_input(spec, point_name, point_decl)
     return out
 end
 
+-- True when the current viewer holds the action's permission. The tile uses it
+-- to hide controls the viewer cannot use; the action endpoint still checks the
+-- permission on every call. A declaration the endpoint would refuse as
+-- undeclared gives false.
+local function viewer_may_run(meta)
+    local permission = meta.permission
+    if type(meta.func) ~= "string" or meta.func == "" or type(permission) ~= "table"
+        or type(permission.action) ~= "string" or type(permission.resource) ~= "string" then
+        return false
+    end
+    return security.can(permission.action, permission.resource) == true
+end
+
 -- Returns the props table, or nil plus an error string when a declaration the
--- stored page names has gone from the registry.
+-- stored page names has gone from the registry. Runs as the viewer: each
+-- compiled action says whether this viewer may run it.
 function M.compile(spec, page_id, revision)
     -- The stored spec is the request body, so optional maps may be absent.
     spec.params = spec.params or {}
@@ -165,6 +180,7 @@ function M.compile(spec, page_id, revision)
             actions[name] = {
                 action = action,
                 confirm = decl.meta.confirm == true,
+                allowed = viewer_may_run(decl.meta),
                 refreshes = refreshes,
             }
         end

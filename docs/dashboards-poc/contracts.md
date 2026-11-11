@@ -228,11 +228,13 @@ JSON note: the runtime's JSON encoder cannot write `null` inside an object, so t
 - The compiler works through an allowlist. Props never hold a function id, a declaration id, a workflow reference, `point_meta` or the raw spec. Page-local point and action names stay.
 - A control tile (`param` set) gets the parameter's options point as its `main` input.
 - `refresh_ms` and `live_topic` come from the point declaration.
+- A compiled action is `{ "action": "<page action>", "confirm": true, "allowed": true, "refreshes": [...] }`. `allowed` is per viewer, so the props of one page differ between viewers.
 
 The board, before each tile update, replaces each `$param` with the current value and builds the tile attributes:
 
 - `data-sources`: `{ "main": { "url": "<page-url>/points/<point>", "args": {...}, "refresh_ms": ..., "live_topic": ... } }`
-- `actions`: `{ "<name>": { "url": "<page-url>/actions/<page action>", "confirm": true } }`. `<name>` is the tile's own name for the action, and `<page action>` is the page's action that the tile's name maps to (the compiled `action` field). The two differ when a page maps a tile action to another name.
+- `actions`: `{ "<name>": { "url": "<page-url>/actions/<page action>", "confirm": true, "allowed": true } }`. `<name>` is the tile's own name for the action, and `<page action>` is the page's action that the tile's name maps to (the compiled `action` field). The two differ when a page maps a tile action to another name.
+- `allowed` comes from the compiled action. The props endpoint runs as the viewer and sets it to true only when the viewer holds the action declaration's `permission` at that read. A tile hides the controls of an action whose `allowed` is not true. This only hides controls: the action endpoint still checks the permission on every call (section 10), and a permission change shows after the next props read.
 
 Current values: default first, then `from_path` (segment N of `sub-path`, decoded), then user changes. Clearing a selection returns a parameter to its default. A tile depends on a parameter when the parameter appears in its `data` args or in its `params` list. Only dependent tiles get a new `request-id`.
 

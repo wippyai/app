@@ -19,8 +19,9 @@ const users = computed(() => {
   return data === null ? null : readUsers(data).users
 })
 
-// The actions column appears when the page gives the tile the action `set_status`.
-const hasActions = computed(() => 'set_status' in tile.config.value.actions)
+// The actions column appears when the page gives the tile the action `set_status` and the viewer
+// may run it. The server still checks the permission on every call.
+const hasActions = computed(() => tile.config.value.actions.set_status?.allowed === true)
 
 // The viewer's own row has no control. The server refuses the call too (error code self_target).
 const viewerId = useViewerId()

@@ -31,6 +31,7 @@ export function buildDataSources(pageUrl: string, tile: CompiledTile, values: Pa
 /**
  * `actions` (contracts section 6): one entry per action under the tile's own name. The URL names the
  * page's action, which differs from the tile's name when the page maps the tile action to another one.
+ * `allowed` is true only when the server said the viewer may run the action.
  */
 export function buildActions(pageUrl: string, tile: CompiledTile): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -39,6 +40,7 @@ export function buildActions(pageUrl: string, tile: CompiledTile): Record<string
     out[name] = {
       url: `${baseUrl(pageUrl)}/actions/${encodeURIComponent(target)}`,
       confirm: action.confirm === true,
+      allowed: action.allowed === true,
     }
   }
   return out

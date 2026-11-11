@@ -58,6 +58,8 @@ entries:
     meta:
       comment: Compiles a stored page spec into the props of dashboard-layout (contracts section 6)
     source: file://compile.lua
+    modules:
+      - security
     imports:
       spec: wippy.dashboards:spec
 
