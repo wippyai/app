@@ -36,8 +36,8 @@ modules:
       version: 0.5.4
       hash: cae8cf3ebe0a327a663f1da3a27429f9b78c15f046ef007fcd1ebbba0af3a7e9
     - name: wippy/facade
-      version: 0.6.50
-      hash: ff23fc4c710db490bee5c28cac2a5f06a35c825cafab7511b48a26c126970fd1
+      version: 0.6.52
+      hash: cf09d4e1245b77475431f87d6183a493dfb0c5ba8abe1ac88077f6c2c8d4fce8
     - name: wippy/llm
       version: 0.5.8
       hash: 5c6b10c51a5657c25d989286eda12ce68684d11575c46940160c5c726c5260f7
