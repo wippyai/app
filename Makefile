@@ -1,4 +1,4 @@
-.PHONY: build clean-build dev run run-e2e prepare-e2e lint test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-dashboard-page build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-dashboard-layout build-wc-dash-tiles build-wc-run-timeline build-wc-user-status
+.PHONY: build clean-build dev run run-e2e prepare-e2e lint test-pkg-app-nav test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-dashboard-page build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-dashboard-layout build-wc-dash-tiles build-wc-run-timeline build-wc-user-status
 
 # Use NPM_INSTALL=true after installing local release packages for a smoke build.
 NPM_INSTALL ?= npm install
@@ -19,6 +19,10 @@ test-attention-touch:
 
 test-attention-helpers:
 	npm run test:e2e -- attention-context-helpers.spec.ts --project=chromium --max-failures=1 --output=.local/test-results/attention-helpers-tmp
+
+# Headless TypeScript packages under frontend/packages: install, typecheck, unit tests.
+test-pkg-app-nav:
+	cd frontend/packages/app-nav && $(NPM_INSTALL) && npm run typecheck && npm test
 
 build: build-app-main build-app-iframe-demo build-app-dashboard-page build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-dashboard-layout build-wc-dash-tiles build-wc-run-timeline build-wc-user-status
 
@@ -66,6 +70,7 @@ build-wc-user-status:
 
 lint:
 	cd frontend/applications/main && npm run lint
+	cd frontend/packages/app-nav && npm run lint
 	cd frontend/applications/dashboard-page && npm run lint
 	cd frontend/web-components/reaction-bar && npm run lint
 	cd frontend/web-components/websocket-log && npm run lint

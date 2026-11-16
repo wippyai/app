@@ -1,0 +1,31 @@
+{
+  "name": "@example/app-nav",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Headless model of an app-owned sidebar for a Wippy shell page. It merges the app's own items with the pages that the registry announces (GET /api/public/pages/list), groups and orders them by the same rules as the Web Host's built-in nav, keeps the list live on the WebSocket topic `pages`, finds the active item, and resolves a shell path to a page that the shell can host with <w-artifact nav-owner>. It renders nothing: the app owns the look. TypeScript source, consumed through a local path dependency.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src/"
+  ],
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0",
+    "vue": "^3.5.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
+  }
+}

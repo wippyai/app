@@ -1,0 +1,131 @@
+import type { Ref } from 'vue'
+import { getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
+import type { PageInfo } from './types'
+
+/** wippy/views: the announced pages the caller may view. */
+export const PAGES_LIST_URL = '/api/public/pages/list'
+/**
+ * The content-free WebSocket topic that says the page list changed. The Web
+ * Host's built-in nav listens for it too.
+ */
+export const PAGES_TOPIC = 'pages'
+/** Proxy event after the WebSocket reconnects; signals may have been missed. */
+export const RECONNECT_TOPIC = '@reconnect'
+
+export interface PageListDeps {
+  /** The host's authenticated axios instance, or anything with the same `get`. */
+  api: { get: (url: string) => Promise<{ data: unknown }> }
+  /** Subscribes to a topic and returns the unsubscribe, like `on` from `@wippy-fe/proxy`. */
+  on: (topic: string, callback: () => void) => () => void
+  /** Signals that arrive closer together than this cause one read. Default 150 ms. */
+  debounceMs?: number
+}
+
+export interface PageList {
+  pages: Readonly<Ref<readonly PageInfo[]>>
+  /** True after the first successful read. */
+  ready: Readonly<Ref<boolean>>
+  /** The error of the last read, or null after a successful one. */
+  error: Readonly<Ref<unknown>>
+  /** Reads the list now. A call during a read queues exactly one more read. */
+  refresh: () => Promise<void>
+  /** Stops listening. Reads that are under way no longer change the list. */
+  dispose: () => void
+}
+
+function isPage(value: unknown): value is PageInfo {
+  if (!value || typeof value !== 'object')
+    return false
+  const page = value as Record<string, unknown>
+  return typeof page.id === 'string' && page.id !== '' && typeof page.title === 'string'
+}
+
+/** The `pages` array of a list response. Malformed items are dropped. */
+export function parsePages(data: unknown): PageInfo[] {
+  const pages = data && typeof data === 'object' ? (data as { pages?: unknown }).pages : undefined
+  if (!Array.isArray(pages))
+    throw new Error('The page list response has no pages array')
+  return pages.filter(isPage)
+}
+
+/**
+ * A live copy of the viewer's page list. It reads the list once, then again
+ * after every `pages` signal and every WebSocket reconnect. Because each read
+ * uses the viewer's own token, the server's access check decides what the
+ * viewer sees, and the signal itself carries nothing.
+ */
+export function createPageList(deps: PageListDeps): PageList {
+  const debounceMs = deps.debounceMs ?? 150
+  const pages = shallowRef<readonly PageInfo[]>([])
+  const ready = ref(false)
+  const error = shallowRef<unknown>(null)
+  let running: Promise<void> | null = null
+  let readAgain = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let disposed = false
+
+  async function readOnce(): Promise<void> {
+    try {
+      const { data } = await deps.api.get(PAGES_LIST_URL)
+      if (disposed)
+        return
+      pages.value = parsePages(data)
+      error.value = null
+      ready.value = true
+    }
+    catch (err) {
+      if (!disposed)
+        error.value = err
+    }
+  }
+
+  function refresh(): Promise<void> {
+    if (running) {
+      readAgain = true
+      return running
+    }
+    running = (async () => {
+      do {
+        readAgain = false
+        await readOnce()
+      } while (readAgain && !disposed)
+    })().finally(() => {
+      running = null
+    })
+    return running
+  }
+
+  function onSignal(): void {
+    if (disposed)
+      return
+    if (timer)
+      clearTimeout(timer)
+    timer = setTimeout(() => {
+      timer = null
+      void refresh()
+    }, debounceMs)
+  }
+
+  const unsubscribes = [deps.on(PAGES_TOPIC, onSignal), deps.on(RECONNECT_TOPIC, onSignal)]
+  void refresh()
+
+  function dispose(): void {
+    if (disposed)
+      return
+    disposed = true
+    if (timer)
+      clearTimeout(timer)
+    for (const unsubscribe of unsubscribes)
+      unsubscribe()
+  }
+
+  return { pages, ready, error, refresh, dispose }
+}
+
+/** `createPageList` that disposes itself with the current effect scope, such as a component. */
+export function usePageList(deps: PageListDeps): PageList {
+  const list = createPageList(deps)
+  if (getCurrentScope())
+    onScopeDispose(list.dispose)
+  return list
+}

@@ -39,9 +39,16 @@ $wcs = @(
     @{ name = 'user-status'; dir = 'frontend/web-components/user-status'; out = 'static/wc/user-status' }
 )
 
+# Headless TypeScript packages with a test-pkg-<name> target (install,
+# typecheck, unit tests). Mirrors the Makefile's test-pkg-* recipes.
+$pkgs = @(
+    @{ name = 'app-nav'; dir = 'frontend/packages/app-nav' }
+)
+
 # Subset that runs `npm run lint` - mirrors Makefile's `lint:` recipe.
 $lintDirs = @(
     'frontend/applications/main'
+    'frontend/packages/app-nav'
     'frontend/applications/dashboard-page'
     'frontend/web-components/reaction-bar'
     'frontend/web-components/websocket-log'
@@ -114,6 +121,25 @@ function Invoke-Lint {
     }
 }
 
+function Invoke-PackageTest {
+    param([Parameter(Mandatory)][string]$Dir)
+    Push-Location $Dir
+    try {
+        Write-Host "==> test $Dir" -ForegroundColor Cyan
+        if (-not $SkipInstall) {
+            npm install
+            if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
+        }
+        npm run typecheck
+        if ($LASTEXITCODE -ne 0) { throw "npm run typecheck failed in $Dir (exit $LASTEXITCODE)" }
+        npm test
+        if ($LASTEXITCODE -ne 0) { throw "npm test failed in $Dir (exit $LASTEXITCODE)" }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 function Invoke-BuildAll {
     foreach ($i in $script:apps + $script:wcs) {
         Invoke-Recipe -Dir $i.dir -Out $i.out
@@ -128,6 +154,7 @@ function Show-Help {
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
+    Write-Host "  test-pkg-<name>    Typecheck and unit-test a package (e.g. test-pkg-app-nav)"
     Write-Host "  test-attention     Run Attention acceptance in Chromium"
     Write-Host "  test-attention-touch Run Attention touch acceptance in Chromium"
     Write-Host "  test-attention-helpers Run Attention codec and helper checks"
@@ -139,6 +166,7 @@ function Show-Help {
     Write-Host "  help               Show this message`n"
     Write-Host "Apps:           $($apps.name -join ', ')"
     Write-Host "Web components: $($wcs.name -join ', ')"
+    Write-Host "Packages:       $($pkgs.name -join ', ')"
 }
 
 # Top-level dispatch wrapped in try/catch so a thrown error surfaces as a
@@ -167,6 +195,13 @@ try {
             $item = $wcs | Where-Object { $_.name -eq $name }
             if (-not $item) { throw "Unknown web component: $name. Run 'make help' for the list." }
             Invoke-Recipe -Dir $item.dir -Out $item.out
+            break
+        }
+        '^test-pkg-(.+)$' {
+            $name = $Matches[1]
+            $item = $pkgs | Where-Object { $_.name -eq $name }
+            if (-not $item) { throw "Unknown package: $name. Run 'make help' for the list." }
+            Invoke-PackageTest -Dir $item.dir
             break
         }
         '^lint$' {

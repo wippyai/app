@@ -1,0 +1,93 @@
+import { describe, expect, it } from 'vitest'
+import { activeKey, isUnder, joinPath, matchPage, mountPrefix, normalizePath, pagePath } from './match'
+import type { NavItem, PageInfo } from './types'
+
+const pages: PageInfo[] = [
+  { id: 'app.views:main', title: 'Admin Panel', mountRoute: '/home/:part(.*)*' },
+  { id: 'dash:llm', title: 'LLM usage', mountRoute: '/reports/llm-usage/:part(.*)*' },
+  { id: 'dash:reports', title: 'Reports', mountRoute: '/reports/:part(.*)*' },
+  { id: 'keeper:main', title: 'Keeper', mountRoute: null },
+]
+
+describe('paths', () => {
+  it('normalizes slashes, query and hash', () => {
+    expect(normalizePath('reports//x/?a=1#h')).toBe('/reports/x')
+    expect(normalizePath('/')).toBe('/')
+    expect(normalizePath('')).toBe('/')
+  })
+
+  it('takes the literal start of a mount route', () => {
+    expect(mountPrefix('/reports/llm-usage/:part(.*)*')).toBe('/reports/llm-usage')
+    expect(mountPrefix('/a/:id/b')).toBe('/a')
+    expect(mountPrefix('/:part(.*)*')).toBe('/')
+  })
+
+  it('uses /page/<id> for a page without a usable mount route', () => {
+    expect(pagePath({ id: 'keeper:main', mountRoute: null })).toBe('/page/keeper:main')
+    expect(pagePath({ id: 'x', mountRoute: '/:part(.*)*' })).toBe('/page/x')
+  })
+
+  it('matches whole segments only', () => {
+    expect(isUnder('/reports/llm-usage', '/reports')).toBe(true)
+    expect(isUnder('/reportsx', '/reports')).toBe(false)
+    expect(isUnder('/users', '/')).toBe(false)
+    expect(isUnder('/', '/')).toBe(true)
+  })
+
+  it('joins a prefix and a sub-path', () => {
+    expect(joinPath('/reports/llm-usage', '/')).toBe('/reports/llm-usage')
+    expect(joinPath('/reports/llm-usage', '')).toBe('/reports/llm-usage')
+    expect(joinPath('/reports/llm-usage', 'claude')).toBe('/reports/llm-usage/claude')
+    expect(joinPath('/', '/x')).toBe('/x')
+  })
+})
+
+describe('matchPage', () => {
+  it('picks the longest page path and returns the rest as sub-path', () => {
+    expect(matchPage(pages, '/reports/llm-usage/claude-haiku-4-5')).toMatchObject({
+      page: { id: 'dash:llm' },
+      prefix: '/reports/llm-usage',
+      subPath: '/claude-haiku-4-5',
+    })
+    expect(matchPage(pages, '/reports/other')?.page.id).toBe('dash:reports')
+    expect(matchPage(pages, '/reports/llm-usage')?.subPath).toBe('/')
+  })
+
+  it('finds a page without mount route under /page/<id>', () => {
+    expect(matchPage(pages, '/page/keeper:main/x')).toMatchObject({ page: { id: 'keeper:main' }, subPath: '/x' })
+  })
+
+  it('never matches an excluded page, such as the shell itself', () => {
+    expect(matchPage(pages, '/home/users', { exclude: ['app.views:main'] })).toBeNull()
+    expect(matchPage(pages, '/home/users')?.page.id).toBe('app.views:main')
+  })
+
+  it('returns null when no page lives at the path', () => {
+    expect(matchPage(pages, '/nowhere')).toBeNull()
+  })
+})
+
+describe('activeKey', () => {
+  const items: NavItem[] = [
+    { key: 'home', label: 'Home', target: { kind: 'route', path: '/' } },
+    { key: 'users', label: 'Users', target: { kind: 'route', path: '/users' } },
+    { key: 'reports', label: 'Reports', target: { kind: 'route', path: '/reports' } },
+    { key: 'llm', label: 'LLM usage', target: { kind: 'route', path: '/reports/llm-usage' } },
+    { key: 'keeper', label: 'Keeper', target: { kind: 'host', path: '/' } },
+  ]
+
+  it('matches the root only exactly', () => {
+    expect(activeKey(items, '/')).toBe('home')
+    expect(activeKey(items, '/nowhere')).toBeNull()
+  })
+
+  it('prefers the longest matching item', () => {
+    expect(activeKey(items, '/reports/llm-usage/claude')).toBe('llm')
+    expect(activeKey(items, '/reports/x')).toBe('reports')
+    expect(activeKey(items, '/users/42')).toBe('users')
+  })
+
+  it('never activates an item that hands over to the Host', () => {
+    expect(activeKey([items[4]], '/')).toBeNull()
+  })
+})
