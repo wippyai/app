@@ -1,12 +1,49 @@
 local test = require("test")
+local env = require("env")
+local sql = require("sql")
+local time = require("time")
 local user_repo = require("user_repo")
 local user_groups_repo = require("user_groups_repo")
 
 local TEST_USER_ID = "test_user_" .. tostring(os.time())
 local TEST_EMAIL = TEST_USER_ID .. "@test.local"
 
+local function wait_for_users_schema()
+    local database, err = env.get("userspace.user.env:database_resource")
+    if err or not database or database == "" then
+        return false, err or "users database is not configured"
+    end
+
+    -- The bootloader applies migrations asynchronously on a fresh database.
+    for attempt = 1, 120 do
+        local db, db_err = sql.get(database)
+        err = db_err
+        if db then
+            local _, query_err = db:query(
+                "SELECT 1 FROM app_users u LEFT JOIN app_user_groups g ON g.user_id = u.user_id LIMIT 0"
+            )
+            db:release()
+            if not query_err then
+                return true
+            end
+            err = query_err
+        end
+        if attempt < 120 then
+            time.sleep("250ms")
+        end
+    end
+    return false, err or "users schema did not become ready"
+end
+
 local function define_tests()
     test.describe("user management", function()
+        test.before_all(function()
+            local ready, err = wait_for_users_schema()
+            if not ready then
+                error("Users tests could not start: " .. tostring(err))
+            end
+        end)
+
         test.describe("create", function()
             test.it("creates a user with valid data", function()
                 local result, err = user_repo.create({
