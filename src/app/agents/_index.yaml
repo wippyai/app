@@ -31,6 +31,8 @@ entries:
       - id: app.agents:wippy_artifacts_trait
       - id: app.agents:wippy_attention_trait
       - id: wippy.agent.traits:attention
+      # wippy/dashboards: build a dashboard page from one request in this chat.
+      - id: wippy.dashboards.agent:trait
 
   - name: wippy_nav_trait
     kind: registry.entry
