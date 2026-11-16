@@ -374,6 +374,7 @@ entries:
       title: Models in use
       description: The LLM models that made calls, as choices for a model filter
       func: demo.actor:resolve
+      live_read: true
       recipe: usage_models
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: options }
@@ -388,6 +389,7 @@ entries:
       title: Token use
       description: Total LLM tokens and number of calls, optionally for one model
       func: demo.actor:resolve
+      live_read: true
       recipe: usage_tokens
       args_schema:
         type: object
@@ -406,6 +408,7 @@ entries:
       title: Token use by day
       description: LLM tokens per day, split by model
       func: demo.actor:resolve
+      live_read: true
       recipe: usage_by_day
       args_schema:
         type: object
@@ -425,6 +428,7 @@ entries:
       title: Token use by model
       description: Calls and tokens per model, optionally for one model or one day (YYYY-MM-DD)
       func: demo.actor:resolve
+      live_read: true
       recipe: usage_by_model
       args_schema:
         type: object
@@ -445,6 +449,7 @@ entries:
       title: Token use summary
       description: One sentence that sums up LLM token use and the top model
       func: demo.actor:resolve
+      live_read: true
       recipe: usage_summary
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: record }
@@ -458,6 +463,7 @@ entries:
       title: Sessions
       description: Number of chat sessions
       func: demo.actor:resolve
+      live_read: true
       recipe: app_sessions
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: scalar }
@@ -471,6 +477,7 @@ entries:
       title: Messages
       description: Number of chat messages
       func: demo.actor:resolve
+      live_read: true
       recipe: app_messages
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: scalar }
@@ -484,6 +491,7 @@ entries:
       title: Sessions by month
       description: Chat sessions started per month (YYYY-MM)
       func: demo.actor:resolve
+      live_read: true
       recipe: sessions_by_month
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: category }
@@ -498,6 +506,7 @@ entries:
       title: Messages by type
       description: Chat messages per message type (user, assistant, system, tool and so on)
       func: demo.actor:resolve
+      live_read: true
       recipe: message_types
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: category }
@@ -512,6 +521,7 @@ entries:
       title: Messages by day
       description: Chat messages per day
       func: demo.actor:resolve
+      live_read: true
       recipe: messages_by_day
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: series }
@@ -526,6 +536,7 @@ entries:
       title: LLM calls by day
       description: Number of LLM calls per day, optionally for one model
       func: demo.actor:resolve
+      live_read: true
       recipe: calls_by_day
       args_schema:
         type: object
@@ -544,6 +555,7 @@ entries:
       title: Tokens by kind
       description: LLM tokens split into prompt, completion, thinking and cache tokens, optionally for one model; suits a pie or doughnut
       func: demo.actor:resolve
+      live_read: true
       recipe: tokens_by_kind
       args_schema:
         type: object
@@ -562,6 +574,7 @@ entries:
       title: Recent sessions
       description: The 20 most recent chat sessions with status, start day, last message time and message count
       func: demo.actor:resolve
+      live_read: true
       recipe: recent_sessions
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: table }
@@ -579,6 +592,7 @@ entries:
       title: Users
       description: Number of user accounts in the app
       func: demo.actor:resolve
+      live_read: true
       recipe: app_users
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: scalar }

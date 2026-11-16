@@ -222,8 +222,8 @@ test.describe('stage C: built-in tiles with real data', () => {
     // One label per day, and bars drawn on the canvas (a blank plot with labels fails).
     await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(usage.days.length)
     await expectBars(f, 'by_day', usage.dayTokens)
-    // The points send no data_as_of, so every frame says it is unknown (contracts section 7).
-    await expect(f.locator('[data-tile-id="tokens"] [data-as-of]')).toHaveText('Data as of unknown')
+    // The demo points declare live_read, so the frame says the data is live as of the read (contracts section 7).
+    await expect(f.locator('[data-tile-id="tokens"] [data-as-of]')).toHaveText(/^Live data, read /)
     await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(usage.byModelRows)
     await expect(f.locator('[data-tile-id="by_day"] figure[aria-label="Tokens by day"]')).toHaveCount(1)
     const canvas = await f.locator('[data-tile-id="by_day"] wippy-chartjs canvas').boundingBox()

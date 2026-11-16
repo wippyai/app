@@ -35,6 +35,7 @@ entries:
       type: wippy.dashboards.point
       title: Users
       func: demo.user_status:list_users
+      live_read: true
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output:
         shape: schema

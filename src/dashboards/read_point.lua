@@ -239,6 +239,11 @@ local function handler()
         logger:warn("dashboards: data cannot be encoded", { page = id, point = point, error = tostring(eerr) })
         return send(res, http.STATUS.OK, error_envelope(point, "failed", "format_mismatch", ctx, "main", "data"))
     end
+    -- A point that reads its source at call time (meta.live_read) has data that
+    -- is current as of this read. Any other point leaves data_as_of unknown.
+    if meta.live_read == true then
+        env.data_as_of = env.computed_at
+    end
     if meta.refresh_ms ~= nil then
         env.refresh_ms = meta.refresh_ms
     end

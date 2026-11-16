@@ -33,6 +33,7 @@ entries:
       type: wippy.dashboards.point
       title: Latest workflow run
       func: demo.run_timeline:read_latest_run
+      live_read: true
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output:
         shape: schema

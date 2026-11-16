@@ -284,11 +284,15 @@ async function retry() {
       class="frame__meta"
     >
       <span v-if="frame.sourceTitle">{{ frame.sourceTitle }}</span>
-      <span v-if="frame.computedAt">Computed {{ formatTime(frame.computedAt) }}</span>
+      <!-- A live read: the data is current as of the read, so one line says both. -->
       <span
-        v-if="frame.computedAt"
+        v-if="frame.computedAt && frame.dataAsOf === frame.computedAt"
         data-as-of
-      >Data as of {{ frame.dataAsOf ? formatTime(frame.dataAsOf) : 'unknown' }}</span>
+      >Live data, read {{ formatTime(frame.computedAt) }}</span>
+      <template v-else-if="frame.computedAt">
+        <span>Computed {{ formatTime(frame.computedAt) }}</span>
+        <span data-as-of>Data as of {{ frame.dataAsOf ? formatTime(frame.dataAsOf) : 'unknown' }}</span>
+      </template>
       <span v-if="frame.status === 'computing'">Computing</span>
       <span v-if="frame.stale">Stale</span>
       <span v-if="frame.completeness === 'partial'">Partial</span>

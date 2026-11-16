@@ -257,6 +257,7 @@ A control tile (with `param`) also receives its own parameter's current value in
 - `failed` and `denied` add `error: { code, message, input?, field? }`. `message` is a fixed safe text. Codes: `invalid_args`, `format_mismatch`, `source_error`, `denied`, `not_found`, `expired`, `undeclared`.
 - `empty`: a frame with no rows, or a `record` with no fields. Never a zero.
 - `data_as_of` is null when unknown, and the tile shows "unknown". The board's tile frame shows it in the footer after each finished read: "Data as of <time>" or "Data as of unknown".
+- A point whose function reads its source at call time declares `live_read: true` in its meta. The engine then sets `data_as_of` to `computed_at`, and the footer shows one line, "Live data, read <time>". Every point of `demo.actor`, `demo.user_status` and `demo.run_timeline` reads `app.db` live and declares it; the stage B fixture points do not, so they still say "unknown".
 
 Table frame (shapes `scalar`, `series`, `category`, `table`, `options`):
 
