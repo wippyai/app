@@ -29,6 +29,28 @@ test.beforeAll(async ({ browser }) => {
   }
 })
 
+// The stage B test pages would otherwise stay in the Host's nav after the run.
+test.afterAll(async ({ browser }) => {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  try {
+    await loginAsAdmin(page)
+    for (const name of ['coord_ph_one', 'coord_ph_two']) {
+      const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${name}`)
+      expect([200, 404], removed.body).toContain(removed.status)
+    }
+  }
+  finally {
+    await context.close()
+  }
+})
+
+/**
+ * A window wide enough for the lg layout (1024 px of board) in both boot modes. In managed mode the
+ * Host's nav and side panel take about 600 px, so 1400 px leaves the board narrow.
+ */
+const WIDE = { width: 1920, height: 900 }
+
 function pageFrame(page: Page, id: string): FrameLocator {
   return page.frameLocator(`iframe[name="wippy:page:wippy.dashboards.pages:${id}"]`)
 }
@@ -217,6 +239,80 @@ async function chartLabels(frame: FrameLocator, tileId: string): Promise<number>
   return data ? (JSON.parse(data).labels ?? []).length : -1
 }
 
+/**
+ * The data is live: the app's own chat and LLM calls add rows to the tables the points read. So
+ * the tests compare what a tile draws with what its point returns now, not with a fixed snapshot.
+ */
+interface Frame { fields: Array<{ name: string }>, rows: unknown[][] }
+
+/** Reads a point of a page through the read endpoint, as the signed-in user, with no arguments. */
+async function readPoint(page: Page, pageId: string, point: string): Promise<any> {
+  const r = await api(page, 'GET', `/api/v1/dashboards/pages/${pageId}/points/${point}`)
+  expect(r.status, `${pageId}/${point}: ${r.body}`).toBe(200)
+  return JSON.parse(r.body).data
+}
+
+/** The values of one field of a frame, found by name. */
+function column(frame: Frame, name: string): unknown[] {
+  const i = frame.fields.findIndex(f => f.name === name)
+  expect(i, `field ${name}`).toBeGreaterThanOrEqual(0)
+  return frame.rows.map(r => r[i])
+}
+
+/** A whole number as a tile formats it, with or without a thousands separator. */
+function numberPattern(n: unknown): RegExp {
+  const digits = String(Math.round(Number(n)))
+  const groups: string[] = []
+  for (let i = digits.length; i > 0; i -= 3)
+    groups.unshift(digits.slice(Math.max(0, i - 3), i))
+  // No digit boundary: a table's text runs its cells together, so "5" calls then "162,186" reads "5162,186".
+  return new RegExp(groups.join('[,.\\s\\u00a0\\u202f]?'))
+}
+
+/** How many values reach `share` of the largest one. */
+function countAbove(values: number[], share: number): number {
+  const max = Math.max(...values)
+  return values.filter(v => v >= max * share).length
+}
+
+/**
+ * Checks that a bar chart drew its bars. drawnBars counts the bars taller than 12 px, so every
+ * value of at least 15% of the largest must show, and none under 3% can.
+ */
+async function expectBars(f: FrameLocator, tileId: string, values: number[]) {
+  await expect.poll(() => drawnBars(f, tileId), { timeout: 10_000 }).toBeGreaterThanOrEqual(countAbove(values, 0.15))
+  expect(await drawnBars(f, tileId)).toBeLessThanOrEqual(countAbove(values, 0.03))
+}
+
+/** The LLM usage page's points as they are now, and the numbers its tiles must show. */
+async function readUsage(page: Page) {
+  const tokens: Frame = await readPoint(page, 'llm_usage', 'tokens')
+  const summary: { text: string } = await readPoint(page, 'llm_usage', 'summary')
+  const byDay: Frame = await readPoint(page, 'llm_usage', 'by_day')
+  const byModel: Frame = await readPoint(page, 'llm_usage', 'by_model')
+  const models: Frame = await readPoint(page, 'llm_usage', 'models')
+  const days = column(byDay, 'day') as string[]
+  const dayModels = column(byDay, 'model') as string[]
+  const dayTokens = (column(byDay, 'tokens') as number[]).map(Number)
+  const modelIds = column(byModel, 'model_id') as string[]
+  const modelTokens = (column(byModel, 'tokens') as number[]).map(Number)
+  return {
+    total: numberPattern(column(tokens, 'tokens')[0]),
+    summary: summary.text,
+    days: [...new Set(days)],
+    dayTokens,
+    byModelRows: byModel.rows.length,
+    modelCount: models.rows.length,
+    /** The tokens of one model over all days. */
+    modelTotal: (model: string) => numberPattern(modelTokens[modelIds.indexOf(model)]),
+    /** The tokens of one model on one day, and how many models ran that day. */
+    onDay: (day: string, model: string) => ({
+      tokens: numberPattern(dayTokens[days.findIndex((d, i) => d === day && dayModels[i] === model)]),
+      models: days.filter(d => d === day).length,
+    }),
+  }
+}
+
 test.describe('stage C: built-in tiles with real data', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 900 })
@@ -224,16 +320,17 @@ test.describe('stage C: built-in tiles with real data', () => {
   })
 
   test('LLM usage shows the real values', async ({ page }) => {
+    const usage = await readUsage(page)
     await openInShell(page, '/reports/llm-usage')
     const f = pageFrame(page, 'llm_usage')
-    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
-    await expect(f.locator('[data-tile-id="text"]')).toContainText('38 calls used 550135 tokens. claude-sonnet-4-6 used 97.1% of them.')
-    // Five days: five labels, and five bars drawn on the canvas (one per day of the larger series).
-    await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(5)
-    await expect.poll(() => drawnBars(f, 'by_day'), { timeout: 10_000 }).toBe(5)
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(usage.total, { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="text"]')).toContainText(usage.summary)
+    // One label per day, and bars drawn on the canvas (a blank plot with labels fails).
+    await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(usage.days.length)
+    await expectBars(f, 'by_day', usage.dayTokens)
     // The points send no data_as_of, so every frame says it is unknown (contracts section 7).
     await expect(f.locator('[data-tile-id="tokens"] [data-as-of]')).toHaveText('Data as of unknown')
-    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(2)
+    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(usage.byModelRows)
     await expect(f.locator('[data-tile-id="by_day"] figure[aria-label="Tokens by day"]')).toHaveCount(1)
     const canvas = await f.locator('[data-tile-id="by_day"] wippy-chartjs canvas').boundingBox()
     console.log('by_day canvas', JSON.stringify(canvas))
@@ -244,7 +341,8 @@ test.describe('stage C: built-in tiles with real data', () => {
     await combo.focus()
     await page.keyboard.press('Enter')
     const options = f.locator('[role="option"]')
-    await expect(options).toHaveCount(3, { timeout: 5_000 })
+    // Every model, and "All".
+    await expect(options).toHaveCount(usage.modelCount + 1, { timeout: 5_000 })
     const listBox = await f.locator('[role="listbox"]').boundingBox()
     const panel = await f.locator('[data-tile-id="model_picker"]').boundingBox()
     console.log('listbox', JSON.stringify(listBox), 'panel', JSON.stringify(panel))
@@ -260,11 +358,15 @@ test.describe('stage C: built-in tiles with real data', () => {
   test('App activity shows the real values', async ({ page }) => {
     await openInShell(page, '/ops/app-activity')
     const f = pageFrame(page, 'app_activity')
-    await expect(f.locator('[data-tile-id="sessions"] .dash-kpi__value')).toHaveText('14', { timeout: 20_000 })
-    await expect(f.locator('[data-tile-id="messages"] .dash-kpi__value')).toHaveText('107')
-    await expect.poll(() => chartLabels(f, 'sessions_by_month'), { timeout: 10_000 }).toBe(3)
-    await expect.poll(() => drawnBars(f, 'sessions_by_month'), { timeout: 10_000 }).toBe(3)
-    await expect(f.locator('[data-tile-id="message_types"] tbody tr')).toHaveCount(6)
+    const sessions: Frame = await readPoint(page, 'app_activity', 'sessions')
+    const messages: Frame = await readPoint(page, 'app_activity', 'messages')
+    const byMonth: Frame = await readPoint(page, 'app_activity', 'sessions_by_month')
+    const types: Frame = await readPoint(page, 'app_activity', 'message_types')
+    await expect(f.locator('[data-tile-id="sessions"] .dash-kpi__value')).toContainText(numberPattern(sessions.rows[0][0]), { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="messages"] .dash-kpi__value')).toContainText(numberPattern(messages.rows[0][0]))
+    await expect.poll(() => chartLabels(f, 'sessions_by_month'), { timeout: 10_000 }).toBe(byMonth.rows.length)
+    await expectBars(f, 'sessions_by_month', byMonth.rows.map(r => Number(r[1])))
+    await expect(f.locator('[data-tile-id="message_types"] tbody tr')).toHaveCount(types.rows.length)
   })
 })
 
@@ -284,16 +386,26 @@ async function chooseModel(page: Page, f: FrameLocator, label: string) {
   await f.locator('[role="option"]', { hasText: label }).first().click()
 }
 
-/** Clicks the tallest bar of the last category in a two-series bar chart. */
-async function clickLastCategoryBar(f: FrameLocator, tileId: string) {
-  const canvas = f.locator(`[data-tile-id="${tileId}"] wippy-chartjs canvas`)
+/**
+ * Clicks the tallest bar of one category in a grouped bar chart. The chart's own data says how
+ * many categories and series there are and which series is tallest at that label.
+ */
+async function clickCategoryBar(f: FrameLocator, tileId: string, label: string) {
+  const chart = f.locator(`[data-tile-id="${tileId}"] wippy-chartjs`)
+  const data = JSON.parse((await chart.getAttribute('data'))!) as { labels: string[], datasets: Array<{ data: Array<number | null> }> }
+  const at = data.labels.indexOf(label)
+  expect(at, `label ${label}`).toBeGreaterThanOrEqual(0)
+  const heights = data.datasets.map(d => Number(d.data[at] ?? 0))
+  const series = heights.indexOf(Math.max(...heights))
+  // Chart.js gives each category 80% of its width for the bars, split evenly between the series.
+  const centre = 0.5 + 0.8 * ((series + 0.5) / data.datasets.length - 0.5)
+  const canvas = chart.locator('canvas')
   const box = (await canvas.boundingBox())!
-  // The plot starts after the y axis (about 60 px) and has five categories; the second bar of a
-  // category sits right of its centre. Try a few points across that bar, low in the plot.
-  for (const fx of [0.68, 0.72, 0.64, 0.76]) {
-    const plotLeft = 58
-    const cat = (box.width - plotLeft) / 5
-    const x = plotLeft + cat * 4 + cat * fx
+  // The plot starts after the y axis (about 60 px). Try a few points across the bar, low in the plot.
+  const plotLeft = 58
+  const cat = (box.width - plotLeft) / data.labels.length
+  for (const dx of [0, -0.04, 0.04, -0.08, 0.08]) {
+    const x = plotLeft + cat * at + cat * (centre + dx)
     await canvas.click({ position: { x, y: box.height - 45 } })
     if (await f.locator('dashboard-layout').evaluate(el => !!el.shadowRoot!.querySelector('[data-selection="day"]')))
       return
@@ -308,16 +420,17 @@ test.describe('stage D: arguments and interaction', () => {
   })
 
   test('choosing a model updates only the dependent tiles, and clear restores them', async ({ page }) => {
+    const usage = await readUsage(page)
     const reads = watchPointReads(page, 'llm_usage')
     await openInShell(page, '/reports/llm-usage')
     const f = pageFrame(page, 'llm_usage')
-    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
-    await expect(f.locator('[data-tile-id="text"]')).toContainText('38 calls used')
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(usage.total, { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="text"]')).toContainText(usage.summary)
     await page.waitForTimeout(500)
     const before = reads.length
 
     await chooseModel(page, f, 'claude-sonnet-4-6')
-    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/534[,.   ]?297/, { timeout: 10_000 })
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(usage.modelTotal('claude-sonnet-4-6'), { timeout: 10_000 })
     await expect(f.locator('[data-selection="model"] [data-selection-value]')).toContainText('claude-sonnet-4-6')
     await page.waitForTimeout(500)
     const afterModel = reads.slice(before)
@@ -327,40 +440,44 @@ test.describe('stage D: arguments and interaction', () => {
 
     // Clear all: every tile returns to its value for no argument.
     await f.locator('[data-selections-clear-all]').click()
-    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 10_000 })
-    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(2)
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(usage.total, { timeout: 10_000 })
+    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(usage.byModelRows)
     await expect(f.locator('[data-tile-id="model_picker"] [role="combobox"]')).toContainText('All')
     await expect(f.locator('[data-selections]')).toHaveCount(0)
   })
 
   test('a bar click sets the day for the table only', async ({ page }) => {
+    // 2026-08-31 is a seeded day with two models; the chat demo only adds later days.
+    const usage = await readUsage(page)
+    const day = usage.onDay('2026-08-31', 'claude-sonnet-4-6')
     const reads = watchPointReads(page, 'llm_usage')
     await openInShell(page, '/reports/llm-usage')
     const f = pageFrame(page, 'llm_usage')
-    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
-    await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(5)
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(usage.total, { timeout: 20_000 })
+    await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(usage.days.length)
     await page.waitForTimeout(800)
     const before = reads.length
 
-    await clickLastCategoryBar(f, 'by_day')
+    await clickCategoryBar(f, 'by_day', '2026-08-31')
     await expect(f.locator('[data-selection="day"] [data-selection-value]')).toContainText('2026-08-31')
-    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(2)
-    await expect(f.locator('[data-tile-id="by_model"]')).toContainText(/162[,.   ]?186/, { timeout: 10_000 })
+    await expect(f.locator('[data-tile-id="by_model"] tbody tr')).toHaveCount(day.models)
+    await expect(f.locator('[data-tile-id="by_model"]')).toContainText(day.tokens, { timeout: 10_000 })
     await page.waitForTimeout(500)
     const afterClick = reads.slice(before)
     console.log('reads after bar click', JSON.stringify(afterClick))
     expect(afterClick).toEqual(['by_model'])
 
     await f.locator('[data-selection-clear="day"]').click()
-    await expect(f.locator('[data-tile-id="by_model"]')).toContainText(/534[,.   ]?297/, { timeout: 10_000 })
+    await expect(f.locator('[data-tile-id="by_model"]')).toContainText(usage.modelTotal('claude-sonnet-4-6'), { timeout: 10_000 })
   })
 
   test('the model comes from the path on a direct link', async ({ page }) => {
     // Let the shell that sign-in opened finish loading, so this navigation cancels none of its loads.
     await page.waitForLoadState('networkidle')
+    const usage = await readUsage(page)
     await page.goto('/reports/llm-usage/claude-haiku-4-5')
     const f = pageFrame(page, 'llm_usage')
-    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/15[,.   ]?838/, { timeout: 30_000 })
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(usage.modelTotal('claude-haiku-4-5'), { timeout: 30_000 })
     await expect(f.locator('[data-selection="model"] [data-selection-value]')).toContainText('claude-haiku-4-5')
   })
 })
@@ -512,12 +629,13 @@ async function targetStatus(page: Page): Promise<string> {
 
 test.describe('stage F: plan section 7 checks not covered above', () => {
   test('a width change across 1024 changes the layout and sends no read', async ({ page }) => {
-    await page.setViewportSize({ width: 1400, height: 900 })
+    await page.setViewportSize(WIDE)
     await loginAsAdmin(page)
+    const usage = await readUsage(page)
     const reads = watchPointReads(page, 'llm_usage')
     await openInShell(page, '/reports/llm-usage')
     const f = pageFrame(page, 'llm_usage')
-    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(/550[,.   ]?135/, { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="tokens"]')).toContainText(usage.total, { timeout: 20_000 })
     await page.waitForTimeout(800)
     const wide = await boxes(f, ['text', 'model_picker'])
     expect(wide.text.y).toBe(wide.model_picker.y)
@@ -684,7 +802,7 @@ test.describe('stage F: plan section 7 checks not covered above', () => {
 
 test.describe('stage B: page host and dashboard-layout', () => {
   test.beforeEach(async ({ page }) => {
-    await page.setViewportSize({ width: 1400, height: 900 })
+    await page.setViewportSize(WIDE)
     await loginAsAdmin(page)
   })
 
@@ -710,7 +828,7 @@ test.describe('stage B: page host and dashboard-layout', () => {
       return b.t1 && b.t2 && b.t2.y > b.t1.y && b.t1.x === b.t2.x
     }, { timeout: 10_000 }).toBe(true)
     console.log('narrow', JSON.stringify(await boxes(frame, ['t1', 't2', 't3'])))
-    await page.setViewportSize({ width: 1400, height: 900 })
+    await page.setViewportSize(WIDE)
     await expect.poll(async () => {
       const b = await boxes(frame, ['t1', 't2'])
       return b.t1 && b.t2 && b.t1.y === b.t2.y
