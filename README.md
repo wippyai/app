@@ -110,12 +110,13 @@ All frontend, theming, and web-component guidance lives in [`frontend/docs/`](fr
 ## Testing
 
 ```bash
-wippy test users-test
+WIPPY_TEST_REQUIRE_CASES=1 wippy test
 ```
 
-This command waits for the users database migrations and runs the users suite.
-It exits nonzero if any case fails or no cases run. The test entry is inactive
-during normal `wippy run` startup.
+The `wippy/test` runner runs every test entry of the application. The users
+suite waits for the users database migrations first. The command exits nonzero
+if any case fails, and `WIPPY_TEST_REQUIRE_CASES=1` also makes it fail when no
+case runs. Test entries are inactive during normal `wippy run` startup.
 
 ## Documentation
 
