@@ -12,7 +12,13 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "@wippy-fe/types-global-proxy"]
+    "types": ["vite/client", "@wippy-fe/types-global-proxy"],
+    // Local packages (frontend/packages/*) carry their own dev copy of vue.
+    // Resolve every vue import to this app's copy, so a Ref from a package
+    // is the same type as a Ref made here. At run time vue is external.
+    "paths": {
+      "vue": ["./node_modules/vue"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"]
 }

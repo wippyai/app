@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import Button from 'primevue/button'
 import Avatar from 'primevue/avatar'
-import { useApi, useHost, useWippy } from '../composables/useWippy'
+import { on } from '@wippy-fe/proxy'
+import { useAppNav } from '@example/app-nav'
+import SidebarItem from '../components/sidebar-item.vue'
+import { useApi, useHost, usePages } from '../composables/useWippy'
+import { NAV_GROUPS, NAV_ITEMS } from '../nav'
 
 const router = useRouter()
 const route = useRoute()
 const api = useApi()
 const host = useHost()
-const instance = useWippy()
+const unsubscribes: Array<() => void> = []
 
 const collapsed = ref(false)
 const logoUrl = '/app/wippy-logo.svg'
@@ -51,42 +55,27 @@ function cycleTheme() {
   setTheme(themeOptions[(idx + 1) % themeOptions.length].mode)
 }
 
-instance.on('action:navigate', (value: unknown) => {
-  const data = value as NavigateAction
-  const path = typeof data.data?.path === 'string'
-    ? data.data.path
-    : typeof data.path === 'string' ? data.path : null
-  if (path) router.push(path)
+// Host paths leave this app; everything else is a route here. A route here
+// may also be a registry page, which then opens inside this app.
+function openPath(path: string) {
+  if (path.startsWith('/c/') || path.startsWith('/chat/'))
+    host.navigate(path)
+  else
+    router.push(path)
+}
+
+// The sidebar: the app's own items plus the registry pages of NAV_GROUPS,
+// live as pages are published or removed.
+const { tree: navTree, activeKey, open: openItem } = useAppNav({
+  items: NAV_ITEMS,
+  pageList: usePages(),
+  groups: NAV_GROUPS,
+  currentPath: computed(() => route.path),
+  navigate: { route: path => router.push(path), host: path => host.navigate(path) },
 })
 
-interface NavItem {
-  path: string
-  name: string
-  label: string
-  icon: string
-  hostNav?: boolean
-}
-
-const navItems: NavItem[] = [
-  { path: '/', name: 'home', label: 'Home', icon: 'tabler:home' },
-  { path: '/users', name: 'users', label: 'Users', icon: 'tabler:users' },
-  { path: '/components', name: 'components', label: 'Components', icon: 'tabler:components' },
-  { path: '/nested-nav', name: 'nested-nav', label: 'Nested Nav', icon: 'tabler:route-2' },
-  { path: '/research', name: 'research', label: 'Web Research', icon: 'tabler:world-search' },
-  { path: '/c/keeper:main', name: 'keeper', label: 'Keeper', icon: 'tabler:shield-code', hostNav: true },
-]
-
-const currentName = computed(() => route.name)
 const currentUser = ref<{ email: string; full_name: string } | null>(null)
 const wippyToken = ref<string | null>(null)
-
-function navigate(item: NavItem) {
-  if (item.hostNav) {
-    host.navigate(item.path)
-    return
-  }
-  router.push(item.path)
-}
 
 function userInitials(user: { email: string; full_name: string }): string {
   if (user.full_name) {
@@ -136,10 +125,23 @@ onMounted(() => {
   fetchMe()
   fetchWippyAgent()
   themeMode.value = host.getThemeMode()
-  instance.on('@theme', (mode: unknown) => {
+  unsubscribes.push(on('@theme', (mode: unknown) => {
     if (themeOptions.some(option => option.mode === mode))
       themeMode.value = mode as ThemeMode
-  })
+  }))
+  // An agent tool (NavigateTo) asks the UI to open a path.
+  unsubscribes.push(on('action:navigate', (value: unknown) => {
+    const data = value as NavigateAction
+    const path = typeof data.data?.path === 'string'
+      ? data.data.path
+      : typeof data.path === 'string' ? data.path : null
+    if (path)
+      openPath(path)
+  }))
+})
+
+onUnmounted(() => {
+  unsubscribes.splice(0).forEach(unsubscribe => unsubscribe())
 })
 </script>
 
@@ -167,29 +169,48 @@ onMounted(() => {
 
       <nav
         aria-label="Main navigation"
-        class="flex-1 px-2 py-1 space-y-0.5"
+        class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 py-1 space-y-0.5"
       >
-        <button
-          v-for="item in navItems"
-          :key="item.name"
-          class="w-full flex items-center rounded-lg text-sm transition-colors"
-          :class="[
-            collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-3 py-2',
-            currentName === item.name
-              ? 'bg-primary/10 text-primary font-medium'
-              : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800',
-          ]"
-          :aria-current="currentName === item.name ? 'page' : undefined"
-          :title="collapsed ? item.label : undefined"
-          @click="navigate(item)"
+        <template
+          v-for="(node, index) in navTree"
+          :key="node.key"
         >
-          <Icon
-            :icon="item.icon"
-            class="w-[18px] h-[18px] shrink-0"
-            aria-hidden="true"
+          <SidebarItem
+            v-if="node.type === 'item'"
+            :item="node.item"
+            :active="activeKey === node.item.key"
+            :collapsed="collapsed"
+            @open="openItem"
           />
-          <span v-if="!collapsed">{{ item.label }}</span>
-        </button>
+          <div
+            v-else
+            role="group"
+            :aria-labelledby="collapsed ? undefined : `nav-group-${index}`"
+            :aria-label="collapsed ? node.group.label : undefined"
+            class="pt-3 space-y-0.5"
+          >
+            <div
+              v-if="!collapsed"
+              :id="`nav-group-${index}`"
+              class="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-surface-400"
+            >
+              {{ node.group.label }}
+            </div>
+            <div
+              v-else
+              class="mx-2 mb-1 border-t border-surface-200 dark:border-surface-700"
+              aria-hidden="true"
+            />
+            <SidebarItem
+              v-for="item in node.group.items"
+              :key="item.key"
+              :item="item"
+              :active="activeKey === item.key"
+              :collapsed="collapsed"
+              @open="openItem"
+            />
+          </div>
+        </template>
       </nav>
 
       <!-- Color theme switch: segmented (expanded) / single cycling icon (collapsed) -->

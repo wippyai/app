@@ -1,3 +1,5 @@
-export type HostApi = Awaited<ReturnType<typeof window.$W.host>>
-export type ProxyApiInstance = Awaited<ReturnType<typeof window.$W.instance>>
-export type WippyConfig = Awaited<ReturnType<typeof window.$W.config>>
+import type { api, host, on } from '@wippy-fe/proxy'
+
+export type HostApi = typeof host
+export type ApiInstance = typeof api
+export type OnTopic = typeof on
