@@ -83,9 +83,10 @@ entries:
       title: Table
       tile_type: table
       tag: dash-table
+      # A table draws any frame, so it also takes the two-column shapes a chart uses.
       inputs:
         main:
-          shape: table
+          shape: [table, category, series]
       fields: [columns]
       options_schema:
         type: object

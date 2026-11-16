@@ -73,4 +73,43 @@ function M.message_types()
     return query("SELECT type, COUNT(*) AS messages FROM messages GROUP BY 1 ORDER BY 2 DESC")
 end
 
+-- Added for the chat demo: more points an agent can choose from.
+
+function M.messages_by_day()
+    return query("SELECT substr(date, 1, 10) AS day, COUNT(*) AS messages FROM messages GROUP BY 1 ORDER BY 1")
+end
+
+function M.calls_by_day(args)
+    local model = opt(args.model)
+    return query([[
+        SELECT substr(timestamp, 1, 10) AS day, COUNT(*) AS calls
+        FROM token_usage WHERE (? IS NULL OR model_id = ?) GROUP BY 1 ORDER BY 1
+    ]], { model, model })
+end
+
+function M.tokens_by_kind(args)
+    local model = opt(args.model)
+    return query([[
+        SELECT COALESCE(SUM(prompt_tokens), 0) AS prompt, COALESCE(SUM(completion_tokens), 0) AS completion,
+               COALESCE(SUM(thinking_tokens), 0) AS thinking, COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
+               COALESCE(SUM(cache_write_tokens), 0) AS cache_write
+        FROM token_usage WHERE (? IS NULL OR model_id = ?)
+    ]], { model, model })
+end
+
+function M.recent_sessions()
+    return query([[
+        SELECT COALESCE(NULLIF(s.title, ''), '(untitled)') AS title, s.status AS status,
+               substr(s.start_date, 1, 10) AS started,
+               COALESCE(substr(s.last_message_date, 1, 16), '') AS last_message,
+               COUNT(m.message_id) AS messages
+        FROM sessions s LEFT JOIN messages m ON m.session_id = s.session_id
+        GROUP BY s.session_id ORDER BY s.last_message_date DESC LIMIT 20
+    ]])
+end
+
+function M.app_users()
+    return query("SELECT COUNT(*) AS users FROM app_users")
+end
+
 return M
