@@ -9,12 +9,50 @@
 -- user's groups grants.
 local json = require("json")
 local logger = require("logger")
+local registry = require("registry")
 local security = require("security")
 local funcs = require("funcs")
 local plan_lib = require("plan")
 
 local PUBLISH_FUNC = "wippy.dashboards.agent:publish_page"
 local HINT = "Fix every error and call BuildDashboard again with the whole plan."
+
+-- The literal start of a mount route: "/home/:part(.*)*" gives "/home".
+local function mount_prefix(mount_route)
+    local parts = {}
+    for segment in tostring(mount_route):gmatch("[^/]+") do
+        if segment:sub(1, 1) == ":" or segment:find("[%*%(]") then
+            break
+        end
+        parts[#parts + 1] = segment
+    end
+    return "/" .. table.concat(parts, "/")
+end
+
+-- Where a link to a published page points. An app may show pages inside a
+-- shell page instead of on their own: the shell's view.page declares
+-- meta.page_outlet = true and shows any listed page at its own mount prefix
+-- plus the page's route (the template's frontend/packages/app-nav does this).
+-- The link then opens the page inside the shell and keeps the app's nav.
+-- Without exactly one outlet, the link is the page's own route, which the Web
+-- Host opens on its own. The module knows nothing about the app either way.
+local function page_link(route)
+    local pages, err = registry.find({ ["meta.type"] = "view.page" })
+    if err then
+        return route
+    end
+    local outlets = {}
+    for _, entry in ipairs(pages or {}) do
+        local meta = entry.meta or {}
+        if meta.page_outlet == true and type(meta.mountRoute) == "string" then
+            outlets[#outlets + 1] = mount_prefix(meta.mountRoute)
+        end
+    end
+    if #outlets ~= 1 or outlets[1] == "/" then
+        return route
+    end
+    return outlets[1] .. route
+end
 
 -- Publishes with the session's identity, then with each of the user's groups. Returns the
 -- publish result, or nil and { code, message }.
@@ -79,15 +117,17 @@ local function handler(params)
 
     local count = 0
     for _ in pairs(spec.tiles) do count = count + 1 end
-    logger:info("dashboards: page built", { page = result.id, route = result.route, tiles = count, revision = result.revision })
+    local url = page_link(result.route)
+    logger:info("dashboards: page built", { page = result.id, route = result.route, url = url, tiles = count, revision = result.revision })
     return {
         ok = true,
         page_id = result.id,
         title = spec.title,
         route = result.route,
+        url = url,
         revision = result.revision,
         tiles = count,
-        link = "[" .. spec.title .. "](" .. result.route .. ")",
+        link = "[" .. spec.title .. "](" .. url .. ")",
         reply = "Answer in one or two sentences: what the page shows, then the link exactly as given in `link`. "
             .. "Mention a limit only when it matters (for example, the data covers only what this app recorded).",
     }

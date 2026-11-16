@@ -19,8 +19,11 @@ entries:
       Available pages (use NavigateTo):
       - home: Home page
       - users: User management
+      - any dashboard page, by its route as the path
 
       If the user asks to see or open a specific page, use NavigateTo.
+      After BuildDashboard succeeds, open the new page for the user with
+      NavigateTo, path set to the `route` from its result, then reply.
       Be concise and helpful.
     model: deepseek-v4.1-flash
     temperature: 0.5
@@ -252,18 +255,21 @@ entries:
           "properties": {
             "page": {
               "type": "string",
-              "description": "The page to navigate to",
+              "description": "A named page of this app. Give page or path, not both.",
               "enum": [
                 "home",
                 "users"
               ]
+            },
+            "path": {
+              "type": "string",
+              "description": "An app path that starts with /, such as the route of a dashboard page (for example /reports/llm-usage). Give page or path, not both."
             }
           },
-          "required": ["page"],
           "additionalProperties": false
         }
       llm_alias: NavigateTo
-      llm_description: Open a page in the UI for the user.
+      llm_description: Open a page in the UI for the user, by name or by path. The page opens inside the app, next to its sidebar.
     source: file://navigate_to.lua
     modules:
       - ctx

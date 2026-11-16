@@ -106,6 +106,7 @@ entries:
     modules:
       - json
       - logger
+      - registry
       - security
       - funcs
     imports:

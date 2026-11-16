@@ -4,8 +4,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import Button from 'primevue/button'
 import Avatar from 'primevue/avatar'
-import { on } from '@wippy-fe/proxy'
-import { useAppNav } from '@example/app-nav'
+import { config, on } from '@wippy-fe/proxy'
+import { isUnder, mountPrefix, normalizePath, useAppNav } from '@example/app-nav'
 import SidebarItem from '../components/sidebar-item.vue'
 import { useApi, useHost, usePages } from '../composables/useWippy'
 import { NAV_GROUPS, NAV_ITEMS } from '../nav'
@@ -55,20 +55,38 @@ function cycleTheme() {
   setTheme(themeOptions[(idx + 1) % themeOptions.length].mode)
 }
 
-// Host paths leave this app; everything else is a route here. A route here
-// may also be a registry page, which then opens inside this app.
+const pageList = usePages()
+
+// This app's own mount prefix (/home), from its entry in the page list.
+const ownPageId = config.selfPageId ?? config.context?.resourceId
+const ownPrefix = computed(() => {
+  const own = pageList.pages.value.find(page => page.id === ownPageId)
+  return own?.mountRoute ? mountPrefix(own.mountRoute) : null
+})
+
+// Host paths (/c/..., /chat/...) leave this app. A host URL inside this app
+// (/home/users) and an app route (/users) both open here. A route here may
+// also be a registry page, which then opens inside this app.
 function openPath(path: string) {
-  if (path.startsWith('/c/') || path.startsWith('/chat/'))
+  if (path.startsWith('/c/') || path.startsWith('/chat/')) {
     host.navigate(path)
-  else
-    router.push(path)
+    return
+  }
+  const prefix = ownPrefix.value
+  if (prefix && prefix !== '/' && path.startsWith(prefix) && isUnder(normalizePath(path), prefix)) {
+    // Keep any query: /home/components?tab=chat opens /components?tab=chat.
+    const rest = path.slice(prefix.length)
+    router.push(rest.startsWith('/') ? rest : `/${rest}`)
+    return
+  }
+  router.push(path)
 }
 
 // The sidebar: the app's own items plus the registry pages of NAV_GROUPS,
 // live as pages are published or removed.
 const { tree: navTree, activeKey, open: openItem } = useAppNav({
   items: NAV_ITEMS,
-  pageList: usePages(),
+  pageList,
   groups: NAV_GROUPS,
   currentPath: computed(() => route.path),
   navigate: { route: path => router.push(path), host: path => host.navigate(path) },
