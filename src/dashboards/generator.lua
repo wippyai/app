@@ -33,6 +33,10 @@ function M.build_entry(spec)
             mountRoute = spec_lib.mount_route(spec.route),
             resource_id = spec.id,
             managed_by = "wippy.dashboards",
+            -- One nav group for every dashboard page in the Host's sidebar.
+            group = "Dashboards",
+            group_icon = "tabler:layout-dashboard",
+            group_order = 50,
         },
     }
 end
@@ -90,6 +94,36 @@ function M.write(spec)
         return nil, "apply failed"
     end
     return entry.id
+end
+
+-- Deletes the view.page entry of a page. A page whose entry is already gone
+-- (for example after a restart before the restore ran) counts as removed.
+-- Returns entry_id, or nil, err.
+function M.remove(page_id)
+    local entry_id = spec_lib.entry_id(page_id)
+    if not inside_namespace(entry_id) then
+        return nil, "refused: entry id outside " .. spec_lib.ENTRY_NAMESPACE
+    end
+    if not registry.get(entry_id) then
+        return entry_id
+    end
+    local snap, err = registry.snapshot()
+    if err then
+        return nil, "snapshot failed"
+    end
+    local changes, cerr = snap:changes()
+    if cerr then
+        return nil, "changeset failed"
+    end
+    local _, derr = changes:delete(entry_id)
+    if derr then
+        return nil, "changeset rejected the delete"
+    end
+    local _, aerr = changes:apply()
+    if aerr then
+        return nil, "apply failed"
+    end
+    return entry_id
 end
 
 return M

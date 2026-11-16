@@ -225,3 +225,74 @@ entries:
     method: POST
     func: run_action
     path: /dashboards/pages/{id}/actions/{action}
+
+  # Removes a published page: its row, its view.page entry, its route and nav item.
+  - name: unpublish
+    kind: function.lua
+    meta:
+      comment: DELETE a dashboard page (same permission as publishing)
+    source: file://unpublish.lua
+    method: handler
+    modules:
+      - http
+      - security
+      - sql
+      - logger
+    imports:
+      spec: wippy.dashboards:spec
+      generator: wippy.dashboards:generator
+
+  - name: unpublish.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: DELETE
+    func: unpublish
+    path: /dashboards/pages/{id}
+
+  # ── restore on start (spec 9.1) ──────────────────────────────────────
+  # Runtime entries are lost on restart; this service re-writes the view.page
+  # entry of every published page when the app starts, through the generator,
+  # which refuses any change outside wippy.dashboards.pages.
+  - name: restore
+    kind: process.lua
+    meta:
+      comment: Re-writes the view.page entries of the stored published pages, then waits
+    source: file://restore.lua
+    method: main
+    modules:
+      - sql
+      - json
+      - logger
+    imports:
+      generator: wippy.dashboards:generator
+
+  - name: restore_service
+    kind: process.service
+    meta:
+      comment: Starts the page restore once the database and process host run
+    process: wippy.dashboards:restore
+    host: app:processes
+    lifecycle:
+      auto_start: true
+      depends_on:
+        - app:processes
+        - app:db
+      security:
+        actor:
+          id: wippy.dashboards.restore
+        groups:
+          - wippy.dashboards:restorer
+
+  # The restore actor may apply registry changes; the generator limits them to
+  # wippy.dashboards.pages in code, because registry.apply cannot be scoped.
+  - name: restorer_registry
+    kind: security.policy
+    meta:
+      comment: The page restore service may change the registry
+    groups:
+      - wippy.dashboards:restorer
+    policy:
+      resources: '*'
+      actions: '*'
+      effect: allow
