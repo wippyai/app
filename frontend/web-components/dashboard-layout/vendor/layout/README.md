@@ -3,7 +3,7 @@
 Build output of `@wippy-fe/layout` 0.0.68 with a local patch: a nested `PanelTree` takes an optional `size`.
 Remove this folder and use the published package when the patch is released.
 
-- Repository: `C:/Projects/gen-2-chat` (Wippy Web Host)
+- Repository: Wippy Web Host (`estimation-engine/wippy-web-host`)
 - Branch: `feat/layout-tree-size` (not pushed), cut from `origin/webcomponents` at `1e92ea1e`
 - Commit: `252942387a3dcb5b303eec7e3c6f67123878a5ae`
 - Package: `npm/@wippy-fe--layout`

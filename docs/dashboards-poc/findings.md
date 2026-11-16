@@ -93,15 +93,15 @@ These changes come from the build. Each one names the section of spec v6.8 it ch
 | gen-2-chat | `feat/layout-tree-size`, worktree `.local/worktrees/dashboards-layout-size` | 2523942: size on `@wippy-fe/layout` tree nodes |
 | web-components | `feat/chartjs-click-event`, worktree `.local/worktrees/chartjs-click` | 7d47955, f3286ee: `chart-click` event; 1f5c564: the chart fills its host |
 
-The template's `wippy.lock` loads `wippy-swiss/chartjs` from the local chart branch, and the template vendors the patched `@wippy-fe/layout` build. Both must be published before this branch runs anywhere else.
+The tracked `wippy.lock` pins hub versions only. The chart click needs the local chart branch until `wippy-swiss/chartjs` 0.2.0 is released: put it in a gitignored `.wippy.workspace.yaml` (a `workspace` profile with `workspace.replacements`, Wippy 0.3.26a or later). Without it the charts draw, but a bar click does nothing. The template vendors the patched `@wippy-fe/layout` build until that patch is released.
 
 ## How to run the POC
 
-1. Use the worktree `C:/Projects/app-template-raw/.local/worktrees/dashboards-poc`. It has its own `.env` and `.wippy/app.db`. The app listens on `127.0.0.1:8086`, because `.env` sets that port.
-2. After a `wippy.lock` change, run `C:/Projects/app-template-raw/wippy.exe install` in the worktree.
-3. Build the front end from the worktree: `.\make.bat build`. To build one package, use `.\make.bat build-wc-<name>` or `.\make.bat build-app-<name>`.
-4. Start the app with the wippy-dev skill (`preflight`, then `bg_run`, then `check`). The start line is `wippy.exe run -c -o app:gateway:addr=:8086` with `.env` loaded.
+1. The app reads `.env` and keeps its data in `.wippy/app.db`. The local checkout listens on `127.0.0.1:8086`, because its `.env` sets that port.
+2. After a `wippy.lock` change, run `wippy install`.
+3. Build the front end: `make.bat build` on Windows, `make build` elsewhere. To build one package, use the `build-wc-<name>` or `build-app-<name>` target.
+4. Start the app with `.env` loaded: `wippy run -c --config .wippy.workspace.yaml --profile workspace -o app:gateway:addr=:8086`. Leave out the two config flags when you have no local replacements.
 5. The restore service publishes the stored pages again at each start. To rebuild the two demo pages from their specs, sign in as the admin and send `POST /api/v1/demo/build`. The browser suite does this itself.
 6. For the chat demo, start the run card's `managed` instance, sign in, open "Ask Wippy" and ask for a dashboard, for example "Build me a dashboard of LLM usage: total tokens, tokens by day per model, and a table by model, with a model filter."
 7. Open `http://127.0.0.1:8086/`, sign in, and open the pages from the menu or at `/reports/llm-usage` and `/ops/app-activity`. The admin account is in `.env`. The test users `viewer@wippy.local` and `target@wippy.local` come from `src/demo_seed/`.
-8. Run the browser suite from the worktree: `node C:/Projects/app-template-raw/node_modules/@playwright/test/cli.js test e2e/dashboards.spec.ts --reporter=list`. Before the first test it publishes the two demo pages and the two stage B test pages from `e2e/fixtures/dashboards/`.
+8. Run the browser suite: `npm run test:e2e -- e2e/dashboards.spec.ts --project=chromium`. Before the first test it publishes the two demo pages and the two stage B test pages from `e2e/fixtures/dashboards/`.
