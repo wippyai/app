@@ -8,7 +8,7 @@ The interfaces of this build are in `contracts.md` in this folder.
 
 ## Answers to the eight goals
 
-The evidence is the browser suite `e2e/dashboards.spec.ts`, which runs in headless Chromium against the real Web Host. It watches every page from before sign-in with the HTTP cache off, and it fails a test on any console error, page error, error response or failed request that the test did not declare. The final run passed the whole suite twice, 30 of 30. After the chat demo, on 16 November, it passed 15 of 15 in managed mode.
+The evidence is the browser suite `e2e/dashboards.spec.ts`, which runs in headless Chromium against the real Web Host. It watches every page from before sign-in with the HTTP cache off, and it fails a test on any console error, page error, error response or failed request that the test did not declare. The final run passed the whole suite twice, 30 of 30. After the chat demo, on 16 November, it passed 15 of 15 in managed mode and 15 of 15 in the default compat mode.
 
 | # | Goal | Answer | Evidence |
 |---|---|---|---|
