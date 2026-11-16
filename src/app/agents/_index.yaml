@@ -27,7 +27,10 @@ entries:
       Be concise and helpful.
     model: deepseek-v4.1-flash
     temperature: 0.5
-    max_tokens: 8000
+    # A dashboard plan of up to 12 tiles plus the model's reasoning needs more
+    # than 8000 output tokens; at 8000 a large request ended with "Model reached
+    # its output limit". The model allows far more (src/app/models).
+    max_tokens: 16000
     traits:
       - id: userspace.user.traits:user_aware
       - id: app.agents:wippy_nav_trait

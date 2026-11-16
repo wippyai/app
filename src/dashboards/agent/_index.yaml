@@ -155,7 +155,8 @@ entries:
          an argument that makes the page more useful. A select filter needs an
          options point and a control.select tile. Bind point args to it with
          {"filter": "<name>"}. A chart can set a filter on click with click_sets.
-      4. Arrange rows: numbers and controls first, up to four per row; then charts
+      4. Arrange rows: a text tile (a summary or note) alone on its own row at
+         width 100; numbers and controls next, up to four per row; then charts
          and tables, two per row; widths are percentages.
       5. Call BuildDashboard once with the whole plan. If it returns errors, fix
          each one and call it again, at most three times in total.

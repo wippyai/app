@@ -15,8 +15,19 @@ test.skip(process.env.RUN_LLM_DEMO !== '1', 'calls a real LLM; set RUN_LLM_DEMO=
 test.describe.configure({ mode: 'serial' })
 
 const SHOTS = process.env.SHOTS_DIR
+/**
+ * The showcase request: one page with every tile kind (text, numbers, a select filter, bar, doughnut
+ * and line charts, a table, and the two plugin tiles), a model filter, a day filter set by a bar
+ * click, and the live user list. It asks for 11 tiles; a plan may hold at most 12.
+ */
 const ADMIN_PROMPT = process.env.DEMO_PROMPT
-  || 'Build me a dashboard of our LLM token use: total tokens and calls, tokens by day per model, tokens by kind as a doughnut, and a model filter.'
+  || 'Build me an app overview dashboard. Start with a one-sentence summary of LLM token use. Then the numbers: '
+  + 'total LLM tokens, LLM calls and chat sessions. Add a model filter that applies to the token number, the '
+  + 'tokens-by-day chart and the model table, and a day filter that I set by clicking a bar in the tokens-by-day '
+  + 'chart; the model table follows that day too. Charts: LLM tokens by day per model as bars, tokens by kind as '
+  + 'a doughnut, and chat messages per day as a line. A table of calls and tokens by model. Also show the users '
+  + 'with their live status and the latest workflow run as a tree. I confirm that the page may let admins change '
+  + 'a user\'s status.'
 
 /** A page link the agent gives: into the home page (/home/dash/...), or a page's own route. */
 const PAGE_LINK = 'a[href*="/dash/"]'
@@ -79,7 +90,7 @@ test('one prompt in the chat builds one dashboard', async ({ page }) => {
 
   // The sidebar already lists the new page: the backend's `pages` signal, no reload. A page with
   // the same title replaces the earlier one, so the count may stay the same.
-  await expect(dashboardsGroup(page).getByRole('button', { name: title })).toBeVisible({ timeout: 10_000 })
+  await expect(dashboardsGroup(page).getByRole('button', { name: title, exact: true })).toBeVisible({ timeout: 10_000 })
   expect(await dashboardsGroup(page).getByRole('button').count()).toBeGreaterThanOrEqual(itemsBefore)
   await page.waitForTimeout(1500)
   await shot(page, 'demo-1-chat')

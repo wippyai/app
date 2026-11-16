@@ -95,7 +95,7 @@ test.afterEach(async () => {
 test.describe('app nav: the app\'s own sidebar lists registry pages live', () => {
   test('the sidebar keeps its own items and adds the Dashboards group; the Host nav stays hidden', async ({ page }) => {
     await loginAsAdmin(page)
-    await expect(dashboardsGroup(page).getByRole('button', { name: 'LLM usage' })).toBeVisible()
+    await expect(dashboardsGroup(page).getByRole('button', { name: 'LLM usage', exact: true })).toBeVisible()
     const labels = await navLabels(page)
     expect(labels.slice(0, OWN_ITEMS.length)).toEqual(OWN_ITEMS)
     expect(labels).toContain('App activity')
@@ -110,7 +110,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
   test('a dashboard opens inside the home page and the sidebar stays', async ({ page }) => {
     await loginAsAdmin(page)
     await markShell(page)
-    await dashboardsGroup(page).getByRole('button', { name: 'LLM usage' }).click()
+    await dashboardsGroup(page).getByRole('button', { name: 'LLM usage', exact: true }).click()
     await expect(page).toHaveURL(/\/home\/reports\/llm-usage$/)
     await expect(active(page)).toHaveText('LLM usage')
     await expect(hosted(page, 'llm_usage').locator('[data-tile-id="model_picker"]')).toBeVisible()
@@ -118,7 +118,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     expect(await shellKept(page)).toBe(true)
 
     // An own item leaves the hosted page, still in the same home page.
-    await sidebar(page).getByRole('button', { name: 'Users' }).click()
+    await sidebar(page).getByRole('button', { name: 'Users', exact: true }).click()
     await expect(page).toHaveURL(/\/home\/users$/)
     await expect(active(page)).toHaveText('Users')
     expect(await shellKept(page)).toBe(true)
@@ -132,7 +132,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     await expect(board.locator('[data-tile-id="model_picker"]')).toContainText('claude-haiku-4-5')
     await expect(active(page)).toHaveText('LLM usage')
 
-    await sidebar(page).getByRole('button', { name: 'Home' }).click()
+    await sidebar(page).getByRole('button', { name: 'Home', exact: true }).click()
     await expect(page).toHaveURL(/\/home\/?$/)
     await expect(active(page)).toHaveText('Home')
 
@@ -154,7 +154,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
       const published = await api(page, 'POST', '/api/v1/dashboards/pages', fixturePage(id, '/coord/nav-live', 'Nav live check'))
       expect(published.status, published.body).toBe(200)
       // The backend sends `pages`; the sidebar reads the list again. No reload.
-      const item = dashboardsGroup(page).getByRole('button', { name: 'Nav live check' })
+      const item = dashboardsGroup(page).getByRole('button', { name: 'Nav live check', exact: true })
       await expect(item).toBeVisible({ timeout: 5_000 })
       await item.click()
       await expect(page).toHaveURL(/\/home\/coord\/nav-live$/)
@@ -167,7 +167,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
       await expect(shell(page).getByText('This page is no longer available')).toBeVisible()
       expect(await shellKept(page)).toBe(true)
 
-      await shell(page).getByRole('button', { name: 'Go to Home' }).click()
+      await shell(page).getByRole('button', { name: 'Go to Home', exact: true }).click()
       await expect(page).toHaveURL(/\/home\/?$/)
     }
     finally {
@@ -190,13 +190,13 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     try {
       const published = await api(page, 'POST', '/api/v1/dashboards/pages', fixturePage(id, '/coord/deny-check', 'Denied check'))
       expect(published.status, published.body).toBe(200)
-      await expect(dashboardsGroup(page).getByRole('button', { name: 'Denied check' })).toBeVisible({ timeout: 5_000 })
+      await expect(dashboardsGroup(page).getByRole('button', { name: 'Denied check', exact: true })).toBeVisible({ timeout: 5_000 })
 
       const viewer = await newPage(browser, 'viewer')
       await loginAs(viewer, 'viewer@wippy.local')
       await shellReady(viewer)
-      await expect(dashboardsGroup(viewer).getByRole('button', { name: 'LLM usage' })).toBeVisible()
-      await expect(dashboardsGroup(viewer).getByRole('button', { name: 'Denied check' })).toHaveCount(0)
+      await expect(dashboardsGroup(viewer).getByRole('button', { name: 'LLM usage', exact: true })).toBeVisible()
+      await expect(dashboardsGroup(viewer).getByRole('button', { name: 'Denied check', exact: true })).toHaveCount(0)
       // A direct link to the denied page finds no page for this viewer and goes Home.
       await openInShell(viewer, '/home/coord/deny-check')
       await expect(viewer).toHaveURL(/\/home\/?$/)
@@ -214,7 +214,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
       if (m)
         reads.push(m[1])
     })
-    await dashboardsGroup(page).getByRole('button', { name: 'App activity' }).click()
+    await dashboardsGroup(page).getByRole('button', { name: 'App activity', exact: true }).click()
     await expect(hosted(page, 'app_activity').locator('[data-tile-id="users"]')).toBeVisible()
     await expect.poll(() => reads.filter(p => p === 'users').length).toBeGreaterThan(0)
     const before = reads.length
