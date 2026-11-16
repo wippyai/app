@@ -84,11 +84,13 @@ src/app/               Backend (Wippy Lua), namespace `app`
   models/              app.models     LLM model registry
   research/            app.research   Web Research demo: agent + HTTP GET tool + dataflow
   views/               app.views      frontend page registration (view.page)
+  pages/               app.pages      sends `pages` when the page list changes
   deps/                app.deps       module dependencies (facade, keeper, llm, ...)
   env/                 app.env        environment storage
 
 frontend/
   applications/main/   Vue 3 admin app (the page you see)
+  packages/app-nav/    headless model of the live sidebar (see Navigation)
   web-components/       standalone example components (mermaid, markdown, charts, ...)
   docs/                frontend and theming guides
 
@@ -102,6 +104,21 @@ cd frontend/applications/main && npm run dev   # frontend watch mode
 make build                                     # rebuild all bundles to static/
 wippy run -c                                   # server
 ```
+
+## Navigation
+
+The app draws its own sidebar and hides the Web Host's built-in nav (`hide_nav_bar: "true"` in `src/app/deps/_index.yaml`). The app's sections (Users, Components, Web Research and the others) are routes inside one page, `app.views:main`, and the Host nav can list only whole pages. Its sidebar also has no place for the logo, the theme switch, the user card or "Ask Wippy".
+
+The sidebar is still live. It lists two kinds of items:
+
+- **The app's own items**, declared in `frontend/applications/main/src/nav.ts` (`NAV_ITEMS`).
+- **Pages from the registry** whose `meta.group` is in `NAV_GROUPS`, for example the `Dashboards` group. Other modules add such pages at run time, and the sidebar lists the pages each viewer may open.
+
+When a module publishes, changes or removes a `view.page`, the service `src/app/pages` sends the WebSocket topic `pages`. The sidebar then reads `/api/public/pages/list` again, so a new page joins the sidebar while the app is open. The Host's built-in nav listens for the same topic.
+
+A registry page opens inside the home page, next to the sidebar, at the start of its own mount route. For example, `/reports/llm-usage/:part(.*)*` opens at `/home/reports/llm-usage`. The home page declares `meta.page_outlet: true`, so modules that hand out page links, such as the dashboards agent, point them there. Each page is still a regular `view.page` and also opens on its own route.
+
+The logic is in the headless package [`frontend/packages/app-nav`](frontend/packages/app-nav/README.md): it merges the items, orders them with the Host nav's rules, keeps the list live and resolves paths. The app keeps the look: `src/app/app.vue`, `src/components/sidebar-item.vue` and `src/pages/hosted-page.vue`. To add a group, put its name in `NAV_GROUPS`. To add an item of your own, add it to `NAV_ITEMS`.
 
 ## Frontend & theming
 

@@ -1,6 +1,6 @@
 # Dashboards POC: findings
 
-Status: POC complete on local branches, 11 November 2026. The chat demo was added on 16 November 2026. Nothing is pushed or published.
+Status: POC complete, 11 November 2026. The chat demo and the app's own live sidebar were added on 16 November 2026. The branch is pushed as a draft pull request; nothing is published.
 
 The POC builds the frame from the dashboards specification v6.8 on `app-template-raw`, a plain Wippy application with no Kickside modules. It shows two generated pages on the template's own data: LLM usage at `/reports/llm-usage` and App activity at `/ops/app-activity`. `wippy/dashboards` is Wippy core and works on its own. Kickside is one extension of it, and the POC does not touch Kickside.
 
@@ -8,7 +8,7 @@ The interfaces of this build are in `contracts.md` in this folder.
 
 ## Answers to the eight goals
 
-The evidence is the browser suite `e2e/dashboards.spec.ts`, which runs in headless Chromium against the real Web Host. It watches every page from before sign-in with the HTTP cache off, and it fails a test on any console error, page error, error response or failed request that the test did not declare. The final run passed the whole suite twice, 30 of 30. After the chat demo, on 16 November, it passed 15 of 15 in managed mode and 15 of 15 in the default compat mode.
+The evidence is the browser suite `e2e/dashboards.spec.ts`, which runs in headless Chromium against the real Web Host. It watches every page from before sign-in with the HTTP cache off, and it fails a test on any console error, page error, error response or failed request that the test did not declare. The final run passed the whole suite twice, 30 of 30. After the chat demo, on 16 November, it passed 15 of 15 in managed mode and 15 of 15 in the default compat mode. With the app's own live sidebar it passes together with `e2e/app-nav.spec.ts`, 22 of 22, in the default compat mode.
 
 | # | Goal | Answer | Evidence |
 |---|---|---|---|
@@ -29,18 +29,29 @@ The app's normal chat builds a page from one request. There is no builder page a
 
 - The chat agent `wippy` (`src/app/agents/_index.yaml`) gains the trait `wippy.dashboards.agent:trait`. The trait adds the live catalogue to the system prompt: every declared point with its fields and shape, and every tile type with the shapes it accepts. It also adds one tool, `BuildDashboard`.
 - The tool takes a plan: a title, filters, tiles and rows. `plan.lua` turns it into a page spec, checks every field and shape against the catalogue, and publishes it through the same publish library as `POST /api/v1/dashboards/pages`. A refused plan goes back to the model as a list of errors, and the model corrects it. A tile with actions needs `confirmed: true`, which the agent sets only after the user agrees in the chat.
-- The tool answers with a Markdown link to the new page. The page opens in the main panel, and the Host's nav lists it under "Dashboards".
+- The tool answers with a Markdown link to the new page. The app's agent then opens the page for the user with `NavigateTo`. The page appears in the app's own sidebar under "Dashboards" and opens inside the home page, next to that sidebar (see "The app's own live sidebar" below).
 - A viewer without `dashboards.publish` gets a refusal in the chat, and no page is made.
 - The chat model in this app is DeepSeek V4.1 Flash. In the demo runs it built a correct page from one request. Once it chose a pie chart for a table point; the tool's error made it change the chart.
-- Evidence: `e2e/dashboards-chat.spec.ts` (gated by `RUN_LLM_DEMO=1`, because each run spends model credits) passed 2 of 2 in managed mode: the admin builds a page and opens it from the link, and the viewer is refused.
+- Evidence: `e2e/dashboards-chat.spec.ts` (gated by `RUN_LLM_DEMO=1`, because each run spends model credits) passed 2 of 2, first in managed mode and then in the default compat mode with the app's own sidebar: the admin builds a page, the page joins the sidebar without a reload, its link opens it inside the home page, and the viewer is refused.
 
 Findings from the demo:
 
 - **Tool identity.** An agent tool runs with the chat session's actor, but with the default user scope, not the scope of the user's groups. A publish from the tool was refused for the admin. The tool now rebuilds the scope from the actor's security groups (`security.named_scope`) and calls the publisher as that user. Phase 1 needs a platform answer: either tools get the session's real scope, or the spec says how a tool acts as its user.
-- **Routes of new pages.** The Host learns routes at start or on a full page load. A link in the chat is a plain link, so it loads the page in full and the new route works. An in-app navigation to a page made after the start would fail until the Host learns new routes when a page is published.
-- **Nav.** The template's default compat boot hides the Host's dynamic nav (`hide_nav_bar: "true"`) and shows the home app's own sidebar. In managed mode (`-o wippy.facade:fe_mode:default=managed`) the generated pages appear in the Host's nav like any other page.
+- **Routes of new pages.** The Host learns routes at start or on a full page load. A page opened on its own route after it was made needs a full load. Inside the home page this does not matter, because the home page resolves paths from the live page list, not from the Host's routes.
+- **Nav.** The template's default compat boot hides the Host's dynamic nav (`hide_nav_bar: "true"`) and shows the home app's own sidebar. In managed mode (`-o wippy.facade:fe_mode:default=managed`) the generated pages appear in the Host's nav like any other page, but next to the app's own sidebar, so the app shows two sidebars. The demo therefore stays in compat mode and makes the app's own sidebar live.
 - **Restore on start.** The process service `wippy.dashboards:restore_service` publishes every stored page again when the app starts, so pages, routes and nav items survive a restart. `DELETE /api/v1/dashboards/pages/{id}` removes a page for good.
 - **Live data in tests.** The chat itself writes LLM usage, sessions and messages, so the demo pages change after every chat. The browser suite now reads the expected numbers from the points and compares the tiles with them.
+
+## The app's own live sidebar (16 November)
+
+The app keeps the look it had before the dashboards work: compat boot, no Host nav, and the home page's own sidebar. That sidebar now lists registry pages too.
+
+- **What the user sees.** Below the app's own items, the sidebar shows a "Dashboards" group with every dashboard page the user may open. A page that is published, changed or removed while the app is open joins, changes or leaves the group without a reload. Opening an item shows the page inside the home page, so the sidebar stays. A page that disappears while open shows "This page is no longer available" with a way back to Home.
+- **Live list.** The service `src/app/pages` watches registry commits. When the nav-relevant meta of any `view.page` changes, it sends the content-free WebSocket topic `pages`. Clients then read `/api/public/pages/list` again with their own token, so the per-user access check still decides what each user sees. It works for any module, including direct changeset applies that skip Keeper's observer. Measured: one signal about 200 ms after a publish or a removal. The Host's built-in nav listens for the same topic, so apps that show it get live updates too.
+- **Pages inside the home page.** The home page's catch-all route resolves a path to a listed page and shows it with `<w-artifact type="page" nav-owner>`, at the start of the page's mount route: `/reports/llm-usage` opens at `/home/reports/llm-usage`. The page's own sub-path, a reload, and back and forward stay in the browser URL. The dashboard page receives its id and sub-path, reads its data, and gets live signals through both frame levels. A filter takes its value from the path, and choosing a filter value does not write the path (contracts section 6), which is unchanged.
+- **Links and agent navigation.** The home page declares `meta.page_outlet: true`. `BuildDashboard` looks for exactly one such page and links into it (`/home/dash/<slug>`); with none, the link stays the page's own route, so `wippy/dashboards` still knows nothing about the app. `NavigateTo` accepts a path, and the app's agent opens a page it just built. In the recorded demo run the chat panel was closed after the link was clicked; the page had already opened, because the agent navigated first.
+- **Abstraction.** The logic is a headless package, `frontend/packages/app-nav`: it merges the app's items with the registry pages of chosen groups, orders them by the Host nav's rules, keeps the list live, finds the active item and resolves paths. The app keeps the look. Nested Nav uses the same frame component as the dashboards. A Web Host version of the same API (with live route refresh) is being built on a separate branch of the Web Host repository.
+- **Evidence.** 43 unit tests in the package; `e2e/app-nav.spec.ts`, 7 of 7; together with `e2e/dashboards.spec.ts`, 22 of 22; the chat demo, 2 of 2. The compliance gate of the home app went from 2 failures to none.
 
 ## Reviews
 
@@ -89,7 +100,7 @@ These changes come from the build. Each one names the section of spec v6.8 it ch
 
 | Repository | Branch | Commits |
 |---|---|---|
-| app-template-raw | `feat/dashboards-poc`, worktree `.local/worktrees/dashboards-poc` | 7f2e349 to 8496d58 and this document, on `origin/master` 3606075 |
+| app-template-raw | `feat/dashboards-poc`, worktree `.local/worktrees/dashboards-poc`, draft pull request wippyai/app#42 | 7f2e349 to 8496d58 for the POC, then the chat demo and the live sidebar, on `origin/master` 3606075 |
 | gen-2-chat | `feat/layout-tree-size`, worktree `.local/worktrees/dashboards-layout-size` | 2523942: size on `@wippy-fe/layout` tree nodes |
 | web-components | `feat/chartjs-click-event`, worktree `.local/worktrees/chartjs-click` | 7d47955, f3286ee: `chart-click` event; 1f5c564: the chart fills its host |
 
@@ -102,6 +113,6 @@ The tracked `wippy.lock` pins hub versions only. The chart click needs the local
 3. Build the front end: `make.bat build` on Windows, `make build` elsewhere. To build one package, use the `build-wc-<name>` or `build-app-<name>` target.
 4. Start the app with `.env` loaded: `wippy run -c --config .wippy.workspace.yaml --profile workspace -o app:gateway:addr=:8086`. Leave out the two config flags when you have no local replacements.
 5. The restore service publishes the stored pages again at each start. To rebuild the two demo pages from their specs, sign in as the admin and send `POST /api/v1/demo/build`. The browser suite does this itself.
-6. For the chat demo, start the run card's `managed` instance, sign in, open "Ask Wippy" and ask for a dashboard, for example "Build me a dashboard of LLM usage: total tokens, tokens by day per model, and a table by model, with a model filter."
-7. Open `http://127.0.0.1:8086/`, sign in, and open the pages from the menu or at `/reports/llm-usage` and `/ops/app-activity`. The admin account is in `.env`. The test users `viewer@wippy.local` and `target@wippy.local` come from `src/demo_seed/`.
-8. Run the browser suite: `npm run test:e2e -- e2e/dashboards.spec.ts --project=chromium`. Before the first test it publishes the two demo pages and the two stage B test pages from `e2e/fixtures/dashboards/`.
+6. For the chat demo, sign in, open "Ask Wippy" and ask for a dashboard, for example "Build me a dashboard of LLM usage: total tokens, tokens by day per model, and a table by model, with a model filter." The new page joins the sidebar's "Dashboards" group and opens inside the app.
+7. Open `http://127.0.0.1:8086/`, sign in, and open the pages from the sidebar's "Dashboards" group, or at `/home/reports/llm-usage` and `/home/ops/app-activity`. The admin account is in `.env`. The test users `viewer@wippy.local` and `target@wippy.local` come from `src/demo_seed/`.
+8. Run the browser suites: `npm run test:e2e -- e2e/dashboards.spec.ts e2e/app-nav.spec.ts --project=chromium`. Before the first test they publish the two demo pages and the two stage B test pages from `e2e/fixtures/dashboards/`. The unit tests of the sidebar package run with `make test-pkg-app-nav`.
