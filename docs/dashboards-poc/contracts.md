@@ -44,6 +44,7 @@ All endpoints sit on `app:api`, take the viewer's token and return JSON.
 | Method and path | Who | Stage | Purpose |
 |---|---|---|---|
 | `POST /api/v1/dashboards/pages` | caller allowed `dashboards.publish` on `wippy.dashboards:pages` | B1 | Store a page spec and publish it |
+| `DELETE /api/v1/dashboards/pages/{id}` | caller allowed `dashboards.publish` on `wippy.dashboards:pages` | demo | Remove a page: its `view.page` entry first, then its stored row. Answers `{ "id": "...", "removed": true }`, or 404 for an unknown page |
 | `GET /api/v1/dashboards/pages/{id}/props` | viewer with `view` on the page's entry | B1 | Compiled props of the published revision |
 | `GET /api/v1/dashboards/pages/{id}/points/{point}` | viewer with `view` on the page's entry | C2 | One read. Query: `args` (one JSON value, URL-encoded) and optional `operation` |
 | `POST /api/v1/dashboards/pages/{id}/actions/{action}` | viewer with `view` on the page's entry and the action's permission | E3 | One action. Body: `{ "args": {}, "idempotency_key": "..." }` |
@@ -192,7 +193,7 @@ The function receives `{ args = <merged args>, action_id = "<declaration id>", i
 | `control.select` | `dash-select` | `options` | `value`, `label` | `change` `{ value }` | C3 descriptor, C4 tile |
 | `kpi` | `dash-kpi` | `scalar` | `value` | none | C3 descriptor, C4 tile |
 | `chart` | `dash-chart` | `series` or `category` (the descriptor allows both) | `x`, `y` (list), `series` | `select` `{ x, series, value }` | C3 descriptor, C4 tile, D1 |
-| `table` | `dash-table` | `table` | `columns` (list) | none | C3 descriptor, C4 tile |
+| `table` | `dash-table` | `table`, `category` or `series` (a table draws any frame) | `columns` (list) | none | C3 descriptor, C4 tile |
 | `demo.run_timeline` | `run-timeline` | `schema` | none | none | E1 |
 | `demo.user_status` | `user-status` | `schema` | none | none; uses action `set_status` | E2, E3 |
 
@@ -345,7 +346,14 @@ The generator writes one entry per published page through a registry changeset, 
     mountRoute: /reports/llm-usage/:part(.*)*
     resource_id: llm_usage             # kept for clarity; Host 1.0.68 does not use it
     managed_by: wippy.dashboards
+    group: Dashboards                  # one nav group for every generated page
+    group_icon: tabler:layout-dashboard
+    group_order: 50
 ```
+
+The Host's dynamic nav (`@HOST/nav-sidebar`) lists every announced `view.page` and groups them by `group`, so a published page gets a nav item under "Dashboards" like any other page of the app. The template's default compat boot hides that nav (`hide_nav_bar: "true"` in `src/app/deps/_index.yaml`) and shows the home app's own sidebar instead. Run with `-o wippy.facade:fe_mode:default=managed` to see it.
+
+Runtime entries are lost when the app restarts. The process service `wippy.dashboards:restore_service` starts with the app and calls the generator for every row of `dash_pages` with `published = 1`, so the pages, their routes and their nav items come back. It runs as the actor `wippy.dashboards.restore` in the group `wippy.dashboards:restorer`, which may apply registry changes; the generator still refuses any change outside `wippy.dashboards.pages`.
 
 Entry ids live in `wippy.dashboards.pages`. Access uses `view` on `page:<entry id>`. Host 1.0.68 passes the entry id (`wippy.dashboards.pages:llm_usage`) as `config.context.resourceId`, not `meta.resource_id`, so the page host keeps the part after the last `:` as the page id. The Wippy KB said otherwise; the running app showed this on 2026-11-09.
 
