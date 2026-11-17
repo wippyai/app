@@ -6,7 +6,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [vue(), wippyComponentPlugin()],
   resolve: {
-    // The helper is linked from ../../packages. Keep one copy of vue.
+    // The tile helper is an npm workspace in .wippy/npm (make tile-helper). Keep one copy of vue.
     dedupe: ['vue'],
   },
   build: {

@@ -1,4 +1,4 @@
-import type { TileError } from '@example/dash-tile-helper'
+import type { TileError } from '@wippy/dashboards-tile-helper'
 
 /** One node of the run, as the function `demo.run_timeline:read_latest_run` returns it. */
 export interface RunNode {

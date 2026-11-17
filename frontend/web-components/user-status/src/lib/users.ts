@@ -1,4 +1,4 @@
-import type { TileError } from '@example/dash-tile-helper'
+import type { TileError } from '@wippy/dashboards-tile-helper'
 
 /** One user of the `users` point (src/demo_user_status/_index.yaml, output schema). */
 export interface UserRow {

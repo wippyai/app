@@ -1,6 +1,6 @@
 import { useEvents, useProps } from '@wippy-fe/webcomponent-vue'
-import { useTile } from '@example/dash-tile-helper'
-import type { EmitFn, InputValidator, RenderStateDetail } from '@example/dash-tile-helper'
+import { useTile } from '@wippy/dashboards-tile-helper'
+import type { EmitFn, InputValidator, RenderStateDetail } from '@wippy/dashboards-tile-helper'
 
 /** Events of every tile element (contracts section 8), plus the lifecycle events of the base class. */
 export interface TileEvents {

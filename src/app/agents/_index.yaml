@@ -272,7 +272,7 @@ entries:
           "additionalProperties": false
         }
       llm_alias: NavigateTo
-      llm_description: Open a page in the UI for the user, by name or by path. The page opens inside the app, next to its sidebar.
+      llm_description: Ask the user's open app to show a page, by name or by path. The page opens inside the app, next to its sidebar. The tool cannot confirm that the app is open in a browser, so also give the user the link.
     source: file://navigate_to.lua
     modules:
       - ctx

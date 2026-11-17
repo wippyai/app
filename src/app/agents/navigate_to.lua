@@ -68,7 +68,10 @@ local function handler(params)
         path = params.path
     end
 
-    -- The user's hub exists only while the user has the app open.
+    -- wippy/relay starts the user's hub when the user's first browser connects,
+    -- and keeps it for a while after the last one leaves (its inactivity
+    -- timeout). So a hub means the user was here recently, not that a browser
+    -- is open now, and the relay offers no way to ask how many are connected.
     local hub_pid = process.registry.lookup(USER_HUB_PREFIX .. user_id)
     if not hub_pid then
         return { error = "The user has no open app window, so nothing was opened. Give the user the link instead." }
@@ -80,7 +83,9 @@ local function handler(params)
 
     return {
         success = true,
-        message = "Opened " .. path,
+        delivered = "unconfirmed",
+        message = "Sent " .. path .. " to the user's app. It opens there when the app is open in a browser; "
+            .. "this cannot be confirmed, so also give the user the link.",
         page = params.page,
         path = path,
     }

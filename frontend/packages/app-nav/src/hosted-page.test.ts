@@ -20,12 +20,28 @@ function setup(path = '/reports/llm-usage') {
   const current = ref(path)
   // What the next fresh read returns; null keeps the list as it is.
   let nextRead: readonly PageInfo[] | null = null
+  // When set, fresh reads fail with this error, as the real list records it.
+  let failWith: unknown = null
   const refresh = vi.fn(async () => {
+    if (failWith) {
+      error.value = failWith
+      return
+    }
+    error.value = null
     if (nextRead)
       pages.value = nextRead
   })
   const state = useHostedPage({ pageList: { pages, ready, error, refresh }, path: current, exclude: [shell.id] })
-  return { pages, ready, error, current, state, refresh, readReturns: (list: readonly PageInfo[]) => { nextRead = list } }
+  return {
+    pages,
+    ready,
+    error,
+    current,
+    state,
+    refresh,
+    readReturns: (list: readonly PageInfo[]) => { nextRead = list },
+    readFails: (err: unknown) => { failWith = err },
+  }
 }
 
 describe('useHostedPage', () => {
@@ -60,6 +76,41 @@ describe('useHostedPage', () => {
     await flush()
     expect(state.value).toEqual({ status: 'none' })
     expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('says error, not none, when the fresh read fails', async () => {
+    const { pages, ready, state, readFails } = setup('/dash/new')
+    pages.value = [shell, llm]
+    readFails(new Error('offline'))
+    ready.value = true
+    await flush()
+    expect(state.value.status).toBe('error')
+  })
+
+  it('settles a failed check with the next successful read', async () => {
+    const { pages, ready, error, state, readFails } = setup('/nowhere')
+    pages.value = [shell, llm]
+    readFails(new Error('offline'))
+    ready.value = true
+    await flush()
+    expect(state.value.status).toBe('error')
+    // A `pages` signal or a reconnect reads the list again, and it works.
+    error.value = null
+    expect(state.value).toEqual({ status: 'none' })
+  })
+
+  it('reads a checked path again on a later visit', async () => {
+    const { pages, ready, current, state, refresh, readReturns } = setup('/dash/new')
+    pages.value = [shell, llm]
+    ready.value = true
+    await flush()
+    expect(state.value).toEqual({ status: 'none' })
+    current.value = '/reports/llm-usage'
+    readReturns([shell, llm, fresh])
+    current.value = '/dash/new'
+    await flush()
+    expect(refresh).toHaveBeenCalledTimes(2)
+    expect(state.value).toMatchObject({ status: 'ready', match: { page: { id: 'd:new' } } })
   })
 
   it('finds a page published after the cached read', async () => {

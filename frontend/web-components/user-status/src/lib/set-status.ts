@@ -1,4 +1,4 @@
-import type { ActionResult } from '@example/dash-tile-helper'
+import type { ActionResult } from '@wippy/dashboards-tile-helper'
 import type { UserRow } from './users.ts'
 
 /** The two statuses the action `set_status` accepts (contracts section 5.2). */

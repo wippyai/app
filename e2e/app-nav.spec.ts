@@ -251,9 +251,11 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
         reads.push(m[1])
     })
     await dashboardsGroup(page).getByRole('button', { name: 'App activity', exact: true }).click()
-    await expect(hosted(page, 'app_activity').locator('[data-tile-id="users"]')).toBeVisible()
+    await expect(hosted(page, 'app_activity').locator('[data-tile-id="users"]')).toBeVisible({ timeout: 20_000 })
     await expect.poll(() => reads.filter(p => p === 'users').length).toBeGreaterThan(0)
-    // Every tile has finished its first read; only what the signal causes counts from here.
+    // Every tile has finished its first read: no tile frame is busy, and no new read
+    // started for 1.5 s. Only what the signal causes counts from here.
+    await boardSettled(page, 'app_activity')
     await readsSettled(page, reads)
     const before = reads.length
 

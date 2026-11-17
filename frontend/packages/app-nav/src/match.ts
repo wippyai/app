@@ -93,8 +93,10 @@ export function matchPage(
 
 /**
  * The key of the item that `path` belongs to: among items that open inside the
- * shell, the one with the longest matching path. Items that hand over to the
- * Host are never active, because the shell is gone once they open.
+ * shell, the one with the longest matching path. An item that stands for a
+ * page (`pageId`) also matches at `/page/<page id>`, where the shell hosts
+ * every listed page. Items that hand over to the Host are never active,
+ * because the shell is gone once they open.
  */
 export function activeKey(items: readonly NavItem[], path: string): string | null {
   const target = normalizePath(path)
@@ -102,11 +104,13 @@ export function activeKey(items: readonly NavItem[], path: string): string | nul
   for (const item of items) {
     if (item.target.kind !== 'route')
       continue
-    const prefix = normalizePath(item.target.path)
-    if (!isUnder(target, prefix))
-      continue
-    if (!best || prefix.length > best.length)
-      best = { key: item.key, length: prefix.length }
+    const prefixes = [normalizePath(item.target.path)]
+    if (item.pageId)
+      prefixes.push(pageIdPath(item.pageId))
+    for (const prefix of prefixes) {
+      if (isUnder(target, prefix) && (!best || prefix.length > best.length))
+        best = { key: item.key, length: prefix.length }
+    }
   }
   return best?.key ?? null
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { TileConfirm } from '@example/dash-tile-helper'
+import { TileConfirm } from '@wippy/dashboards-tile-helper'
 import { useDashTile } from '../use-dash-tile'
 import { useViewerId } from '../use-viewer'
 import { groupLabel, readUsers, statusTone } from '../lib/users'

@@ -107,4 +107,11 @@ describe('activeKey', () => {
   it('never activates an item that hands over to the Host', () => {
     expect(activeKey([items[4]], '/')).toBeNull()
   })
+
+  it('activates a page item at /page/<page id> too', () => {
+    const page: NavItem = { key: 'd:llm', label: 'LLM usage', pageId: 'd:llm', target: { kind: 'route', path: '/reports/llm-usage' } }
+    expect(activeKey([items[0], page], '/page/d:llm')).toBe('d:llm')
+    expect(activeKey([items[0], page], '/page/d:llm/claude?x=1')).toBe('d:llm')
+    expect(activeKey([items[0], page], '/page/d:other')).toBeNull()
+  })
 })

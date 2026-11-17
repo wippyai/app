@@ -3,7 +3,7 @@
   "version": "0.0.68",
   "specification": "wippy-component-1.0",
   "title": "User Status Tile",
-  "description": "Plugin tile of the dashboards proof of concept (stage E2): lists the users with status and groups. It uses @example/dash-tile-helper for the tile protocol and writes only its rendering.",
+  "description": "Plugin tile of the dashboards proof of concept (stage E2): lists the users with status and groups. It uses @wippy/dashboards-tile-helper (from the wippy/dashboards module) for the tile protocol and writes only its rendering.",
   "browser": "dist/user-status.js",
   "files": [
     "dist/",
@@ -11,7 +11,7 @@
     "package.json"
   ],
   "dependencies": {
-    "@example/dash-tile-helper": "file:../../packages/dash-tile-helper",
+    "@wippy/dashboards-tile-helper": "*",
     "@wippy-fe/theme": "^0.0.68",
     "@wippy-fe/webcomponent-core": "^0.0.68",
     "@wippy-fe/webcomponent-vue": "^0.0.68"
@@ -44,14 +44,41 @@
     "props": {
       "type": "object",
       "properties": {
-        "tile-id": { "type": "string", "default": "", "description": "Tile id in the page." },
-        "request-id": { "type": "string", "default": "", "description": "A new id for each configuration. The board sets it last, and the tile starts work only when it is set." },
-        "data-sources": { "type": "object", "description": "Map from input name to { url, args, refresh_ms, live_topic }. user-status reads the input main." },
-        "actions": { "type": "object", "description": "Map from action name to { url, confirm }. Stage E3 adds the action set_status." },
-        "fields": { "type": "object", "description": "Map from the tile field names to data field names. user-status has none." },
-        "options": { "type": "object", "description": "Tile options. user-status has none." },
-        "params": { "type": "object", "description": "Current values of the page parameters the tile declares." },
-        "mode": { "type": "string", "default": "view", "description": "view (the POC has no edit mode)." }
+        "tile-id": {
+          "type": "string",
+          "default": "",
+          "description": "Tile id in the page."
+        },
+        "request-id": {
+          "type": "string",
+          "default": "",
+          "description": "A new id for each configuration. The board sets it last, and the tile starts work only when it is set."
+        },
+        "data-sources": {
+          "type": "object",
+          "description": "Map from input name to { url, args, refresh_ms, live_topic }. user-status reads the input main."
+        },
+        "actions": {
+          "type": "object",
+          "description": "Map from action name to { url, confirm }. Stage E3 adds the action set_status."
+        },
+        "fields": {
+          "type": "object",
+          "description": "Map from the tile field names to data field names. user-status has none."
+        },
+        "options": {
+          "type": "object",
+          "description": "Tile options. user-status has none."
+        },
+        "params": {
+          "type": "object",
+          "description": "Current values of the page parameters the tile declares."
+        },
+        "mode": {
+          "type": "string",
+          "default": "view",
+          "description": "view (the POC has no edit mode)."
+        }
       }
     },
     "scripts": {
@@ -67,5 +94,8 @@
     "lint": "eslint src --ext .ts,.vue",
     "lint:fix": "eslint src --ext .ts,.vue --fix",
     "test": "vitest run"
-  }
+  },
+  "workspaces": [
+    "./.wippy/npm/@*/*"
+  ]
 }

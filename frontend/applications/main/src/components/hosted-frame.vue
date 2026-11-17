@@ -24,9 +24,10 @@ function onNavOwnerRoute(event: Event) {
   const path = (event as CustomEvent<{ path?: string }>).detail?.path
   if (!path)
     return
-  // joinPath keeps the hosted page's query and hash.
+  // joinPath keeps the hosted page's query and hash. The router normalizes the
+  // encoding of both sides, and its decoding never throws on a stray `%`.
   const next = joinPath(props.basePath, path)
-  if (decodeURI(route.fullPath) !== decodeURI(next))
+  if (router.resolve(next).fullPath !== route.fullPath)
     router.push(next)
 }
 </script>

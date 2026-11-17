@@ -11,6 +11,8 @@ export const PAGES_LIST_URL = '/api/public/pages/list'
 export const PAGES_TOPIC = 'pages'
 /** Proxy event after the WebSocket reconnects; signals may have been missed. */
 export const RECONNECT_TOPIC = '@reconnect'
+/** The default waits between new tries while the first read keeps failing. */
+export const DEFAULT_RETRY_DELAYS_MS: readonly number[] = [1000, 3000, 10000]
 
 export interface PageListDeps {
   /** The host's authenticated axios instance, or anything with the same `get`. */
@@ -61,7 +63,7 @@ export function parsePages(data: unknown): PageInfo[] {
  */
 export function createPageList(deps: PageListDeps): PageList {
   const debounceMs = deps.debounceMs ?? 150
-  const retryDelays = deps.retryDelaysMs ?? [1000, 3000, 10000]
+  const retryDelays = deps.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS
   const pages = shallowRef<readonly PageInfo[]>([])
   const ready = ref(false)
   const error = shallowRef<unknown>(null)

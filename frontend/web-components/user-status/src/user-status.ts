@@ -1,6 +1,6 @@
 import { WippyVueElement, define } from '@wippy-fe/webcomponent-vue'
 import type { WippyElementConfig, WippyPropsSchema } from '@wippy-fe/webcomponent-vue'
-import { tilePropsSchema } from '@example/dash-tile-helper'
+import { tilePropsSchema } from '@wippy/dashboards-tile-helper'
 import UserStatus from './app/user-status.vue'
 import stylesText from './styles.css?inline'
 import type { TileEvents } from './use-dash-tile.ts'

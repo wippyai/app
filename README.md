@@ -132,7 +132,7 @@ The module is not on the hub yet. Until it is, clone it next to this repository 
 
 1. Clone `git@git.wippy.ai:wippy/dashboard.git` to a sibling folder, for example `../wippy-dashboards`.
 2. In the gitignored `.wippy.workspace.yaml`, add `wippy/dashboards: <path of the clone>` under `profiles.workspace.workspace.replacements`, and start with `wippy run -c --config .wippy.workspace.yaml --profile workspace`.
-3. The demo tiles build against the module's tile helper. `make link-dashboards` links `frontend/packages/dash-tile-helper` to the clone (the build targets of the two tiles do it for you). Pass `DASHBOARDS_DIR=<path>` (`-DashboardsDir <path>` with `make.bat`) when the clone is not at `../wippy-dashboards`.
+3. The demo tiles build against `@wippy/dashboards-tile-helper`, an npm package that the module ships inside its `.wapp` (artifact `wippy.dashboards:tile_helper_fs`). `make tile-helper` runs `wippy artifacts materialize` into each tile's `.wippy/npm`, which the tile's `package.json` lists as an npm workspace; the build targets of the two tiles run it for you. It takes the `.wapp` from `DASHBOARDS_WAPP` when set, else packs the clone in `DASHBOARDS_DIR` (default `../wippy-dashboards`), else uses the installed module in `.wippy/vendor/wippy`. With `make.bat`, pass `-DashboardsWapp <file>` or `-DashboardsDir <path>`, and set `WIPPY_BIN` to the Wippy CLI when it is not on `PATH`.
 
 ## Frontend & theming
 

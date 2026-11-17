@@ -18,5 +18,3 @@ test-results/
 # Machine-local module replacements (wippy run --config .wippy.workspace.yaml --profile workspace).
 .wippy.workspace.yaml
 
-# Link to the tile helper of a wippy/dashboards checkout (make link-dashboards).
-frontend/packages/dash-tile-helper

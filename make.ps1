@@ -10,8 +10,10 @@ param(
     [Parameter(Position = 0)]
     [string]$Target = 'help',
     [switch]$SkipInstall,
-    # Checkout of the wippy/dashboards module (see link-dashboards). Defaults to
-    # $env:DASHBOARDS_DIR, then to a sibling folder of this repository.
+    # Source of the tile helper (see tile-helper): a wippy/dashboards .wapp, or
+    # a checkout of the module. Default to $env:DASHBOARDS_WAPP and
+    # $env:DASHBOARDS_DIR, then to a sibling checkout, then to .wippy/vendor.
+    [string]$DashboardsWapp = '',
     [string]$DashboardsDir = '',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$RuntimeArguments = @()
@@ -60,29 +62,38 @@ $lintDirs = @(
     'frontend/web-components/user-status'
 )
 
-# Mirrors the Makefile's link-dashboards: points frontend/packages/dash-tile-helper
-# (gitignored) at the tile helper of a wippy/dashboards checkout, as a junction.
-# Replaces only an existing link; never deletes a real folder.
-function Invoke-LinkDashboards {
-    $dir = $script:DashboardsDir
-    if (-not $dir) { $dir = $env:DASHBOARDS_DIR }
-    if (-not $dir) { $dir = Join-Path $PSScriptRoot '../wippy-dashboards' }
-    $source = Join-Path $dir 'frontend/packages/dash-tile-helper'
-    if (-not (Test-Path (Join-Path $source 'package.json'))) {
-        throw "No wippy/dashboards checkout at $dir; pass -DashboardsDir <path> or set DASHBOARDS_DIR"
-    }
-    $source = (Resolve-Path $source).Path
-    $link = Join-Path $PSScriptRoot 'frontend/packages/dash-tile-helper'
-    if (Test-Path $link) {
-        $item = Get-Item $link -Force
-        if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            throw "frontend/packages/dash-tile-helper is a real folder, not a link; move it away first"
+# Mirrors the Makefile's tile-helper: materializes @wippy/dashboards-tile-helper
+# (artifact wippy.dashboards:tile_helper_fs) into each demo tile's .wippy/npm,
+# which the tile's package.json lists as an npm workspace. The .wapp comes from
+# -DashboardsWapp, else a checkout in -DashboardsDir (packed with its make.bat
+# pack), else the installed module in .wippy/vendor/wippy.
+$script:tileHelperDone = $false
+function Invoke-TileHelper {
+    # One materialize per make.bat call serves every demo tile.
+    if ($script:tileHelperDone) { return }
+    $wippy = if ($env:WIPPY_BIN) { $env:WIPPY_BIN } else { 'wippy' }
+    $wapp = $script:DashboardsWapp
+    if (-not $wapp) { $wapp = $env:DASHBOARDS_WAPP }
+    if (-not $wapp) {
+        $dir = $script:DashboardsDir
+        if (-not $dir) { $dir = $env:DASHBOARDS_DIR }
+        if (-not $dir) { $dir = Join-Path $PSScriptRoot '../wippy-dashboards' }
+        if (Test-Path (Join-Path $dir 'wippy.yaml')) {
+            & (Join-Path $dir 'make.bat') pack
+            if ($LASTEXITCODE -ne 0) { throw "make.bat pack failed in $dir (exit $LASTEXITCODE)" }
+            $wapp = Join-Path $dir '.wippy/dist/dashboards.wapp'
         }
-        # Deletes the junction itself, not the folder it points at.
-        [IO.Directory]::Delete($link, $false)
     }
-    New-Item -ItemType Junction -Path $link -Target $source | Out-Null
-    Write-Host "linked frontend/packages/dash-tile-helper -> $source"
+    if (-not $wapp) {
+        $wapp = Get-ChildItem '.wippy/vendor/wippy/dashboards-*.wapp' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notmatch 'sha256' } | Sort-Object LastWriteTime | Select-Object -Last 1 -ExpandProperty FullName
+    }
+    if (-not $wapp) { throw 'no wippy/dashboards .wapp: pass -DashboardsWapp or -DashboardsDir, or run wippy install' }
+    foreach ($t in ($script:wcs | Where-Object { $_.tileHelper })) {
+        & $wippy artifacts materialize $wapp wippy.dashboards:tile_helper_fs --root "$($t.dir)/.wippy"
+        if ($LASTEXITCODE -ne 0) { throw "materializing the tile helper into $($t.dir) failed (exit $LASTEXITCODE)" }
+    }
+    $script:tileHelperDone = $true
 }
 
 function Invoke-Recipe {
@@ -91,7 +102,7 @@ function Invoke-Recipe {
         [Parameter(Mandatory)][string]$Out,
         [switch]$Clean
     )
-    if (($script:wcs | Where-Object { $_.dir -eq $Dir -and $_.tileHelper })) { Invoke-LinkDashboards }
+    if (($script:wcs | Where-Object { $_.dir -eq $Dir -and $_.tileHelper })) { Invoke-TileHelper }
     Push-Location $Dir
     try {
         Write-Host "==> $Dir" -ForegroundColor Cyan
@@ -183,7 +194,8 @@ function Show-Help {
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
-    Write-Host "  link-dashboards    Link the tile helper of a wippy/dashboards checkout (-DashboardsDir)"
+    Write-Host "  tile-helper        Materialize the wippy/dashboards tile helper into the demo tiles"
+    Write-Host "                     (-DashboardsWapp <file> or -DashboardsDir <checkout>)"
     Write-Host "  test-pkg-<name>    Typecheck and unit-test a package (e.g. test-pkg-app-nav)"
     Write-Host "  test-attention     Run Attention acceptance in Chromium"
     Write-Host "  test-attention-touch Run Attention touch acceptance in Chromium"
@@ -235,12 +247,12 @@ try {
             break
         }
         '^lint$' {
-            Invoke-LinkDashboards
+            Invoke-TileHelper
             foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
             break
         }
-        '^link-dashboards$' {
-            Invoke-LinkDashboards
+        '^tile-helper$' {
+            Invoke-TileHelper
             break
         }
         '^test-attention$' {

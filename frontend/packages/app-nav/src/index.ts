@@ -2,7 +2,7 @@ export type { NavGroup, NavItem, NavNode, NavTarget, PageInfo, PageMatch } from 
 export { DEFAULT_ORDER, buildNavTree, compareItems } from './tree'
 export { activeKey, isUnder, joinPath, matchPage, mountPrefix, normalizePath, pageIdPath, pagePath, splitPath } from './match'
 export type { PageList, PageListDeps } from './page-list'
-export { PAGES_LIST_URL, PAGES_TOPIC, RECONNECT_TOPIC, createPageList, parsePages, usePageList } from './page-list'
+export { DEFAULT_RETRY_DELAYS_MS, PAGES_LIST_URL, PAGES_TOPIC, RECONNECT_TOPIC, createPageList, parsePages, usePageList } from './page-list'
 export type { AppNav, AppNavOptions, PageNavOptions } from './app-nav'
 export { pageNavItems, useAppNav, visibleItems } from './app-nav'
 export type { HostedPageOptions, HostedPageState } from './hosted-page'

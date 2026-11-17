@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ActionResult } from '@example/dash-tile-helper'
+import type { ActionResult } from '@wippy/dashboards-tile-helper'
 import { confirmQuestion, controlLabel, describeOutcome, isOwnRow, nextStatus, tileArgs, viewerIdFrom } from './set-status.ts'
 import type { UserRow } from './users.ts'
 

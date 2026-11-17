@@ -36,7 +36,7 @@ Since 17 November 2026 the engine is the module `wippy/dashboards`, in its own r
 | module `frontend/web-components/dash-tiles/` | built to module `static/wc/dash-tiles` | C1, C4 |
 | `frontend/web-components/run-timeline/` | built to `static/wc/run-timeline` | E1 |
 | `frontend/web-components/user-status/` | built to `static/wc/user-status` | E2 |
-| module `frontend/packages/dash-tile-helper/` | local path dependency of every tile package; this app links it with `make link-dashboards` | C1 |
+| module `frontend/packages/dash-tile-helper/package/` | the npm package `@wippy/dashboards-tile-helper`; the module ships it as the artifact `wippy.dashboards:tile_helper_fs`, and this app materializes it with `make tile-helper` | C1 |
 
 Bundles of this app. Both the `Makefile` and the CI job `Build_frontend` (`make build NPM_INSTALL='npm ci'`) build every package listed in the `build` target, so the bundles stay gitignored. Each new package gets a `build-app-<name>` or `build-wc-<name>` target in the `Makefile`, a place in its `build` and `lint` lists, and a row in `$apps` or `$wcs` (and `$lintDirs`) in `make.ps1`. This replaces the plan's stage A1 step that added `.gitignore` exceptions: when the plan was written, CI could not build the bundles.
 

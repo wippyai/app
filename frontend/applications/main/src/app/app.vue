@@ -5,7 +5,7 @@ import { Icon } from '@iconify/vue'
 import Button from 'primevue/button'
 import Avatar from 'primevue/avatar'
 import { config, on } from '@wippy-fe/proxy'
-import { isUnder, mountPrefix, normalizePath, useAppNav, usePageList } from '@example/app-nav'
+import { DEFAULT_RETRY_DELAYS_MS, isUnder, mountPrefix, normalizePath, useAppNav, usePageList } from '@example/app-nav'
 import SidebarItem from '../components/sidebar-item.vue'
 import { useApi, useHost } from '../composables/useWippy'
 import { PAGE_LIST } from '../constants'
@@ -75,21 +75,34 @@ function isAppPath(path: string): boolean {
   return path.startsWith('/') && !path.startsWith('//') && !path.includes('\\')
 }
 
-// The first page list, which tells this app its own prefix. Gives up after
-// ten seconds, so an outage never holds a navigation forever.
+// How long a navigation waits for the first page list: past the list's own
+// retries of a failed first read, so it gives up only after the list does.
+const LIST_WAIT_MS = DEFAULT_RETRY_DELAYS_MS.reduce((sum, ms) => sum + ms, 0) + 5_000
+// Waits that are still open, so unmounting can end them and their timers.
+const openWaits = new Set<() => void>()
+
+// The first page list, which tells this app its own prefix.
 function whenListReady(): Promise<void> {
   if (pageList.ready.value)
     return Promise.resolve()
   return new Promise((resolve) => {
-    const done = () => {
+    const finish = () => {
       stop()
       clearTimeout(timer)
+      openWaits.delete(finish)
       resolve()
     }
-    const stop = watch(pageList.ready, ready => ready && done())
-    const timer = setTimeout(done, 10_000)
+    const stop = watch(pageList.ready, ready => ready && finish())
+    const timer = setTimeout(finish, LIST_WAIT_MS)
+    openWaits.add(finish)
   })
 }
+
+// Every navigation request and every route change takes the next number. A
+// navigation that is still waiting for the list is dropped once a newer one
+// came, so a late agent path never overrides a click made meanwhile.
+let navigationSeq = 0
+const stopRouteCount = router.afterEach(() => { navigationSeq++ })
 
 // Host paths (/c/..., /chat/...) leave this app. A host URL inside this app
 // (/home/users) and an app route (/users) both open here. A route here may
@@ -97,11 +110,14 @@ function whenListReady(): Promise<void> {
 async function openPath(path: string) {
   if (!isAppPath(path))
     return
+  const seq = ++navigationSeq
   if (path.startsWith('/c/') || path.startsWith('/chat/')) {
     host.navigate(path)
     return
   }
   await whenListReady()
+  if (seq !== navigationSeq)
+    return
   const prefix = ownPrefix.value
   if (prefix && prefix !== '/' && path.startsWith(prefix) && isUnder(normalizePath(path), prefix)) {
     // Keep any query: /home/components?tab=chat opens /components?tab=chat.
@@ -193,6 +209,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   unsubscribes.splice(0).forEach(unsubscribe => unsubscribe())
+  stopRouteCount()
+  // Drop any navigation still waiting for the list, and end its wait.
+  navigationSeq++
+  for (const finish of [...openWaits])
+    finish()
 })
 </script>
 
