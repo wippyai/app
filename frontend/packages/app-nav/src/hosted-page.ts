@@ -42,35 +42,41 @@ export function useHostedPage(options: HostedPageOptions): ComputedRef<HostedPag
   const lastMatch = shallowRef<PageMatch | null>(null)
   // The result of the fresh read that checked a path the list did not know.
   const checked = shallowRef<{ path: string, error: unknown } | null>(null)
-  let checking: string | null = null
+  // The check under way, if any. A new visit (the path changed) drops it, so
+  // its result can never answer a later visit, even to the same path.
+  let checking: object | null = null
+  let visitPath: string | null = null
 
   watch(match, (next) => {
     if (next)
       lastMatch.value = next
   }, { immediate: true, flush: 'sync' })
 
-  // Leaving a path forgets what was learned there: an open page that left the
-  // list is not "gone" on a later visit, and a checked path is read again.
+  // Leaving the page's paths forgets it, so coming back later is not "gone".
   watch(bare, (path) => {
     if (lastMatch.value && !isUnder(path, lastMatch.value.prefix))
       lastMatch.value = null
-    if (checked.value && checked.value.path !== path)
-      checked.value = null
   }, { flush: 'sync' })
 
   watch(
     () => [options.pageList.ready.value, match.value, bare.value] as const,
     ([ready, found, path]) => {
-      if (!ready || found || checked.value?.path === path || checking === path)
+      if (path !== visitPath) {
+        // A new visit: forget the check and the result of the last one.
+        visitPath = path
+        checking = null
+        if (checked.value && checked.value.path !== path)
+          checked.value = null
+      }
+      if (!ready || found || checked.value?.path === path || checking)
         return
-      checking = path
+      const check = {}
+      checking = check
       void options.pageList.refresh().finally(() => {
-        if (checking !== path)
+        if (checking !== check)
           return
         checking = null
-        // A result for a path the shell has left would be stale on return.
-        if (bare.value === path)
-          checked.value = { path, error: options.pageList.error.value ?? null }
+        checked.value = { path, error: options.pageList.error.value ?? null }
       })
     },
     { immediate: true, flush: 'sync' },

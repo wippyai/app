@@ -99,6 +99,30 @@ describe('useHostedPage', () => {
     expect(state.value).toEqual({ status: 'none' })
   })
 
+  it('starts a new check when the shell comes back during a check', async () => {
+    const pages = shallowRef<readonly PageInfo[]>([shell, llm])
+    const ready = ref(true)
+    const error = shallowRef<unknown>(null)
+    const current = ref('/dash/new')
+    const pending: Array<() => void> = []
+    const refresh = vi.fn(() => new Promise<void>((resolve) => { pending.push(resolve) }))
+    const state = useHostedPage({ pageList: { pages, ready, error, refresh }, path: current, exclude: [shell.id] })
+    expect(refresh).toHaveBeenCalledTimes(1)
+    current.value = '/reports/llm-usage'
+    current.value = '/dash/new'
+    // The return is a new visit with its own read.
+    expect(refresh).toHaveBeenCalledTimes(2)
+    // The first read ends without the page: it must not answer the new visit.
+    pending[0]()
+    await flush()
+    expect(state.value).toEqual({ status: 'loading' })
+    // The second read finds the page published meanwhile.
+    pages.value = [shell, llm, fresh]
+    pending[1]()
+    await flush()
+    expect(state.value).toMatchObject({ status: 'ready', match: { page: { id: 'd:new' } } })
+  })
+
   it('reads a checked path again on a later visit', async () => {
     const { pages, ready, current, state, refresh, readReturns } = setup('/dash/new')
     pages.value = [shell, llm]

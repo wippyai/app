@@ -66,7 +66,8 @@ $lintDirs = @(
 # (artifact wippy.dashboards:tile_helper_fs) into each demo tile's .wippy/npm,
 # which the tile's package.json lists as an npm workspace. The .wapp comes from
 # -DashboardsWapp, else a checkout in -DashboardsDir (packed with its make.bat
-# pack), else the installed module in .wippy/vendor/wippy.
+# pack), else the installed module in .wippy/vendor/wippy at the version that
+# wippy.lock names, so the tiles match the engine that runs.
 $script:tileHelperDone = $false
 function Invoke-TileHelper {
     # One materialize per make.bat call serves every demo tile.
@@ -84,9 +85,12 @@ function Invoke-TileHelper {
             $wapp = Join-Path $dir '.wippy/dist/dashboards.wapp'
         }
     }
-    if (-not $wapp) {
-        $wapp = Get-ChildItem '.wippy/vendor/wippy/dashboards-*.wapp' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notmatch 'sha256' } | Sort-Object LastWriteTime | Select-Object -Last 1 -ExpandProperty FullName
+    if (-not $wapp -and (Test-Path 'wippy.lock')) {
+        $lock = Get-Content 'wippy.lock' -Raw
+        if ($lock -match '(?m)-\s*name:\s*wippy/dashboards\s*\r?\n\s*version:\s*(\S+)') {
+            $installed = ".wippy/vendor/wippy/dashboards-$($Matches[1]).wapp"
+            if (Test-Path $installed) { $wapp = (Resolve-Path $installed).Path }
+        }
     }
     if (-not $wapp) { throw 'no wippy/dashboards .wapp: pass -DashboardsWapp or -DashboardsDir, or run wippy install' }
     foreach ($t in ($script:wcs | Where-Object { $_.tileHelper })) {

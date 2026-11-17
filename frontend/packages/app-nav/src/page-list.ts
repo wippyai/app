@@ -12,7 +12,7 @@ export const PAGES_TOPIC = 'pages'
 /** Proxy event after the WebSocket reconnects; signals may have been missed. */
 export const RECONNECT_TOPIC = '@reconnect'
 /** The default waits between new tries while the first read keeps failing. */
-export const DEFAULT_RETRY_DELAYS_MS: readonly number[] = [1000, 3000, 10000]
+const DEFAULT_RETRY_DELAYS_MS: readonly number[] = [1000, 3000, 10000]
 
 export interface PageListDeps {
   /** The host's authenticated axios instance, or anything with the same `get`. */
@@ -34,6 +34,11 @@ export interface PageList {
   ready: Readonly<Ref<boolean>>
   /** The error of the last read, or null after a successful one. */
   error: Readonly<Ref<unknown>>
+  /**
+   * True while the first read and all its tries have failed. A `pages` signal
+   * or a reconnect can still bring the list later; a success clears it.
+   */
+  gaveUp: Readonly<Ref<boolean>>
   /** Reads the list now. A call during a read queues exactly one more read. */
   refresh: () => Promise<void>
   /** Stops listening. Reads that are under way no longer change the list. */
@@ -67,6 +72,7 @@ export function createPageList(deps: PageListDeps): PageList {
   const pages = shallowRef<readonly PageInfo[]>([])
   const ready = ref(false)
   const error = shallowRef<unknown>(null)
+  const gaveUp = ref(false)
   let running: Promise<void> | null = null
   let readAgain = false
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -76,8 +82,12 @@ export function createPageList(deps: PageListDeps): PageList {
 
   // While the first read keeps failing, try again a few times on its own.
   function retryLater(): void {
-    if (disposed || ready.value || retryTimer || retries >= retryDelays.length)
+    if (disposed || ready.value || retryTimer)
       return
+    if (retries >= retryDelays.length) {
+      gaveUp.value = true
+      return
+    }
     retryTimer = setTimeout(() => {
       retryTimer = null
       void refresh()
@@ -92,6 +102,7 @@ export function createPageList(deps: PageListDeps): PageList {
       pages.value = parsePages(data)
       error.value = null
       ready.value = true
+      gaveUp.value = false
     }
     catch (err) {
       if (disposed)
@@ -150,7 +161,7 @@ export function createPageList(deps: PageListDeps): PageList {
       unsubscribe()
   }
 
-  return { pages, ready, error, refresh, dispose }
+  return { pages, ready, error, gaveUp, refresh, dispose }
 }
 
 /** `createPageList` that disposes itself with the current effect scope, such as a component. */

@@ -28,7 +28,8 @@ test-attention-helpers:
 #   1. DASHBOARDS_WAPP, when set;
 #   2. a checkout of the module in DASHBOARDS_DIR (default: a sibling folder),
 #      packed with its `make pack` (local development, before publication);
-#   3. the installed module in .wippy/vendor/wippy (after `wippy install`).
+#   3. the installed module in .wippy/vendor/wippy (after `wippy install`), at
+#      the version wippy.lock names, so the tiles match the engine that runs.
 WIPPY ?= wippy
 DASHBOARDS_DIR ?= ../wippy-dashboards
 DASHBOARDS_WAPP ?=
@@ -39,8 +40,11 @@ tile-helper:
 	if [ -z "$$wapp" ] && [ -f "$(DASHBOARDS_DIR)/wippy.yaml" ]; then \
 	  $(MAKE) -C "$(DASHBOARDS_DIR)" pack WIPPY="$(WIPPY)"; wapp="$(DASHBOARDS_DIR)/.wippy/dist/dashboards.wapp"; \
 	fi; \
-	if [ -z "$$wapp" ]; then wapp=$$(ls .wippy/vendor/wippy/dashboards-*.wapp 2>/dev/null | grep -v sha256 | sort -V | tail -1); fi; \
-	test -n "$$wapp" || { echo "no wippy/dashboards .wapp: set DASHBOARDS_WAPP, DASHBOARDS_DIR or run wippy install" >&2; exit 1; }; \
+	if [ -z "$$wapp" ]; then \
+	  ver=$$(sed -n '/- name: wippy\/dashboards *$$/{n;s/^ *version: *//p;}' wippy.lock | tr -d '\r'); \
+	  if [ -n "$$ver" ] && [ -f ".wippy/vendor/wippy/dashboards-$$ver.wapp" ]; then wapp=".wippy/vendor/wippy/dashboards-$$ver.wapp"; fi; \
+	fi; \
+	test -n "$$wapp" || { echo "no wippy/dashboards .wapp: set DASHBOARDS_WAPP or DASHBOARDS_DIR, or run wippy install" >&2; exit 1; }; \
 	for t in $(TILE_HELPER_CONSUMERS); do \
 	  $(WIPPY) artifacts materialize "$$wapp" wippy.dashboards:tile_helper_fs --root frontend/web-components/$$t/.wippy; \
 	done

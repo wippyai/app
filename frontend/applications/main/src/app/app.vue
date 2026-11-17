@@ -5,7 +5,7 @@ import { Icon } from '@iconify/vue'
 import Button from 'primevue/button'
 import Avatar from 'primevue/avatar'
 import { config, on } from '@wippy-fe/proxy'
-import { DEFAULT_RETRY_DELAYS_MS, isUnder, mountPrefix, normalizePath, useAppNav, usePageList } from '@example/app-nav'
+import { isUnder, mountPrefix, normalizePath, useAppNav, usePageList } from '@example/app-nav'
 import SidebarItem from '../components/sidebar-item.vue'
 import { useApi, useHost } from '../composables/useWippy'
 import { PAGE_LIST } from '../constants'
@@ -75,34 +75,31 @@ function isAppPath(path: string): boolean {
   return path.startsWith('/') && !path.startsWith('//') && !path.includes('\\')
 }
 
-// How long a navigation waits for the first page list: past the list's own
-// retries of a failed first read, so it gives up only after the list does.
-const LIST_WAIT_MS = DEFAULT_RETRY_DELAYS_MS.reduce((sum, ms) => sum + ms, 0) + 5_000
-// Waits that are still open, so unmounting can end them and their timers.
+// Waits that are still open, so unmounting can end them.
 const openWaits = new Set<() => void>()
 
-// The first page list, which tells this app its own prefix.
+// The first page list, which tells this app its own prefix. The wait ends when
+// the list is read, or when the list gave up after all its tries.
 function whenListReady(): Promise<void> {
-  if (pageList.ready.value)
+  if (pageList.ready.value || pageList.gaveUp.value)
     return Promise.resolve()
   return new Promise((resolve) => {
     const finish = () => {
       stop()
-      clearTimeout(timer)
       openWaits.delete(finish)
       resolve()
     }
-    const stop = watch(pageList.ready, ready => ready && finish())
-    const timer = setTimeout(finish, LIST_WAIT_MS)
+    const stop = watch([pageList.ready, pageList.gaveUp], ([ready, gaveUp]) => (ready || gaveUp) && finish())
     openWaits.add(finish)
   })
 }
 
-// Every navigation request and every route change takes the next number. A
-// navigation that is still waiting for the list is dropped once a newer one
-// came, so a late agent path never overrides a click made meanwhile.
+// Every navigation request takes the next number, and so does every route
+// change when it starts. A navigation still waiting for the list is dropped
+// once a newer one starts, so a late agent path never overrides a click made
+// meanwhile, and a slow older navigation finishing later changes nothing.
 let navigationSeq = 0
-const stopRouteCount = router.afterEach(() => { navigationSeq++ })
+const stopRouteCount = router.beforeEach(() => { navigationSeq++ })
 
 // Host paths (/c/..., /chat/...) leave this app. A host URL inside this app
 // (/home/users) and an app route (/users) both open here. A route here may

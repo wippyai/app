@@ -150,6 +150,27 @@ describe('createPageList', () => {
     // Ready now, so no more tries run on their own.
     vi.advanceTimersByTime(60_000)
     expect(h.api.get).toHaveBeenCalledTimes(3)
+    expect(list.gaveUp.value).toBe(false)
+  })
+
+  it('says it gave up once the first read and every try failed', async () => {
+    const h = harness()
+    const list = createPageList({ ...h, retryDelaysMs: [1000] })
+    h.responses[0].reject(new Error('down'))
+    await flush()
+    expect(list.gaveUp.value).toBe(false)
+    vi.advanceTimersByTime(1000)
+    h.responses[1].reject(new Error('still down'))
+    await flush()
+    expect(list.ready.value).toBe(false)
+    expect(list.gaveUp.value).toBe(true)
+    // A later signal can still bring the list.
+    h.emit(PAGES_TOPIC)
+    vi.advanceTimersByTime(150)
+    h.responses[2].resolve({ data: { pages: [page('a')] } })
+    await flush()
+    expect(list.ready.value).toBe(true)
+    expect(list.gaveUp.value).toBe(false)
   })
 
   it('does not read again after dispose', async () => {
