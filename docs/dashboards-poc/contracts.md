@@ -133,6 +133,7 @@ Publication error codes: `invalid_spec`, `invalid_route`, `reserved_route`, `dup
     output: { shape: series }      # or { shape: schema, schema: {...} }
     refresh_ms: 60000              # optional
     live_topic: dash.users.changed # optional
+    live_read: true                # optional; the function reads its source at call time (section 7)
     recipe: usage_by_day           # actor-specific; the engine passes it through
 ```
 

@@ -1,30 +1,45 @@
 import type { ComputedRef, Ref } from 'vue'
 import { computed } from 'vue'
-import { activeKey, pagePath } from './match'
+import { activeKey, pageIdPath, pagePath } from './match'
 import type { PageList } from './page-list'
 import { buildNavTree } from './tree'
 import type { NavItem, NavNode, PageInfo } from './types'
+
+export interface PageNavOptions {
+  /** Page ids that never become items, such as the shell's own page. */
+  exclude?: readonly string[]
+  /**
+   * True when the shell's own router already owns a path. A page whose path is
+   * taken opens at `/page/<page id>` instead, so the shell's route cannot hide it.
+   */
+  isTaken?: (path: string) => boolean
+}
 
 /**
  * Nav items for the registry pages of the given groups. Each opens inside the
  * shell at its page path. Ungrouped pages, pages of other groups and inline
  * pages stay out, so the app decides which module pages join its nav.
  */
-export function pageNavItems(pages: readonly PageInfo[], groups: readonly string[]): NavItem[] {
+export function pageNavItems(pages: readonly PageInfo[], groups: readonly string[], options: PageNavOptions = {}): NavItem[] {
   const allowed = new Set(groups)
+  const exclude = new Set(options.exclude ?? [])
   return pages
-    .filter(page => !page.hidden && !!page.group && allowed.has(page.group))
-    .map(page => ({
-      key: `page:${page.id}`,
-      label: page.title,
-      icon: page.icon || undefined,
-      order: page.order,
-      group: page.group,
-      groupIcon: page.groupIcon || undefined,
-      groupOrder: page.groupOrder,
-      pageId: page.id,
-      target: { kind: 'route', path: pagePath(page) },
-    }))
+    .filter(page => !page.hidden && !!page.group && allowed.has(page.group) && !exclude.has(page.id))
+    .map((page) => {
+      const own = pagePath(page)
+      const path = options.isTaken?.(own) ? pageIdPath(page.id) : own
+      return {
+        key: `page:${page.id}`,
+        label: page.title,
+        icon: page.icon || undefined,
+        order: page.order,
+        group: page.group,
+        groupIcon: page.groupIcon || undefined,
+        groupOrder: page.groupOrder,
+        pageId: page.id,
+        target: { kind: 'route', path },
+      }
+    })
 }
 
 /**
@@ -36,7 +51,7 @@ export function visibleItems(items: readonly NavItem[], pages: readonly PageInfo
   return items.filter(item => !item.pageId || (ready && listed.has(item.pageId)))
 }
 
-export interface AppNavOptions {
+export interface AppNavOptions extends PageNavOptions {
   /** The app's own items. Give each an `order`, so registry groups sort among them. */
   items: readonly NavItem[]
   pageList: Pick<PageList, 'pages' | 'ready'>
@@ -59,12 +74,19 @@ export interface AppNav {
   open: (item: NavItem) => void
 }
 
-/** The live nav of a shell: its own items plus the registry pages of the chosen groups. */
+/**
+ * The live nav of a shell: its own items plus the registry pages of the chosen
+ * groups. A registry page that an own item already stands for (`pageId`)
+ * appears once, as the own item.
+ */
 export function useAppNav(options: AppNavOptions): AppNav {
-  const items = computed(() => [
-    ...visibleItems(options.items, options.pageList.pages.value, options.pageList.ready.value),
-    ...pageNavItems(options.pageList.pages.value, options.groups),
-  ])
+  const items = computed(() => {
+    const own = visibleItems(options.items, options.pageList.pages.value, options.pageList.ready.value)
+    const covered = new Set(options.items.map(item => item.pageId).filter(Boolean))
+    const registry = pageNavItems(options.pageList.pages.value, options.groups, options)
+      .filter(item => !covered.has(item.pageId))
+    return [...own, ...registry]
+  })
   const tree = computed(() => buildNavTree(items.value))
   const active = computed(() => activeKey(items.value, options.currentPath.value))
 

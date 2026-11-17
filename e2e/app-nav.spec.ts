@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
-import type { FrameLocator, Page } from '@playwright/test'
+import type { Browser, FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
-import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
+import { api, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
 
 /**
  * The app's own sidebar as a live nav (frontend/packages/app-nav, src/app/pages) in the default
@@ -10,9 +10,12 @@ import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpe
  * sidebar, the registry pages of the Dashboards group join it live, and each opens inside the home
  * page with `<w-artifact nav-owner>`, so the sidebar never goes away.
  *
- * The two demo pages come from `POST /api/v1/demo/build`. Fixture pages published here are removed
- * again, even when a test fails.
+ * The two demo pages come from `POST /api/v1/demo/build`. The fixture pages that tests publish
+ * (FIXTURE_IDS) are removed before the suite and again after it, each time from a fresh browser
+ * context, so a failed or timed-out test leaves none behind.
  */
+
+const FIXTURE_IDS = ['nav_live', 'deny_check']
 
 const OWN_ITEMS = ['Home', 'Users', 'Components', 'Nested Nav', 'Web Research', 'Keeper']
 const PLACEHOLDER = JSON.parse(readFileSync('e2e/fixtures/dashboards/coord_ph_two.json', 'utf8')) as Record<string, unknown>
@@ -64,14 +67,36 @@ async function shellKept(page: Page): Promise<boolean> {
   return shell(page).locator('body').evaluate(() => (window as unknown as { __shellMark?: number }).__shellMark === 1)
 }
 
-/** Removes a fixture page if it is still there. A page already gone answers 404. */
-async function removePage(page: Page, id: string) {
-  expectFailures(page, { status: 404, path: `/api/v1/dashboards/pages/${id}` })
-  const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${id}`)
-  expect([200, 404], removed.body).toContain(removed.status)
+/**
+ * Waits until no new point read has started for 1.5 s, so every tile of a page has finished its
+ * first read before a test counts what a signal causes.
+ */
+async function readsSettled(page: Page, reads: readonly string[]) {
+  let seen = -1
+  while (seen !== reads.length) {
+    seen = reads.length
+    await page.waitForTimeout(1500)
+  }
+}
+
+/** Removes the fixture pages from a fresh, signed-in context. A page already gone answers 404. */
+async function removeFixtures(browser: Browser) {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  try {
+    await loginAsAdmin(page)
+    for (const id of FIXTURE_IDS) {
+      const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${id}`)
+      expect([200, 404], removed.body).toContain(removed.status)
+    }
+  }
+  finally {
+    await context.close()
+  }
 }
 
 test.beforeAll(async ({ browser }) => {
+  await removeFixtures(browser)
   const context = await browser.newContext()
   const page = await context.newPage()
   try {
@@ -82,6 +107,10 @@ test.beforeAll(async ({ browser }) => {
   finally {
     await context.close()
   }
+})
+
+test.afterAll(async ({ browser }) => {
+  await removeFixtures(browser)
 })
 
 test.beforeEach(async ({ page }) => {
@@ -103,12 +132,15 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     const groupLabels = (await dashboardsGroup(page).getByRole('button').allTextContents()).map(t => t.trim())
     expect(labels.slice(OWN_ITEMS.length)).toEqual(groupLabels)
     await expect(active(page)).toHaveText('Home')
-    // The Host's built-in nav would list the home page as "Admin Panel".
+    // The Host marks its layout when hide_nav_bar hides the built-in nav, and that nav, which
+    // would list the home page as "Admin Panel", is not drawn.
+    await expect(page.locator('.layout--navbar_hidden')).toHaveCount(1)
     await expect(page.getByText('Admin Panel', { exact: true })).toHaveCount(0)
   })
 
   test('a dashboard opens inside the home page and the sidebar stays', async ({ page }) => {
     await loginAsAdmin(page)
+    await shellReady(page)
     await markShell(page)
     await dashboardsGroup(page).getByRole('button', { name: 'LLM usage', exact: true }).click()
     await expect(page).toHaveURL(/\/home\/reports\/llm-usage$/)
@@ -149,30 +181,26 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
   test('a page published while the app is open joins the sidebar, opens, and leaves when removed', async ({ page }) => {
     const id = 'nav_live'
     await loginAsAdmin(page)
+    await shellReady(page)
     await markShell(page)
-    try {
-      const published = await api(page, 'POST', '/api/v1/dashboards/pages', fixturePage(id, '/coord/nav-live', 'Nav live check'))
-      expect(published.status, published.body).toBe(200)
-      // The backend sends `pages`; the sidebar reads the list again. No reload.
-      const item = dashboardsGroup(page).getByRole('button', { name: 'Nav live check', exact: true })
-      await expect(item).toBeVisible({ timeout: 5_000 })
-      await item.click()
-      await expect(page).toHaveURL(/\/home\/coord\/nav-live$/)
-      await expect(active(page)).toHaveText('Nav live check')
-      await expect(hosted(page, id).locator('[data-tile-id="x1"]')).toBeVisible()
+    const published = await api(page, 'POST', '/api/v1/dashboards/pages', fixturePage(id, '/coord/nav-live', 'Nav live check'))
+    expect(published.status, published.body).toBe(200)
+    // The backend sends `pages`; the sidebar reads the list again. No reload.
+    const item = dashboardsGroup(page).getByRole('button', { name: 'Nav live check', exact: true })
+    await expect(item).toBeVisible({ timeout: 5_000 })
+    await item.click()
+    await expect(page).toHaveURL(/\/home\/coord\/nav-live$/)
+    await expect(active(page)).toHaveText('Nav live check')
+    await expect(hosted(page, id).locator('[data-tile-id="x1"]')).toBeVisible()
 
-      const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${id}`)
-      expect(removed.status, removed.body).toBe(200)
-      await expect(item).toHaveCount(0, { timeout: 5_000 })
-      await expect(shell(page).getByText('This page is no longer available')).toBeVisible()
-      expect(await shellKept(page)).toBe(true)
+    const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${id}`)
+    expect(removed.status, removed.body).toBe(200)
+    await expect(item).toHaveCount(0, { timeout: 5_000 })
+    await expect(shell(page).getByText('This page is no longer available')).toBeVisible()
+    expect(await shellKept(page)).toBe(true)
 
-      await shell(page).getByRole('button', { name: 'Go to Home', exact: true }).click()
-      await expect(page).toHaveURL(/\/home\/?$/)
-    }
-    finally {
-      await removePage(page, id)
-    }
+    await shell(page).getByRole('button', { name: 'Go to Home', exact: true }).click()
+    await expect(page).toHaveURL(/\/home\/?$/)
   })
 
   test('a path that no page owns goes Home', async ({ page }) => {
@@ -187,23 +215,19 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     // deny_check: a policy in src/dashboards/_index.yaml denies it to app.security:user.
     const id = 'deny_check'
     await loginAsAdmin(page)
-    try {
-      const published = await api(page, 'POST', '/api/v1/dashboards/pages', fixturePage(id, '/coord/deny-check', 'Denied check'))
-      expect(published.status, published.body).toBe(200)
-      await expect(dashboardsGroup(page).getByRole('button', { name: 'Denied check', exact: true })).toBeVisible({ timeout: 5_000 })
+    const published = await api(page, 'POST', '/api/v1/dashboards/pages', fixturePage(id, '/coord/deny-check', 'Denied check'))
+    expect(published.status, published.body).toBe(200)
+    await expect(dashboardsGroup(page).getByRole('button', { name: 'Denied check', exact: true })).toBeVisible({ timeout: 5_000 })
 
-      const viewer = await newPage(browser, 'viewer')
-      await loginAs(viewer, 'viewer@wippy.local')
-      await shellReady(viewer)
-      await expect(dashboardsGroup(viewer).getByRole('button', { name: 'LLM usage', exact: true })).toBeVisible()
-      await expect(dashboardsGroup(viewer).getByRole('button', { name: 'Denied check', exact: true })).toHaveCount(0)
-      // A direct link to the denied page finds no page for this viewer and goes Home.
-      await openInShell(viewer, '/home/coord/deny-check')
-      await expect(viewer).toHaveURL(/\/home\/?$/)
-    }
-    finally {
-      await removePage(page, id)
-    }
+    const viewer = await newPage(browser, 'viewer')
+    await loginAs(viewer, 'viewer@wippy.local')
+    await shellReady(viewer)
+    await expect(dashboardsGroup(viewer).getByRole('button', { name: 'LLM usage', exact: true })).toBeVisible()
+    await expect(dashboardsGroup(viewer).getByRole('button', { name: 'Denied check', exact: true })).toHaveCount(0)
+    // A direct link to the denied page finds no page for this viewer, even after a fresh read,
+    // and goes Home.
+    await openInShell(viewer, '/home/coord/deny-check')
+    await expect(viewer).toHaveURL(/\/home\/?$/)
   })
 
   test('a live tile updates inside the hosted page', async ({ page }) => {
@@ -217,12 +241,15 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     await dashboardsGroup(page).getByRole('button', { name: 'App activity', exact: true }).click()
     await expect(hosted(page, 'app_activity').locator('[data-tile-id="users"]')).toBeVisible()
     await expect.poll(() => reads.filter(p => p === 'users').length).toBeGreaterThan(0)
+    // Every tile has finished its first read; only what the signal causes counts from here.
+    await readsSettled(page, reads)
     const before = reads.length
 
     const signal = await api(page, 'POST', '/api/v1/demo/signal/users')
     expect(signal.status, signal.body).toBe(200)
-    // Only the tile that listens to dash.users.changed reads again.
+    // The tile that listens to dash.users.changed reads again, and no other tile does.
     await expect.poll(() => reads.slice(before)).toContain('users')
+    await readsSettled(page, reads)
     expect(new Set(reads.slice(before))).toEqual(new Set(['users']))
   })
 })

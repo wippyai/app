@@ -16,12 +16,13 @@ The backend side is `src/app/pages`: a service that sends `pages` whenever the n
 
 ```ts
 import { api, on } from '@wippy-fe/proxy'
-import { createPageList, useAppNav, useHostedPage } from '@example/app-nav'
+import { usePageList, useAppNav, useHostedPage } from '@example/app-nav'
 
-// Once per app, for example in the bootstrap, and provide it.
-const pageList = createPageList({ api, on: (topic, cb) => on(topic, cb) })
+// In the shell's root component: one live list, released with the component, provided to the pages.
+const pageList = usePageList({ api, on: (topic, cb) => on(topic, cb) })
+provide(PAGE_LIST, pageList)
 
-// In the sidebar component.
+// The sidebar, in the same component.
 const nav = useAppNav({
   items: [
     { key: 'home', label: 'Home', icon: 'tabler:home', order: 1, target: { kind: 'route', path: '/' } },
@@ -30,21 +31,26 @@ const nav = useAppNav({
   ],
   pageList,
   groups: ['Dashboards'],          // registry groups that join this nav
+  exclude: [ownPageId],            // never list the shell itself
+  isTaken: path => router.resolve(path).name !== 'hosted-page',
   currentPath: computed(() => route.path),
   navigate: { route: path => router.push(path), host: path => host.navigate(path) },
 })
 // nav.tree: items and groups to render; nav.activeKey; nav.open(item)
 
-// In the catch-all route of the shell's router.
-const state = useHostedPage({ pageList, path: computed(() => route.path), exclude: [ownPageId] })
+// In the catch-all route of the shell's router (fullPath keeps a query and hash).
+const state = useHostedPage({ pageList: inject(PAGE_LIST), path: computed(() => route.fullPath), exclude: [ownPageId] })
 // state: loading | error | none (not found) | gone (left the list while open) | ready { match }
 ```
 
-A registry page opens at the literal start of its mount route inside the shell. For example, `/reports/llm-usage/:part(.*)*` opens at `<shell>/reports/llm-usage`. A page without a mount route opens at `<shell>/page/<page id>`.
+A registry page opens at the literal start of its mount route inside the shell. For example, `/reports/llm-usage/:part(.*)*` opens at `<shell>/reports/llm-usage`. Every listed page also opens at `<shell>/page/<page id>`, and a page without a mount route opens only there. A query and hash on the path stay with the hosted page.
 
 ## Choices and limits
 
 - Only pages of the listed `groups` join the nav. Ungrouped pages and other modules' groups stay out, so the app decides what its nav shows. The Host's built-in nav still receives every announced page.
-- An item with `pageId` shows only after the first list arrives. This prevents an item from appearing and then disappearing for a viewer who may not open it.
-- `exclude` must hold the shell's own page id; otherwise a path under the shell's own mount route would host the shell inside itself.
+- An item with `pageId` shows only after the first list arrives. This prevents an item from appearing and then disappearing for a viewer who may not open it. A registry page that such an item already stands for is not listed twice.
+- `exclude` must hold the shell's own page id, in `useHostedPage` and in `useAppNav`; otherwise a path under the shell's own mount route would host the shell inside itself.
+- `isTaken(path)` tells `useAppNav` which paths the shell's own router owns, for example `path => router.resolve(path).name !== 'hosted-page'`. A page whose path is taken opens at `/page/<page id>`, so the shell's route cannot hide it.
+- `useHostedPage` checks a path the cached list does not know with one fresh read before it says `none`, so a page published a moment ago opens instead of sending the user away.
+- If the first read fails, the list tries again after 1, 3 and 10 seconds (`retryDelaysMs`), then waits for a `pages` or reconnect signal.
 - The Web Host learns page routes only when it starts. A page published later opens inside the shell at once, because the shell resolves paths from the live list. Opened on its own route, it needs a full page load until the Host refreshes routes at run time.

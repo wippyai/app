@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeKey, isUnder, joinPath, matchPage, mountPrefix, normalizePath, pagePath } from './match'
+import { activeKey, isUnder, joinPath, matchPage, mountPrefix, normalizePath, pagePath, splitPath } from './match'
 import type { NavItem, PageInfo } from './types'
 
 const pages: PageInfo[] = [
@@ -40,6 +40,14 @@ describe('paths', () => {
     expect(joinPath('/reports/llm-usage', 'claude')).toBe('/reports/llm-usage/claude')
     expect(joinPath('/', '/x')).toBe('/x')
   })
+
+  it('splits off and keeps a query and hash', () => {
+    expect(splitPath('/a/b?x=1#h')).toEqual({ path: '/a/b', suffix: '?x=1#h' })
+    expect(splitPath('/a#h')).toEqual({ path: '/a', suffix: '#h' })
+    expect(splitPath('/a')).toEqual({ path: '/a', suffix: '' })
+    expect(joinPath('/nested-nav', '/tab?filter=one#section')).toBe('/nested-nav/tab?filter=one#section')
+    expect(joinPath('/nested-nav', '/?filter=one')).toBe('/nested-nav?filter=one')
+  })
 })
 
 describe('matchPage', () => {
@@ -55,6 +63,15 @@ describe('matchPage', () => {
 
   it('finds a page without mount route under /page/<id>', () => {
     expect(matchPage(pages, '/page/keeper:main/x')).toMatchObject({ page: { id: 'keeper:main' }, subPath: '/x' })
+  })
+
+  it('also finds a page with a mount route under /page/<id>', () => {
+    expect(matchPage(pages, '/page/dash:llm/claude')).toMatchObject({ page: { id: 'dash:llm' }, prefix: '/page/dash:llm', subPath: '/claude' })
+  })
+
+  it('keeps the query and hash on the sub-path', () => {
+    expect(matchPage(pages, '/reports/llm-usage/x?model=a#chart')?.subPath).toBe('/x?model=a#chart')
+    expect(matchPage(pages, '/reports/llm-usage?model=a')?.subPath).toBe('/?model=a')
   })
 
   it('never matches an excluded page, such as the shell itself', () => {

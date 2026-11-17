@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import Button from 'primevue/button'
 import Avatar from 'primevue/avatar'
 import { config, on } from '@wippy-fe/proxy'
-import { isUnder, mountPrefix, normalizePath, useAppNav } from '@example/app-nav'
+import { isUnder, mountPrefix, normalizePath, useAppNav, usePageList } from '@example/app-nav'
 import SidebarItem from '../components/sidebar-item.vue'
-import { useApi, useHost, usePages } from '../composables/useWippy'
+import { useApi, useHost } from '../composables/useWippy'
+import { PAGE_LIST } from '../constants'
 import { NAV_GROUPS, NAV_ITEMS } from '../nav'
 
 const router = useRouter()
@@ -55,23 +56,52 @@ function cycleTheme() {
   setTheme(themeOptions[(idx + 1) % themeOptions.length].mode)
 }
 
-const pageList = usePages()
+// One live list of the pages this viewer may open, for the sidebar and for the
+// catch-all route that shows pages inside this app. It reads the list again on
+// the backend's `pages` signal, and it stops listening when this component goes.
+const pageList = usePageList({ api, on: (topic, callback) => on(topic, callback) })
+provide(PAGE_LIST, pageList)
 
-// This app's own mount prefix (/home), from its entry in the page list.
+// This app's own page id and mount prefix (/home), from its entry in the page list.
 const ownPageId = config.selfPageId ?? config.context?.resourceId
 const ownPrefix = computed(() => {
   const own = pageList.pages.value.find(page => page.id === ownPageId)
   return own?.mountRoute ? mountPrefix(own.mountRoute) : null
 })
 
+// An app path: one leading slash, no scheme or host, no backslash. Agent
+// tools check this too; the app does not rely on that.
+function isAppPath(path: string): boolean {
+  return path.startsWith('/') && !path.startsWith('//') && !path.includes('\\')
+}
+
+// The first page list, which tells this app its own prefix. Gives up after
+// ten seconds, so an outage never holds a navigation forever.
+function whenListReady(): Promise<void> {
+  if (pageList.ready.value)
+    return Promise.resolve()
+  return new Promise((resolve) => {
+    const done = () => {
+      stop()
+      clearTimeout(timer)
+      resolve()
+    }
+    const stop = watch(pageList.ready, ready => ready && done())
+    const timer = setTimeout(done, 10_000)
+  })
+}
+
 // Host paths (/c/..., /chat/...) leave this app. A host URL inside this app
 // (/home/users) and an app route (/users) both open here. A route here may
 // also be a registry page, which then opens inside this app.
-function openPath(path: string) {
+async function openPath(path: string) {
+  if (!isAppPath(path))
+    return
   if (path.startsWith('/c/') || path.startsWith('/chat/')) {
     host.navigate(path)
     return
   }
+  await whenListReady()
   const prefix = ownPrefix.value
   if (prefix && prefix !== '/' && path.startsWith(prefix) && isUnder(normalizePath(path), prefix)) {
     // Keep any query: /home/components?tab=chat opens /components?tab=chat.
@@ -83,11 +113,14 @@ function openPath(path: string) {
 }
 
 // The sidebar: the app's own items plus the registry pages of NAV_GROUPS,
-// live as pages are published or removed.
+// live as pages are published or removed. A page whose path one of this app's
+// own routes already uses (for example /users) opens at /page/<page id>.
 const { tree: navTree, activeKey, open: openItem } = useAppNav({
   items: NAV_ITEMS,
   pageList,
   groups: NAV_GROUPS,
+  exclude: ownPageId ? [ownPageId] : [],
+  isTaken: path => router.resolve(path).name !== 'hosted-page',
   currentPath: computed(() => route.path),
   navigate: { route: path => router.push(path), host: path => host.navigate(path) },
 })

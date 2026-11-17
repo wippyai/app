@@ -40,6 +40,16 @@ describe('pageNavItems', () => {
   it('adds nothing for an empty group list', () => {
     expect(pageNavItems(listed, [])).toEqual([])
   })
+
+  it('leaves out excluded pages', () => {
+    expect(pageNavItems(listed, ['Dashboards'], { exclude: ['d:llm'] }).map(item => item.key)).toEqual(['page:d:app'])
+  })
+
+  it('opens a page at /page/<id> when the shell already owns its path', () => {
+    const items = pageNavItems(listed, ['Dashboards'], { isTaken: path => path === '/ops/app-activity' })
+    expect(items.find(item => item.pageId === 'd:app')?.target).toEqual({ kind: 'route', path: '/page/d:app' })
+    expect(items.find(item => item.pageId === 'd:llm')?.target).toEqual({ kind: 'route', path: '/reports/llm-usage' })
+  })
 })
 
 describe('visibleItems', () => {
@@ -85,6 +95,17 @@ describe('useAppNav', () => {
     expect(nav.activeKey.value).toBe('page:d:llm')
     currentPath.value = '/users'
     expect(nav.activeKey.value).toBe('users')
+  })
+
+  it('shows a page once when an own item already stands for it', () => {
+    const pages = shallowRef<readonly PageInfo[]>(listed)
+    const ready = ref(true)
+    const pinned: NavItem = { key: 'pinned', label: 'Pinned LLM', order: 7, pageId: 'd:llm', target: { kind: 'route', path: '/reports/llm-usage' } }
+    const nav = useAppNav({ items: [...own, pinned], pageList: { pages, ready }, groups: ['Dashboards'], currentPath: ref('/'), navigate: { route: vi.fn(), host: vi.fn() } })
+    const keys = nav.items.value.map(item => item.key)
+    expect(keys).toContain('pinned')
+    expect(keys).not.toContain('page:d:llm')
+    expect(keys).toContain('page:d:app')
   })
 
   it('opens route items in the shell and host items through the Host', () => {

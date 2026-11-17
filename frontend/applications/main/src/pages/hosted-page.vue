@@ -10,7 +10,8 @@ import { usePages } from '../composables/useWippy'
 /**
  * The catch-all route. A path that belongs to a page from the registry (for
  * example a dashboard at /reports/llm-usage) shows that page here, under the
- * sidebar. The page list is live, so a page published a moment ago opens too.
+ * sidebar. The page list is live, and a path it does not know yet is checked
+ * with one fresh read, so a page published a moment ago opens too.
  */
 const route = useRoute()
 const router = useRouter()
@@ -20,11 +21,13 @@ const pages = usePages()
 const ownPageId = config.selfPageId ?? config.context?.resourceId
 const state = useHostedPage({
   pageList: pages,
-  path: computed(() => route.path),
+  // The full path keeps a query and hash for the hosted page.
+  path: computed(() => route.fullPath),
   exclude: ownPageId ? [ownPageId] : [],
 })
 
-// No listed page lives here: the link is broken, so go Home, as before.
+// No listed page lives here, even after a fresh read: the link is broken, so
+// go Home, as before.
 watch(() => state.value.status, (status) => {
   if (status === 'none')
     router.replace('/')

@@ -116,7 +116,7 @@ The sidebar is still live. It lists two kinds of items:
 
 When a module publishes, changes or removes a `view.page`, the service `src/app/pages` sends the WebSocket topic `pages`. The sidebar then reads `/api/public/pages/list` again, so a new page joins the sidebar while the app is open. The Host's built-in nav listens for the same topic.
 
-A registry page opens inside the home page, next to the sidebar, at the start of its own mount route. For example, `/reports/llm-usage/:part(.*)*` opens at `/home/reports/llm-usage`. The home page declares `meta.page_outlet: true`, so modules that hand out page links, such as the dashboards agent, point them there. Each page is still a regular `view.page` and also opens on its own route.
+A registry page opens inside the home page, next to the sidebar, at the start of its own mount route. For example, `/reports/llm-usage/:part(.*)*` opens at `/home/reports/llm-usage`. A page whose path one of the app's own routes already uses (for example `/users`) opens at `/home/page/<page id>` instead. The home page declares `meta.page_outlet: true`, so modules that hand out page links, such as the dashboards agent, point them there. Each page is still a regular `view.page` and also opens on its own route.
 
 The logic is in the headless package [`frontend/packages/app-nav`](frontend/packages/app-nav/README.md): it merges the items, orders them with the Host nav's rules, keeps the list live and resolves paths. The app keeps the look: `src/app/app.vue`, `src/components/sidebar-item.vue` and `src/pages/hosted-page.vue`. To add a group, put its name in `NAV_GROUPS`. To add an item of your own, add it to `NAV_ITEMS`.
 

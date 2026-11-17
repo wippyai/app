@@ -129,6 +129,48 @@ describe('createPageList', () => {
     expect(list.ready.value).toBe(false)
   })
 
+  it('tries a failed first read again on its own, with growing waits', async () => {
+    const h = harness()
+    const list = createPageList({ ...h, retryDelaysMs: [1000, 3000] })
+    h.responses[0].reject(new Error('starting'))
+    // vi.waitFor would move the fake clock, so let promises settle by hand.
+    await flush()
+    expect(list.error.value).not.toBeNull()
+    vi.advanceTimersByTime(999)
+    expect(h.api.get).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1)
+    expect(h.api.get).toHaveBeenCalledTimes(2)
+    h.responses[1].reject(new Error('still starting'))
+    await flush()
+    vi.advanceTimersByTime(3000)
+    expect(h.api.get).toHaveBeenCalledTimes(3)
+    h.responses[2].resolve({ data: { pages: [page('a')] } })
+    await flush()
+    expect(list.ready.value).toBe(true)
+    // Ready now, so no more tries run on their own.
+    vi.advanceTimersByTime(60_000)
+    expect(h.api.get).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not read again after dispose', async () => {
+    const h = harness()
+    const list = createPageList(h)
+    h.responses[0].resolve({ data: { pages: [] } })
+    await vi.waitFor(() => expect(list.ready.value).toBe(true))
+    list.dispose()
+    await list.refresh()
+    expect(h.api.get).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts a new read for a refresh that comes after a read ended', async () => {
+    const h = harness()
+    const list = createPageList(h)
+    h.responses[0].resolve({ data: { pages: [page('a')] } })
+    await vi.waitFor(() => expect(list.ready.value).toBe(true))
+    void list.refresh()
+    expect(h.api.get).toHaveBeenCalledTimes(2)
+  })
+
   it('stops listening and ignores late answers after dispose', async () => {
     const h = harness()
     const list = createPageList(h)

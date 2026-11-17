@@ -134,9 +134,17 @@ export async function loginAs(page: Page, email: string) {
     await loginAsAdmin(page)
   }
   finally {
-    process.env.USERSPACE_USER_DEFAULT_ADMIN_EMAIL = saved[0]
-    process.env.USERSPACE_USER_DEFAULT_ADMIN_PASSWORD = saved[1]
+    // Assigning undefined would store the text "undefined", so delete an unset variable.
+    restoreEnv('USERSPACE_USER_DEFAULT_ADMIN_EMAIL', saved[0])
+    restoreEnv('USERSPACE_USER_DEFAULT_ADMIN_PASSWORD', saved[1])
   }
+}
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined)
+    delete process.env[name]
+  else
+    process.env[name] = value
 }
 
 /** Calls the app API from a signed-in page with that page's token. */

@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
-import { loginAs } from './helpers/page-watch'
+import { api, loginAs } from './helpers/page-watch'
 
 /**
  * Demo: one prompt in the normal chat builds one dashboard (spec 6.9, section 10).
@@ -29,8 +29,43 @@ const ADMIN_PROMPT = process.env.DEMO_PROMPT
   + 'with their live status and the latest workflow run as a tree. I confirm that the page may let admins change '
   + 'a user\'s status.'
 
+/**
+ * Each run asks for its own title, so the page it builds is new: the sidebar check then proves that
+ * the page joined, not that an older page with the same title was already there.
+ */
+const RUN_TITLE = `App Overview ${new Date().toTimeString().slice(0, 8)}`
+
 /** A page link the agent gives: into the home page (/home/dash/...), or a page's own route. */
 const PAGE_LINK = 'a[href*="/dash/"]'
+
+/** The ids of the pages this signed-in user may open, from the live page list. */
+async function listedIds(page: Page): Promise<string[]> {
+  const res = await api(page, 'GET', '/api/public/pages/list')
+  expect(res.status, res.body).toBe(200)
+  return (JSON.parse(res.body).pages as Array<{ id: string }>).map(p => p.id).sort()
+}
+
+/** The page a chat link points to: /home/dash/<slug> belongs to wippy.dashboards.pages:gen_<slug>. */
+function pageIdOf(href: string): string {
+  return `gen_${href.replace(/^.*\/dash\//, '').replace(/-/g, '_')}`
+}
+
+// The page the admin test built, removed after the suite from a fresh context.
+let builtId: string | null = null
+test.afterAll(async ({ browser }) => {
+  if (!builtId)
+    return
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  try {
+    await loginAsAdmin(page)
+    const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${builtId}`)
+    expect([200, 404], removed.body).toContain(removed.status)
+  }
+  finally {
+    await context.close()
+  }
+})
 
 function shell(page: Page) {
   return page.frameLocator('iframe[name="wippy:page:app.views:main"]')
@@ -73,11 +108,11 @@ test('one prompt in the chat builds one dashboard', async ({ page }) => {
   test.setTimeout(240_000)
   await page.setViewportSize({ width: 1400, height: 900 })
   await loginAsAdmin(page)
-  await expect(dashboardsGroup(page).getByRole('button').first()).toBeVisible({ timeout: 20_000 })
-  const itemsBefore = await dashboardsGroup(page).getByRole('button').count()
+  // Works on a fresh database too: the list may hold no dashboard yet.
+  const idsBefore = await listedIds(page)
   await openChat(page)
   const before = await page.locator(PAGE_LINK).count()
-  await send(page, ADMIN_PROMPT)
+  await send(page, `${ADMIN_PROMPT} Title the page "${RUN_TITLE}".`)
 
   // The agent answers with the link to the page it built.
   const links = page.locator(PAGE_LINK)
@@ -87,11 +122,11 @@ test('one prompt in the chat builds one dashboard', async ({ page }) => {
   const title = (await link.textContent())?.trim() ?? ''
   console.log('built', href, title)
   expect(href, 'the link opens the page inside the home page').toMatch(/^\/home\/dash\//)
+  builtId = pageIdOf(href)
+  expect(idsBefore, 'the page is new in this run').not.toContain(`wippy.dashboards.pages:${builtId}`)
 
-  // The sidebar already lists the new page: the backend's `pages` signal, no reload. A page with
-  // the same title replaces the earlier one, so the count may stay the same.
+  // The sidebar already lists the new page: the backend's `pages` signal, no reload.
   await expect(dashboardsGroup(page).getByRole('button', { name: title, exact: true })).toBeVisible({ timeout: 10_000 })
-  expect(await dashboardsGroup(page).getByRole('button').count()).toBeGreaterThanOrEqual(itemsBefore)
   await page.waitForTimeout(1500)
   await shot(page, 'demo-1-chat')
 
@@ -109,6 +144,7 @@ test('a viewer without publish rights gets no page', async ({ page }) => {
   test.setTimeout(240_000)
   await page.setViewportSize({ width: 1400, height: 900 })
   await loginAs(page, 'viewer@wippy.local')
+  const idsBefore = await listedIds(page)
   await openChat(page)
   const before = await page.locator(PAGE_LINK).count()
   await send(page, 'Build me a dashboard with the number of chat sessions and messages per day.')
@@ -117,6 +153,8 @@ test('a viewer without publish rights gets no page', async ({ page }) => {
   const reply = page.getByText(/permission|not allowed|may not|can't publish|cannot publish|unable to publish|isn't allowed|don't have/i)
   await expect(reply.last()).toBeVisible({ timeout: 180_000 })
   expect(await page.locator(PAGE_LINK).count()).toBe(before)
+  // And no page was published: the page list is the same as before the request.
+  expect(await listedIds(page)).toEqual(idsBefore)
   await page.waitForTimeout(1500)
   await shot(page, 'demo-3-viewer-refused')
 })

@@ -8,10 +8,23 @@ local PAGES: {[string]: string} = {
     users = "/users",
 }
 
+-- True when a segment of the path part (before any ? or #) is "." or "..",
+-- also when written with %2e.
+local function has_dot_segment(path)
+    local bare = path:match("^[^?#]*") or ""
+    for segment in bare:gmatch("[^/]+") do
+        local decoded = segment:gsub("%%2[eE]", ".")
+        if decoded == "." or decoded == ".." then
+            return true
+        end
+    end
+    return false
+end
+
 -- An app path the UI may open: it starts with one slash, carries no scheme or
--- host ("//"), no backslash and no control or space characters. The UI
--- resolves it in its own router, where a registry page (a dashboard) opens
--- inside the app, and an unknown path falls back to Home.
+-- host ("//"), no backslash, no control or space characters and no "." or
+-- ".." segments. The UI resolves it in its own router, where a registry page
+-- (a dashboard) opens inside the app, and an unknown path falls back to Home.
 local function valid_path(path)
     if type(path) ~= "string" or path == "" or #path > MAX_PATH then
         return false
@@ -19,7 +32,10 @@ local function valid_path(path)
     if path:sub(1, 1) ~= "/" or path:sub(1, 2) == "//" then
         return false
     end
-    return not path:find("[%c%s\\]")
+    if path:find("[%c%s\\]") then
+        return false
+    end
+    return not has_dot_segment(path)
 end
 
 local function handler(params)
@@ -47,14 +63,19 @@ local function handler(params)
         end
     else
         if not valid_path(params.path) then
-            return { error = "path must be an app path that starts with /, for example /reports/llm-usage" }
+            return { error = "path must be an app path that starts with /, for example /reports/llm-usage, with no . or .. segments" }
         end
         path = params.path
     end
 
+    -- The user's hub exists only while the user has the app open.
     local hub_pid = process.registry.lookup(USER_HUB_PREFIX .. user_id)
-    if hub_pid then
-        process.send(hub_pid, "action:navigate", { path = path })
+    if not hub_pid then
+        return { error = "The user has no open app window, so nothing was opened. Give the user the link instead." }
+    end
+    local sent, serr = process.send(hub_pid, "action:navigate", { path = path })
+    if not sent then
+        return { error = "The page could not be opened: " .. tostring(serr) }
     end
 
     return {

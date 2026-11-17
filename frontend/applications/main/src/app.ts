@@ -5,10 +5,9 @@ import { createWippyPersist, preloadWippyState } from '@wippy-fe/pinia-persist'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import { PrimeVuePlugin } from '@wippy-fe/theme/primevue-plugin'
-import { createPageList } from '@example/app-nav'
 
 import App from './app/app.vue'
-import { AXIOS_INSTANCE, HOST_API, PAGE_LIST } from './constants'
+import { AXIOS_INSTANCE, HOST_API } from './constants'
 import { createAppRouter } from './router'
 import '@wippy-fe/theme/theme-config.css'
 import './styles.css'
@@ -35,10 +34,7 @@ export async function createMainApp() {
 
   app.provide(HOST_API, host)
   app.provide(AXIOS_INSTANCE, api)
-  // One live page list for the app's lifetime: the sidebar lists from it and
-  // the catch-all route opens its pages inside this app. It reads the list
-  // again whenever the backend sends the `pages` topic.
-  app.provide(PAGE_LIST, createPageList({ api, on: (topic, callback) => on(topic, callback) }))
+  // The live page list is created in app.vue, which provides it to the pages.
 
   const router = createAppRouter(host, on, initialPath)
   app.use(router)

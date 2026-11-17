@@ -188,8 +188,16 @@ function host(url: string): string {
         :label="loading ? 'Researching…' : 'Research'"
         :loading="loading"
         :disabled="!query.trim() || loading"
-        icon="tabler:world-search"
-      />
+      >
+        <!-- PrimeVue's icon prop takes a CSS class, so an Iconify icon goes in the slot. -->
+        <template #icon>
+          <Icon
+            icon="tabler:world-search"
+            class="w-4 h-4"
+            aria-hidden="true"
+          />
+        </template>
+      </Button>
     </form>
 
     <!-- Suggestions -->

@@ -13,7 +13,7 @@ const props = defineProps<{
   pageId: string
   /** The path in this app where the page lives. Its own routes extend it. */
   basePath: string
-  /** The hosted page's own path below `basePath`, `/` at its root. */
+  /** The hosted page's own path below `basePath`, `/` at its root, with any query and hash. */
   subPath: string
 }>()
 
@@ -24,8 +24,9 @@ function onNavOwnerRoute(event: Event) {
   const path = (event as CustomEvent<{ path?: string }>).detail?.path
   if (!path)
     return
+  // joinPath keeps the hosted page's query and hash.
   const next = joinPath(props.basePath, path)
-  if (route.path !== next)
+  if (decodeURI(route.fullPath) !== decodeURI(next))
     router.push(next)
 }
 </script>

@@ -19,6 +19,11 @@ export interface PageListDeps {
   on: (topic: string, callback: () => void) => () => void
   /** Signals that arrive closer together than this cause one read. Default 150 ms. */
   debounceMs?: number
+  /**
+   * Waits between new tries while the first read keeps failing, for example a
+   * short outage at start. Default 1, 3 and 10 seconds; then it waits for a signal.
+   */
+  retryDelaysMs?: readonly number[]
 }
 
 export interface PageList {
@@ -56,13 +61,26 @@ export function parsePages(data: unknown): PageInfo[] {
  */
 export function createPageList(deps: PageListDeps): PageList {
   const debounceMs = deps.debounceMs ?? 150
+  const retryDelays = deps.retryDelaysMs ?? [1000, 3000, 10000]
   const pages = shallowRef<readonly PageInfo[]>([])
   const ready = ref(false)
   const error = shallowRef<unknown>(null)
   let running: Promise<void> | null = null
   let readAgain = false
   let timer: ReturnType<typeof setTimeout> | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let retries = 0
   let disposed = false
+
+  // While the first read keeps failing, try again a few times on its own.
+  function retryLater(): void {
+    if (disposed || ready.value || retryTimer || retries >= retryDelays.length)
+      return
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      void refresh()
+    }, retryDelays[retries++])
+  }
 
   async function readOnce(): Promise<void> {
     try {
@@ -74,24 +92,33 @@ export function createPageList(deps: PageListDeps): PageList {
       ready.value = true
     }
     catch (err) {
-      if (!disposed)
-        error.value = err
+      if (disposed)
+        return
+      error.value = err
+      retryLater()
     }
   }
 
   function refresh(): Promise<void> {
+    if (disposed)
+      return Promise.resolve()
     if (running) {
       readAgain = true
       return running
     }
     running = (async () => {
-      do {
-        readAgain = false
-        await readOnce()
-      } while (readAgain && !disposed)
-    })().finally(() => {
-      running = null
-    })
+      try {
+        do {
+          readAgain = false
+          await readOnce()
+        } while (readAgain && !disposed)
+      }
+      finally {
+        // Cleared in the same step that ends the loop, so a refresh that comes
+        // right after it starts a new read instead of joining a finished one.
+        running = null
+      }
+    })()
     return running
   }
 
@@ -115,6 +142,8 @@ export function createPageList(deps: PageListDeps): PageList {
     disposed = true
     if (timer)
       clearTimeout(timer)
+    if (retryTimer)
+      clearTimeout(retryTimer)
     for (const unsubscribe of unsubscribes)
       unsubscribe()
   }

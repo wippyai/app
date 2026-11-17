@@ -103,6 +103,12 @@ function Invoke-Lint {
     Push-Location $Dir
     try {
         Write-Host "==> lint $Dir" -ForegroundColor Cyan
+        # No build installs a headless package, so its lint installs it first
+        # (the Makefile's lint does the same for these packages).
+        if (($script:pkgs | Where-Object { $_.dir -eq $Dir }) -and -not $SkipInstall) {
+            npm install
+            if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
+        }
         # These packages intentionally use local .eslintrc.cjs files. The
         # candidate worktree can live under a repository with a flat config,
         # so select legacy mode explicitly instead of inheriting that parent.

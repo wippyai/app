@@ -1,8 +1,14 @@
 import type { NavItem, PageInfo, PageMatch } from './types'
 
+/** Splits a path into its path part and the query and hash that follow it (`?a=1#b`). */
+export function splitPath(path: string): { path: string, suffix: string } {
+  const at = path.search(/[?#]/)
+  return at < 0 ? { path, suffix: '' } : { path: path.slice(0, at), suffix: path.slice(at) }
+}
+
 /** Drops the query and hash, adds a leading slash, removes a trailing slash. */
 export function normalizePath(path: string): string {
-  let clean = path.split(/[?#]/, 1)[0] ?? ''
+  let clean = splitPath(path).path
   if (!clean.startsWith('/'))
     clean = `/${clean}`
   clean = clean.replace(/\/{2,}/g, '/')
@@ -20,10 +26,15 @@ export function mountPrefix(mountRoute: string): string {
   return `/${literal.join('/')}`
 }
 
+/** The shell path that every listed page answers to, whatever its mount route. */
+export function pageIdPath(id: string): string {
+  return `/page/${id}`
+}
+
 /**
  * The shell path of a page: the literal start of its mount route, so the shell
  * shows `/reports/llm-usage` at `<shell>/reports/llm-usage`. A page without a
- * mount route lives at `/page/<page id>`.
+ * mount route lives at `/page/<page id>`, and every page also answers there.
  */
 export function pagePath(page: Pick<PageInfo, 'id' | 'mountRoute'>): string {
   if (page.mountRoute) {
@@ -31,7 +42,7 @@ export function pagePath(page: Pick<PageInfo, 'id' | 'mountRoute'>): string {
     if (prefix !== '/')
       return prefix
   }
-  return `/page/${page.id}`
+  return pageIdPath(page.id)
 }
 
 /** True when `path` is `prefix` or below it. The root prefix `/` matches only itself. */
@@ -41,35 +52,41 @@ export function isUnder(path: string, prefix: string): boolean {
   return path === prefix || path.startsWith(`${prefix}/`)
 }
 
-/** `prefix` plus a sub-path. A root sub-path (`/` or empty) gives `prefix` alone. */
+/**
+ * `prefix` plus a sub-path. A root sub-path (`/` or empty) gives `prefix`
+ * alone. A query or hash on the sub-path is kept.
+ */
 export function joinPath(prefix: string, subPath: string): string {
-  const sub = normalizePath(subPath || '/')
-  if (sub === '/')
-    return prefix
-  return prefix === '/' ? sub : `${prefix}${sub}`
+  const { path, suffix } = splitPath(subPath || '/')
+  const sub = normalizePath(path || '/')
+  const joined = sub === '/' ? prefix : (prefix === '/' ? sub : `${prefix}${sub}`)
+  return `${joined}${suffix}`
 }
 
 /**
  * The listed page that lives at `path`, by the longest matching page path.
- * `exclude` holds page ids that must never match, such as the shell itself,
- * which would otherwise host itself.
+ * Each page matches at its own page path and at `/page/<page id>`. `exclude`
+ * holds page ids that must never match, such as the shell itself, which would
+ * otherwise host itself. A query or hash on `path` stays on the sub-path.
  */
 export function matchPage(
   pages: readonly PageInfo[],
   path: string,
   options: { exclude?: readonly string[] } = {},
 ): PageMatch | null {
+  const { suffix } = splitPath(path)
   const target = normalizePath(path)
   const exclude = new Set(options.exclude ?? [])
   let best: PageMatch | null = null
   for (const page of pages) {
     if (exclude.has(page.id))
       continue
-    const prefix = pagePath(page)
-    if (!isUnder(target, prefix))
-      continue
-    if (!best || prefix.length > best.prefix.length)
-      best = { page, prefix, subPath: target.slice(prefix.length) || '/' }
+    for (const prefix of new Set([pagePath(page), pageIdPath(page.id)])) {
+      if (!isUnder(target, prefix))
+        continue
+      if (!best || prefix.length > best.prefix.length)
+        best = { page, prefix, subPath: `${target.slice(prefix.length) || '/'}${suffix}` }
+    }
   }
   return best
 }

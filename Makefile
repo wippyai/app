@@ -70,7 +70,7 @@ build-wc-user-status:
 
 lint:
 	cd frontend/applications/main && npm run lint
-	cd frontend/packages/app-nav && npm run lint
+	cd frontend/packages/app-nav && $(NPM_INSTALL) && npm run lint
 	cd frontend/applications/dashboard-page && npm run lint
 	cd frontend/web-components/reaction-bar && npm run lint
 	cd frontend/web-components/websocket-log && npm run lint

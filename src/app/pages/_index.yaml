@@ -40,18 +40,30 @@ entries:
         groups:
           - app.pages:watchers
 
-  # Watch registry commits, read view.page entries and message the relay hub.
-  # Nothing else.
+  # Read view.page entries (they live in many namespaces) and message the relay
+  # hub, whose process id is not known in advance.
   - name: watchers_policy
     kind: security.policy
     meta:
-      comment: The page-change signal may watch registry commits, read registry entries and send to the relay hub
+      comment: The page-change signal may read registry entries and send to the relay hub
     groups:
       - app.pages:watchers
     policy:
       resources: '*'
       actions:
-        - events.subscribe
         - registry.get
         - process.send
+      effect: allow
+
+  # Watch the registry's events only, not other event systems.
+  - name: watchers_events_policy
+    kind: security.policy
+    meta:
+      comment: The page-change signal may subscribe to registry events only
+    groups:
+      - app.pages:watchers
+    policy:
+      resources: registry
+      actions:
+        - events.subscribe
       effect: allow
