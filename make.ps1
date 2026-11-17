@@ -10,6 +10,9 @@ param(
     [Parameter(Position = 0)]
     [string]$Target = 'help',
     [switch]$SkipInstall,
+    # Checkout of the wippy/dashboards module (see link-dashboards). Defaults to
+    # $env:DASHBOARDS_DIR, then to a sibling folder of this repository.
+    [string]$DashboardsDir = '',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$RuntimeArguments = @()
 )
@@ -22,7 +25,6 @@ Set-Location $PSScriptRoot
 $apps = @(
     @{ name = 'main';        dir = 'frontend/applications/main';        out = 'static/app/main' }
     @{ name = 'iframe-demo'; dir = 'frontend/applications/iframe-demo'; out = 'static/app/iframe-demo' }
-    @{ name = 'dashboard-page'; dir = 'frontend/applications/dashboard-page'; out = 'static/app/dashboard-page' }
 )
 
 $wcs = @(
@@ -33,10 +35,8 @@ $wcs = @(
     @{ name = 'markdown';        dir = 'frontend/web-components/markdown';        out = 'static/wc/markdown' }
     @{ name = 'model-gallery';   dir = 'frontend/web-components/model-gallery';   out = 'static/wc/model-gallery' }
     @{ name = 'counter-persist'; dir = 'frontend/web-components/counter-persist'; out = 'static/wc/counter-persist' }
-    @{ name = 'dashboard-layout'; dir = 'frontend/web-components/dashboard-layout'; out = 'static/wc/dashboard-layout' }
-    @{ name = 'dash-tiles'; dir = 'frontend/web-components/dash-tiles'; out = 'static/wc/dash-tiles' }
-    @{ name = 'run-timeline'; dir = 'frontend/web-components/run-timeline'; out = 'static/wc/run-timeline' }
-    @{ name = 'user-status'; dir = 'frontend/web-components/user-status'; out = 'static/wc/user-status' }
+    @{ name = 'run-timeline'; dir = 'frontend/web-components/run-timeline'; out = 'static/wc/run-timeline'; tileHelper = $true }
+    @{ name = 'user-status'; dir = 'frontend/web-components/user-status'; out = 'static/wc/user-status'; tileHelper = $true }
 )
 
 # Headless TypeScript packages with a test-pkg-<name> target (install,
@@ -49,7 +49,6 @@ $pkgs = @(
 $lintDirs = @(
     'frontend/applications/main'
     'frontend/packages/app-nav'
-    'frontend/applications/dashboard-page'
     'frontend/web-components/reaction-bar'
     'frontend/web-components/websocket-log'
     'frontend/web-components/chart-circle'
@@ -57,11 +56,34 @@ $lintDirs = @(
     'frontend/web-components/markdown'
     'frontend/web-components/model-gallery'
     'frontend/web-components/counter-persist'
-    'frontend/web-components/dashboard-layout'
-    'frontend/web-components/dash-tiles'
     'frontend/web-components/run-timeline'
     'frontend/web-components/user-status'
 )
+
+# Mirrors the Makefile's link-dashboards: points frontend/packages/dash-tile-helper
+# (gitignored) at the tile helper of a wippy/dashboards checkout, as a junction.
+# Replaces only an existing link; never deletes a real folder.
+function Invoke-LinkDashboards {
+    $dir = $script:DashboardsDir
+    if (-not $dir) { $dir = $env:DASHBOARDS_DIR }
+    if (-not $dir) { $dir = Join-Path $PSScriptRoot '../wippy-dashboards' }
+    $source = Join-Path $dir 'frontend/packages/dash-tile-helper'
+    if (-not (Test-Path (Join-Path $source 'package.json'))) {
+        throw "No wippy/dashboards checkout at $dir; pass -DashboardsDir <path> or set DASHBOARDS_DIR"
+    }
+    $source = (Resolve-Path $source).Path
+    $link = Join-Path $PSScriptRoot 'frontend/packages/dash-tile-helper'
+    if (Test-Path $link) {
+        $item = Get-Item $link -Force
+        if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "frontend/packages/dash-tile-helper is a real folder, not a link; move it away first"
+        }
+        # Deletes the junction itself, not the folder it points at.
+        [IO.Directory]::Delete($link, $false)
+    }
+    New-Item -ItemType Junction -Path $link -Target $source | Out-Null
+    Write-Host "linked frontend/packages/dash-tile-helper -> $source"
+}
 
 function Invoke-Recipe {
     param(
@@ -69,6 +91,7 @@ function Invoke-Recipe {
         [Parameter(Mandatory)][string]$Out,
         [switch]$Clean
     )
+    if (($script:wcs | Where-Object { $_.dir -eq $Dir -and $_.tileHelper })) { Invoke-LinkDashboards }
     Push-Location $Dir
     try {
         Write-Host "==> $Dir" -ForegroundColor Cyan
@@ -160,6 +183,7 @@ function Show-Help {
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
+    Write-Host "  link-dashboards    Link the tile helper of a wippy/dashboards checkout (-DashboardsDir)"
     Write-Host "  test-pkg-<name>    Typecheck and unit-test a package (e.g. test-pkg-app-nav)"
     Write-Host "  test-attention     Run Attention acceptance in Chromium"
     Write-Host "  test-attention-touch Run Attention touch acceptance in Chromium"
@@ -211,7 +235,12 @@ try {
             break
         }
         '^lint$' {
+            Invoke-LinkDashboards
             foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            break
+        }
+        '^link-dashboards$' {
+            Invoke-LinkDashboards
             break
         }
         '^test-attention$' {

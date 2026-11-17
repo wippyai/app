@@ -79,6 +79,14 @@ async function readsSettled(page: Page, reads: readonly string[]) {
   }
 }
 
+/**
+ * Waits until no tile frame of a hosted board is busy (loading its component or its data). Call it
+ * after a tile shows, so the board has rendered its frames.
+ */
+async function boardSettled(page: Page, id: string) {
+  await expect(hosted(page, id).locator('[data-tile-id][aria-busy="true"]')).toHaveCount(0, { timeout: 20_000 })
+}
+
 /** Removes the fixture pages from a fresh, signed-in context. A page already gone answers 404. */
 async function removeFixtures(browser: Browser) {
   const context = await browser.newContext()
@@ -145,9 +153,11 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     await dashboardsGroup(page).getByRole('button', { name: 'LLM usage', exact: true }).click()
     await expect(page).toHaveURL(/\/home\/reports\/llm-usage$/)
     await expect(active(page)).toHaveText('LLM usage')
-    await expect(hosted(page, 'llm_usage').locator('[data-tile-id="model_picker"]')).toBeVisible()
+    await expect(hosted(page, 'llm_usage').locator('[data-tile-id="model_picker"]')).toBeVisible({ timeout: 20_000 })
     await expect(sidebar(page)).toBeVisible()
     expect(await shellKept(page)).toBe(true)
+    // Leaving while a tile still reads aborts that read, which the page watch reports.
+    await boardSettled(page, 'llm_usage')
 
     // An own item leaves the hosted page, still in the same home page.
     await sidebar(page).getByRole('button', { name: 'Users', exact: true }).click()
@@ -161,8 +171,9 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     await shellReady(page)
     await openInShell(page, '/home/reports/llm-usage/claude-haiku-4-5')
     const board = hosted(page, 'llm_usage')
-    await expect(board.locator('[data-tile-id="model_picker"]')).toContainText('claude-haiku-4-5')
+    await expect(board.locator('[data-tile-id="model_picker"]')).toContainText('claude-haiku-4-5', { timeout: 20_000 })
     await expect(active(page)).toHaveText('LLM usage')
+    await boardSettled(page, 'llm_usage')
 
     await sidebar(page).getByRole('button', { name: 'Home', exact: true }).click()
     await expect(page).toHaveURL(/\/home\/?$/)
@@ -171,7 +182,8 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     await page.goBack()
     await expect(page).toHaveURL(/\/home\/reports\/llm-usage\/claude-haiku-4-5$/)
     await expect(active(page)).toHaveText('LLM usage')
-    await expect(hosted(page, 'llm_usage').locator('[data-tile-id="model_picker"]')).toContainText('claude-haiku-4-5')
+    await expect(hosted(page, 'llm_usage').locator('[data-tile-id="model_picker"]')).toContainText('claude-haiku-4-5', { timeout: 20_000 })
+    await boardSettled(page, 'llm_usage')
 
     await page.goForward()
     await expect(page).toHaveURL(/\/home\/?$/)

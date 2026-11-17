@@ -120,6 +120,20 @@ A registry page opens inside the home page, next to the sidebar, at the start of
 
 The logic is in the headless package [`frontend/packages/app-nav`](frontend/packages/app-nav/README.md): it merges the items, orders them with the Host nav's rules, keeps the list live and resolves paths. The app keeps the look: `src/app/app.vue`, `src/components/sidebar-item.vue` and `src/pages/hosted-page.vue`. To add a group, put its name in `NAV_GROUPS`. To add an item of your own, add it to `NAV_ITEMS`.
 
+## Dashboards
+
+Dashboard pages come from the module `wippy/dashboards` (repository `git.wippy.ai` `wippy/dashboard`). The app declares it in `src/app/deps/_index.yaml`, and the chat agent includes its trait `wippy.dashboards.agent:trait`, so a chat request can build a page. The app keeps the demo around it:
+
+- `src/demo_actor`, `src/demo_run_timeline`, `src/demo_user_status` and `src/demo_seed`: demo data points, actions and users.
+- `frontend/web-components/run-timeline` and `user-status`: demo plugin tiles.
+- `src/dashboards_fixtures`: test points and placeholder tiles for `e2e/dashboards.spec.ts`. They set `catalog: false`, so the agent never offers them.
+
+The module is not on the hub yet. Until it is, clone it next to this repository and load it as a local replacement:
+
+1. Clone `git@git.wippy.ai:wippy/dashboard.git` to a sibling folder, for example `../wippy-dashboards`.
+2. In the gitignored `.wippy.workspace.yaml`, add `wippy/dashboards: <path of the clone>` under `profiles.workspace.workspace.replacements`, and start with `wippy run -c --config .wippy.workspace.yaml --profile workspace`.
+3. The demo tiles build against the module's tile helper. `make link-dashboards` links `frontend/packages/dash-tile-helper` to the clone (the build targets of the two tiles do it for you). Pass `DASHBOARDS_DIR=<path>` (`-DashboardsDir <path>` with `make.bat`) when the clone is not at `../wippy-dashboards`.
+
 ## Frontend & theming
 
 All frontend, theming, and web-component guidance lives in [`frontend/docs/`](frontend/docs/README.md). The one rule worth stating up front: customize appearance through the **facade** (`src/app/deps/_index.yaml`) — `css_variables` / `custom_css` propagate to every page and component; per-app CSS does not. See [`frontend/docs/theming.md`](frontend/docs/theming.md).

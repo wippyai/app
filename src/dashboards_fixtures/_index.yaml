@@ -1,11 +1,26 @@
 version: "1.0"
-namespace: wippy.dashboards.fixtures
+namespace: app.dashboards_fixtures
 
-# Test fixtures for the dashboards proof of concept: declarations that let a
-# page be published and compiled before the mock actor and the real tiles
-# exist. The tile 'placeholder' is implemented by stage B3 (dash-placeholder).
+# Test fixtures of the wippy/dashboards module, used by this app's browser
+# tests (e2e/dashboards.spec.ts): points that return fixed numbers, series and
+# options, fail, time out or return a wrong shape, placeholder tiles (the
+# dash-placeholder element ships in the module's dashboard-layout bundle), and
+# a denial check page. Every point and tile here sets catalog: false, so the
+# dashboards agent never offers them.
 
 entries:
+  # Test page for denial checks: a regular user may not view deny_check.
+  - name: deny_view_check
+    kind: security.policy
+    meta:
+      comment: app.security:user may not view the page deny_check
+    groups:
+      - app.security:user
+    policy:
+      resources: page:wippy.dashboards.pages:deny_check
+      actions: view
+      effect: deny
+
   # ── functions ────────────────────────────────────────────────────────
   - name: numbers_fn
     kind: function.lua
@@ -162,8 +177,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture numbers
-      func: wippy.dashboards.fixtures:numbers_fn
+      func: app.dashboards_fixtures:numbers_fn
       args_schema:
         type: object
         additionalProperties: false
@@ -177,8 +193,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture series
-      func: wippy.dashboards.fixtures:series_fn
+      func: app.dashboards_fixtures:series_fn
       args_schema:
         type: object
         additionalProperties: false
@@ -192,8 +209,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture options
-      func: wippy.dashboards.fixtures:options_fn
+      func: app.dashboards_fixtures:options_fn
       args_schema:
         type: object
         additionalProperties: false
@@ -206,8 +224,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture failure
-      func: wippy.dashboards.fixtures:fails_fn
+      func: app.dashboards_fixtures:fails_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: scalar }
 
@@ -215,8 +234,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture wrong shape
-      func: wippy.dashboards.fixtures:wrong_shape_fn
+      func: app.dashboards_fixtures:wrong_shape_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: scalar }
 
@@ -224,8 +244,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture bad cell
-      func: wippy.dashboards.fixtures:bad_cell_fn
+      func: app.dashboards_fixtures:bad_cell_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: series }
 
@@ -234,8 +255,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture echo
-      func: wippy.dashboards.fixtures:echo_fn
+      func: app.dashboards_fixtures:echo_fn
       args_schema:
         type: object
         additionalProperties: false
@@ -250,8 +272,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture empty frame
-      func: wippy.dashboards.fixtures:empty_series_fn
+      func: app.dashboards_fixtures:empty_series_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: series }
 
@@ -259,8 +282,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture empty record
-      func: wippy.dashboards.fixtures:empty_record_fn
+      func: app.dashboards_fixtures:empty_record_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: record }
 
@@ -269,8 +293,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture null cells
-      func: wippy.dashboards.fixtures:null_cells_fn
+      func: app.dashboards_fixtures:null_cells_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: series }
 
@@ -280,8 +305,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture tree
-      func: wippy.dashboards.fixtures:tree_fn
+      func: app.dashboards_fixtures:tree_fn
       args_schema:
         type: object
         additionalProperties: false
@@ -310,8 +336,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture tree (no children)
-      func: wippy.dashboards.fixtures:tree_empty_fn
+      func: app.dashboards_fixtures:tree_empty_fn
       args_schema:
         type: object
         additionalProperties: false
@@ -334,8 +361,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture tree (bad children)
-      func: wippy.dashboards.fixtures:tree_bad_fn
+      func: app.dashboards_fixtures:tree_bad_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output:
         shape: schema
@@ -350,8 +378,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture empty scalar (wrong fields)
-      func: wippy.dashboards.fixtures:empty_scalar_wrong_fn
+      func: app.dashboards_fixtures:empty_scalar_wrong_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output: { shape: scalar }
 
@@ -360,8 +389,9 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
+      catalog: false
       title: Fixture without args_schema
-      func: wippy.dashboards.fixtures:numbers_fn
+      func: app.dashboards_fixtures:numbers_fn
       output: { shape: scalar }
 
   # ── action declaration (contracts section 5.2) ───────────────────────
@@ -370,7 +400,7 @@ entries:
     meta:
       type: wippy.dashboards.action
       title: Fixture action
-      func: wippy.dashboards.fixtures:noop_fn
+      func: app.dashboards_fixtures:noop_fn
       args_schema:
         type: object
         additionalProperties: false
@@ -380,7 +410,7 @@ entries:
         type: object
       permission:
         action: dash.fixtures.noop
-        resource: wippy.dashboards.fixtures:noop
+        resource: app.dashboards_fixtures:noop
       confirm: true
       sensitive_fields: []
       refreshes:
@@ -391,6 +421,7 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.tile
+      catalog: false
       tile_type: placeholder
       tag: dash-placeholder
       inputs:
@@ -415,6 +446,7 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.tile
+      catalog: false
       tile_type: placeholder.scalar
       tag: dash-placeholder
       inputs:
@@ -439,6 +471,7 @@ entries:
     kind: registry.entry
     meta:
       type: wippy.dashboards.tile
+      catalog: false
       tile_type: placeholder.select
       tag: dash-placeholder
       inputs:

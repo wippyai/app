@@ -730,11 +730,13 @@ test.describe('stage B: page host and dashboard-layout', () => {
   test('two paths share one bundle, sub-path and history', async ({ page }) => {
     const bundles = new Set<string>()
     const seen: string[] = []
+    // The wippy/dashboards module serves the page app that every page shares at /app/wippy-dashboards/page/.
+    const PAGE_APP = '/app/wippy-dashboards/page/'
     page.on('request', (r) => {
       const u = new URL(r.url())
-      if (u.pathname.includes('dashboard-page') || u.pathname.includes('/pages/content/'))
+      if (u.pathname.startsWith(PAGE_APP) || u.pathname.includes('/pages/content/'))
         seen.push(u.pathname)
-      if (u.pathname.includes('dashboard-page') && u.pathname.endsWith('.js'))
+      if (u.pathname.startsWith(PAGE_APP) && u.pathname.endsWith('.js'))
         bundles.add(u.pathname)
     })
 

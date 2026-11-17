@@ -18,24 +18,27 @@ The POC is thrown away. It proves the frame, so these contracts stay small. Anyt
 
 ## 2. Folders and namespaces
 
+Since 17 November 2026 the engine is the module `wippy/dashboards`, in its own repository (`git.wippy.ai` `wippy/dashboard`, checked out at `C:/Projects/wippy-dashboards`). Its paths below are relative to that repository; the app loads it through the gitignored `.wippy.workspace.yaml`. The demo modules and the test fixtures stay in this app.
+
 | Folder | Namespace | Owner stage |
 |---|---|---|
-| `src/dashboards/` | `wippy.dashboards` | B1, C2, E3 |
-| `src/dashboards/pages/` (generated entries only, never hand-written) | `wippy.dashboards.pages` | B1 |
-| `src/dashboards/components/` (the `view.component` entries of `dashboard-layout` and the tiles) | `wippy.dashboards.components` | B3, C1, C4 |
+| module `src/` | `wippy.dashboards` | B1, C2, E3 |
+| none (generated entries only, never hand-written) | `wippy.dashboards.pages` | B1 |
+| module `src/components/` (the `view.component` entries of `dashboard-layout` and the tiles) | `wippy.dashboards.components` | B3, C1, C4 |
 | `src/demo_seed/` (test users) | `demo.seed` | B1 |
-| `src/dashboards/tiles/` (tile descriptors of `kpi`, `control.select`, `chart`, `table`) | `wippy.dashboards.tiles` | C3, C4 |
+| module `src/tiles/` (tile descriptors of `kpi`, `control.select`, `chart`, `table`) | `wippy.dashboards.tiles` | C3, C4 |
+| `src/dashboards_fixtures/` (test points and placeholder tiles, `catalog: false`) | `app.dashboards_fixtures` | B1, C2 |
 | `src/demo_actor/` | `demo.actor` | C3 |
 | `src/demo_run_timeline/` | `demo.run_timeline` | E1 |
 | `src/demo_user_status/` | `demo.user_status` | E2, E3 |
-| `frontend/applications/dashboard-page/` | built to `static/app/dashboard-page` | B2 |
-| `frontend/web-components/dashboard-layout/` | built to `static/wc/dashboard-layout` | B3 |
-| `frontend/web-components/dash-tiles/` | built to `static/wc/dash-tiles` | C1, C4 |
+| module `frontend/applications/dashboard-page/` | built to module `static/page`, served at `/app/wippy-dashboards/page` | B2 |
+| module `frontend/web-components/dashboard-layout/` | built to module `static/wc/dashboard-layout` | B3 |
+| module `frontend/web-components/dash-tiles/` | built to module `static/wc/dash-tiles` | C1, C4 |
 | `frontend/web-components/run-timeline/` | built to `static/wc/run-timeline` | E1 |
 | `frontend/web-components/user-status/` | built to `static/wc/user-status` | E2 |
-| `frontend/packages/dash-tile-helper/` | local path dependency of every tile package | C1 |
+| module `frontend/packages/dash-tile-helper/` | local path dependency of every tile package; this app links it with `make link-dashboards` | C1 |
 
-Bundles. Both the `Makefile` and the CI job `Build_frontend` (`make build NPM_INSTALL='npm ci'`) build every package listed in the `build` target, so the bundles stay gitignored. Each new package gets a `build-app-<name>` or `build-wc-<name>` target in the `Makefile`, a place in its `build` and `lint` lists, and a row in `$apps` or `$wcs` (and `$lintDirs`) in `make.ps1`. This replaces the plan's stage A1 step that added `.gitignore` exceptions: when the plan was written, CI could not build the bundles.
+Bundles of this app. Both the `Makefile` and the CI job `Build_frontend` (`make build NPM_INSTALL='npm ci'`) build every package listed in the `build` target, so the bundles stay gitignored. Each new package gets a `build-app-<name>` or `build-wc-<name>` target in the `Makefile`, a place in its `build` and `lint` lists, and a row in `$apps` or `$wcs` (and `$lintDirs`) in `make.ps1`. This replaces the plan's stage A1 step that added `.gitignore` exceptions: when the plan was written, CI could not build the bundles.
 
 ## 3. HTTP endpoints
 
@@ -342,8 +345,8 @@ The generator writes one entry per published page through a registry changeset, 
     order: 50
     announced: true
     secure: true
-    url: /app
-    base_path: app/dashboard-page
+    url: /app/wippy-dashboards       # the module's static mount
+    base_path: page
     entry_point: app.html
     mountRoute: /reports/llm-usage/:part(.*)*
     resource_id: llm_usage             # kept for clarity; Host 1.0.68 does not use it
