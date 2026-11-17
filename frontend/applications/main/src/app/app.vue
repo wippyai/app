@@ -8,7 +8,7 @@ import { config, on } from '@wippy-fe/proxy'
 import { isUnder, mountPrefix, normalizePath, useAppNav, usePageList } from '@example/app-nav'
 import SidebarItem from '../components/sidebar-item.vue'
 import { useApi, useHost } from '../composables/useWippy'
-import { PAGE_LIST } from '../constants'
+import { NOTE_NAVIGATION, PAGE_LIST } from '../constants'
 import { NAV_GROUPS, NAV_ITEMS } from '../nav'
 
 const router = useRouter()
@@ -94,35 +94,64 @@ function whenListReady(): Promise<void> {
   })
 }
 
-// Every navigation request takes the next number, and so does every route
-// change when it starts. A navigation still waiting for the list is dropped
-// once a newer one starts, so a late agent path never overrides a click made
-// meanwhile, and a slow older navigation finishing later changes nothing.
+// An agent path waits only while the first page list is still loading. It is
+// dropped when any other navigation starts after it was asked for: a newer
+// agent path, a sidebar click or a hosted page's own navigation (counted the
+// moment they happen, through noteNavigation), and any other route change,
+// such as a link inside a page or back and forward (counted by beforeEach).
+// The route change that openPath itself starts is not counted.
 let navigationSeq = 0
-const stopRouteCount = router.beforeEach(() => { navigationSeq++ })
+let ownTarget: string | null = null
+function noteNavigation() {
+  navigationSeq++
+}
+provide(NOTE_NAVIGATION, noteNavigation)
+const stopRouteCount = router.beforeEach((to) => {
+  if (ownTarget !== null && to.fullPath === ownTarget) {
+    ownTarget = null
+    return
+  }
+  noteNavigation()
+})
 
-// Host paths (/c/..., /chat/...) leave this app. A host URL inside this app
-// (/home/users) and an app route (/users) both open here. A route here may
-// also be a registry page, which then opens inside this app.
-async function openPath(path: string) {
+// Opens an app path with the router. A host URL inside this app (/home/users)
+// opens its app route (/users); a route here may be a registry page.
+function goTo(path: string) {
+  const prefix = ownPrefix.value
+  let target = path
+  if (prefix && prefix !== '/' && path.startsWith(prefix) && isUnder(normalizePath(path), prefix)) {
+    // Keep any query: /home/components?tab=chat opens /components?tab=chat.
+    const rest = path.slice(prefix.length)
+    target = rest.startsWith('/') ? rest : `/${rest}`
+  }
+  const full = router.resolve(target).fullPath
+  ownTarget = full
+  void router.push(target).finally(() => {
+    if (ownTarget === full)
+      ownTarget = null
+  })
+}
+
+// Host paths (/c/..., /chat/...) leave this app; app paths open here. With the
+// page list loaded the path opens at once; before that it waits for the list,
+// which tells this app its own prefix.
+function openPath(path: string) {
   if (!isAppPath(path))
     return
-  const seq = ++navigationSeq
+  noteNavigation()
+  const seq = navigationSeq
   if (path.startsWith('/c/') || path.startsWith('/chat/')) {
     host.navigate(path)
     return
   }
-  await whenListReady()
-  if (seq !== navigationSeq)
-    return
-  const prefix = ownPrefix.value
-  if (prefix && prefix !== '/' && path.startsWith(prefix) && isUnder(normalizePath(path), prefix)) {
-    // Keep any query: /home/components?tab=chat opens /components?tab=chat.
-    const rest = path.slice(prefix.length)
-    router.push(rest.startsWith('/') ? rest : `/${rest}`)
+  if (pageList.ready.value || pageList.gaveUp.value) {
+    goTo(path)
     return
   }
-  router.push(path)
+  void whenListReady().then(() => {
+    if (seq === navigationSeq)
+      goTo(path)
+  })
 }
 
 // The sidebar: the app's own items plus the registry pages of NAV_GROUPS,
@@ -135,7 +164,16 @@ const { tree: navTree, activeKey, open: openItem } = useAppNav({
   exclude: ownPageId ? [ownPageId] : [],
   isTaken: path => router.resolve(path).name !== 'hosted-page',
   currentPath: computed(() => route.path),
-  navigate: { route: path => router.push(path), host: path => host.navigate(path) },
+  navigate: {
+    route: (path) => {
+      noteNavigation()
+      router.push(path)
+    },
+    host: (path) => {
+      noteNavigation()
+      host.navigate(path)
+    },
+  },
 })
 
 const currentUser = ref<{ email: string; full_name: string } | null>(null)

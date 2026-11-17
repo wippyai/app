@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { inject } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { joinPath } from '@example/app-nav'
+import { NOTE_NAVIGATION } from '../constants'
 
 /**
  * Shows another view.page inside this app, under the sidebar. The page is a
@@ -19,6 +21,7 @@ const props = defineProps<{
 
 const route = useRoute()
 const router = useRouter()
+const noteNavigation = inject(NOTE_NAVIGATION, () => {})
 
 function onNavOwnerRoute(event: Event) {
   const path = (event as CustomEvent<{ path?: string }>).detail?.path
@@ -27,8 +30,10 @@ function onNavOwnerRoute(event: Event) {
   // joinPath keeps the hosted page's query and hash. The router normalizes the
   // encoding of both sides, and its decoding never throws on a stray `%`.
   const next = joinPath(props.basePath, path)
-  if (router.resolve(next).fullPath !== route.fullPath)
+  if (router.resolve(next).fullPath !== route.fullPath) {
+    noteNavigation()
     router.push(next)
+  }
 }
 </script>
 
