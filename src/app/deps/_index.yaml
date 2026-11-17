@@ -84,7 +84,7 @@ entries:
   - name: session
     kind: ns.dependency
     component: wippy/session
-    version: '>=v0.6.7'
+    version: '>=v0.7.0'
     parameters:
       - name: api_router
         value: app:api
