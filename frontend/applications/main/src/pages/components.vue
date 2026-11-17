@@ -87,18 +87,16 @@ const mermaidDef = `graph LR
     D --> E[Shadow DOM]
     E --> F[Vue App]`
 
-// Parse this fixed example as HTML so native template.content holds its text.
-// Vue's compiled template children otherwise become ordinary child nodes.
-const mermaidChildrenHtml = `<example-mermaid><template data-type="text/vnd.mermaid">
-sequenceDiagram
-participant H as Host
-participant C as Component
-participant S as Shadow DOM
-H->>C: Register tag
-C->>S: Attach shadow
-S->>S: Load CSS
-S->>C: Mount Vue app
-</template></example-mermaid>`
+// v-text keeps the newlines that Vue's template compiler would otherwise
+// collapse (see component-guide.md, Children Content).
+const mermaidChildrenDef = `sequenceDiagram
+    participant H as Host
+    participant C as Component
+    participant S as Shadow DOM
+    H->>C: Register tag
+    C->>S: Attach shadow
+    S->>S: Load CSS
+    S->>C: Mount Vue app`
 
 const markdownContent = `# Web Components
 
@@ -401,7 +399,13 @@ const emit = useComponentEvents()
               Via children content
               <code class="text-[10px] ml-1 text-surface-400">&lt;template data-type="..."&gt;</code>
             </div>
-            <div v-html="mermaidChildrenHtml" />
+            <example-mermaid>
+              <!-- eslint-disable-next-line vue/no-lone-template -- native inert template, not a Vue slot template -->
+              <template
+                data-type="text/vnd.mermaid"
+                v-text="mermaidChildrenDef"
+              />
+            </example-mermaid>
           </div>
         </div>
       </div>

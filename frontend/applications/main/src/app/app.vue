@@ -177,7 +177,7 @@ onMounted(() => {
             collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-3 py-2',
             currentName === item.name
               ? 'bg-primary/10 text-primary font-medium'
-              : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800',
+              : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800',
           ]"
           :aria-current="currentName === item.name ? 'page' : undefined"
           :title="collapsed ? item.label : undefined"

@@ -2281,7 +2281,7 @@ Before scaffolding a new web component, query the Wippy hub for an existing modu
 - existing options would require more customization than reimplementing, AND
 - the deviation is documented (per §12 known intentional deviations).
 
-**Children-content pattern** (when authoring a WC where multi-line input must survive Vue template compilation): use an inert `<template data-type="text/vnd.<mime>">…</template>` child element rather than inlining as text content. See `kb:web-component-development-guide`.
+**Children-content pattern** (when authoring a WC that takes multi-line input): use an inert `<template data-type="text/vnd.<mime>">…</template>` child element rather than inlining as text content. In raw HTML the text inside it reaches the WC as written. In a Vue SFC the compiler condenses whitespace in static text, including inside this `<template>`, so keep the text in a script string and bind it with `v-text`, e.g. `<template data-type="text/vnd.mermaid" v-text="diagram" />`. See `kb:web-component-development-guide`.
 
 ### 15.4 Host primitives — use before any hand-roll
 

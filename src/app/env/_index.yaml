@@ -22,6 +22,17 @@ entries:
       - app.env:file
       - app.env:os
 
+  # Enables the Session Forms dev endpoint. Must be exactly "true" (see
+  # session_forms_demo/_index.yaml).
+  - name: session_forms_dev_fixtures
+    kind: env.variable
+    meta:
+      comment: Enables the Session Forms dev-only artifact-mutation fixture endpoints (never enable in production)
+      private: true
+    default: "false"
+    storage: app.env:store
+    variable: SESSION_FORMS_DEV_FIXTURES
+
   - name: public_env_handler
     kind: function.lua
     source: file://public_env_handler.lua

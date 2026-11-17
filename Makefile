@@ -1,4 +1,4 @@
-.PHONY: build clean-build dev run run-e2e prepare-e2e lint test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
+.PHONY: build clean-build dev run run-dev run-e2e prepare-e2e lint verify test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-session-forms-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
 
 # Use NPM_INSTALL=true after installing local release packages for a smoke build.
 NPM_INSTALL ?= npm install
@@ -20,13 +20,16 @@ test-attention-touch:
 test-attention-helpers:
 	npm run test:e2e -- attention-context-helpers.spec.ts --project=chromium --max-failures=1 --output=.local/test-results/attention-helpers-tmp
 
-build: build-app-main build-app-iframe-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
+build: build-app-main build-app-iframe-demo build-app-session-forms-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist
 
 build-app-main:
 	cd frontend/applications/main && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/app/main --emptyOutDir
 
 build-app-iframe-demo:
 	cd frontend/applications/iframe-demo && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/app/iframe-demo --emptyOutDir
+
+build-app-session-forms-demo:
+	cd frontend/applications/session-forms-demo && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/app/session-forms-demo --emptyOutDir
 
 build-wc-reaction-bar:
 	cd frontend/web-components/reaction-bar && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/wc/reaction-bar --emptyOutDir
@@ -49,8 +52,12 @@ build-wc-model-gallery:
 build-wc-counter-persist:
 	cd frontend/web-components/counter-persist && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/wc/counter-persist --emptyOutDir
 
+# Lint in eslintrc mode: a flat config in a parent directory (such as the Web
+# Host checkout) would otherwise reject --ext.
+lint: export ESLINT_USE_FLAT_CONFIG := false
 lint:
 	cd frontend/applications/main && npm run lint
+	cd frontend/applications/session-forms-demo && npm run lint
 	cd frontend/web-components/reaction-bar && npm run lint
 	cd frontend/web-components/websocket-log && npm run lint
 	cd frontend/web-components/chart-circle && npm run lint
@@ -59,9 +66,20 @@ lint:
 	cd frontend/web-components/model-gallery && npm run lint
 	cd frontend/web-components/counter-persist && npm run lint
 
+# Frontend build and lint for every app and web component, then the Lua lint for
+# this app's own namespaces (`app`, `app.*`). The CI lint stage covers the whole
+# workspace, which also reports errors in the vendored keeper module that this
+# repo does not own. Needs `wippy` on PATH; make.ps1 has the Windows fallback.
+# The second wippy lint run selects the fixtures profile, because .wippy.yaml
+# removes that namespace from a release.
+verify: build lint
+	wippy lint --level error --ns 'app,app.*'
+	wippy lint --level error --ns 'app,app.*' --profile session-forms-fixtures
+
 clean-build:
 	cd frontend/applications/main && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir
 	cd frontend/applications/iframe-demo && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/iframe-demo --emptyOutDir
+	cd frontend/applications/session-forms-demo && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/session-forms-demo --emptyOutDir
 	cd frontend/web-components/reaction-bar && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/reaction-bar --emptyOutDir
 	cd frontend/web-components/websocket-log && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/websocket-log --emptyOutDir
 	cd frontend/web-components/chart-circle && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/wc/chart-circle --emptyOutDir
@@ -75,3 +93,6 @@ dev:
 
 run: build
 	wippy run -c
+
+run-dev: build
+	node scripts/run-dev.mjs

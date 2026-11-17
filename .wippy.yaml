@@ -1,0 +1,14 @@
+version: "1.0"
+
+# The Session Forms dev fixtures (src/app/session_forms_demo) are removed from
+# the registry unless the session-forms-fixtures profile is selected, so a
+# release has no fixture agents, provider, model or endpoint. See README.md.
+disable:
+  namespaces:
+    - app.session_forms_demo
+
+profiles:
+  session-forms-fixtures:
+    disable:
+      namespaces.remove:
+        - app.session_forms_demo
