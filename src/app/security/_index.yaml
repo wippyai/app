@@ -14,6 +14,7 @@ entries:
         id: app.security:upload_worker
       policies:
         - app.security:upload_worker.env_read
+        - app.security:upload_worker.env_queue_strategy
         - app.security:upload_worker.database
         - app.security:upload_worker.pipeline
         - app.security:upload_worker.actor
@@ -25,6 +26,16 @@ entries:
     kind: security.policy
     policy:
       resources: userspace.uploads.env:database_resource
+      actions:
+        - env.get
+      effect: allow
+
+  # The dispatch library of userspace/uploads (0.5.29 is locked) reads the queue
+  # strategy; without this policy the worker logs a warning and uses fifo.
+  - name: upload_worker.env_queue_strategy
+    kind: security.policy
+    policy:
+      resources: userspace.uploads.env:queue_strategy
       actions:
         - env.get
       effect: allow

@@ -114,7 +114,7 @@ The tracked `wippy.lock` pins hub versions only. The chart click needs the local
 1. The app reads `.env` and keeps its data in `.wippy/app.db`. The local checkout listens on `127.0.0.1:8086`, because its `.env` sets that port.
 2. After a `wippy.lock` change, run `wippy install`.
 3. Build the front end: `make.bat build` on Windows, `make build` elsewhere. To build one package, use the `build-wc-<name>` or `build-app-<name>` target.
-4. Start the app with `.env` loaded: `wippy run -c --config .wippy.workspace.yaml --profile workspace -o app:gateway:addr=:8086`. Leave out the two config flags when you have no local replacements.
+4. Start the app with `.env` loaded: `wippy run -c --config .wippy.yaml --config .wippy.workspace.yaml --profile workspace -o app:gateway:addr=:8086`. List `.wippy.yaml` first, because any `--config` stops it from loading on its own.
 5. The restore service publishes the stored pages again at each start. To rebuild the two demo pages from their specs, sign in as the admin and send `POST /api/v1/demo/build`. The browser suite does this itself.
 6. For the chat demo, sign in, open "Ask Wippy" and ask for a dashboard. The showcase request in `e2e/dashboards-chat.spec.ts` (`ADMIN_PROMPT`) uses every tile kind; a short one is "Build me a dashboard of LLM usage: total tokens, tokens by day per model, and a table by model, with a model filter." The new page joins the sidebar's "Dashboards" group and opens inside the app.
 7. Open `http://127.0.0.1:8086/`, sign in, and open the pages from the sidebar's "Dashboards" group, or at `/home/reports/llm-usage` and `/home/ops/app-activity`. The admin account is in `.env`. The test users `viewer@wippy.local` and `target@wippy.local` come from `src/demo_seed/`.

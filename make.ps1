@@ -25,8 +25,9 @@ Set-Location $PSScriptRoot
 # (name, dir, out) tuples - single source of truth for every build-app-* /
 # build-wc-* target. Keep in sync with the Makefile when adding apps.
 $apps = @(
-    @{ name = 'main';        dir = 'frontend/applications/main';        out = 'static/app/main' }
-    @{ name = 'iframe-demo'; dir = 'frontend/applications/iframe-demo'; out = 'static/app/iframe-demo' }
+    @{ name = 'main';               dir = 'frontend/applications/main';               out = 'static/app/main' }
+    @{ name = 'iframe-demo';        dir = 'frontend/applications/iframe-demo';        out = 'static/app/iframe-demo' }
+    @{ name = 'session-forms-demo'; dir = 'frontend/applications/session-forms-demo'; out = 'static/app/session-forms-demo' }
 )
 
 $wcs = @(
@@ -50,6 +51,7 @@ $pkgs = @(
 # Subset that runs `npm run lint` - mirrors Makefile's `lint:` recipe.
 $lintDirs = @(
     'frontend/applications/main'
+    'frontend/applications/session-forms-demo'
     'frontend/packages/app-nav'
     'frontend/web-components/reaction-bar'
     'frontend/web-components/websocket-log'
@@ -72,7 +74,7 @@ $script:tileHelperDone = $false
 function Invoke-TileHelper {
     # One materialize per make.bat call serves every demo tile.
     if ($script:tileHelperDone) { return }
-    $wippy = if ($env:WIPPY_BIN) { $env:WIPPY_BIN } else { 'wippy' }
+    $wippy = Resolve-WippyBinary
     $wapp = $script:DashboardsWapp
     if (-not $wapp) { $wapp = $env:DASHBOARDS_WAPP }
     if (-not $wapp) {
@@ -80,7 +82,10 @@ function Invoke-TileHelper {
         if (-not $dir) { $dir = $env:DASHBOARDS_DIR }
         if (-not $dir) { $dir = Join-Path $PSScriptRoot '../wippy-dashboards' }
         if (Test-Path (Join-Path $dir 'wippy.yaml')) {
-            & (Join-Path $dir 'make.bat') pack
+            $previousWippyBin = $env:WIPPY_BIN
+            $env:WIPPY_BIN = $wippy
+            try { & (Join-Path $dir 'make.bat') pack }
+            finally { $env:WIPPY_BIN = $previousWippyBin }
             if ($LASTEXITCODE -ne 0) { throw "make.bat pack failed in $dir (exit $LASTEXITCODE)" }
             $wapp = Join-Path $dir '.wippy/dist/dashboards.wapp'
         }
@@ -147,9 +152,7 @@ function Invoke-Lint {
             npm install
             if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
         }
-        # These packages intentionally use local .eslintrc.cjs files. The
-        # candidate worktree can live under a repository with a flat config,
-        # so select legacy mode explicitly instead of inheriting that parent.
+        # Lint in eslintrc mode, as the Makefile does (see the comment there).
         $env:ESLINT_USE_FLAT_CONFIG = 'false'
         npm run lint
         if ($LASTEXITCODE -ne 0) { throw "npm run lint failed in $Dir (exit $LASTEXITCODE)" }
@@ -190,6 +193,24 @@ function Invoke-BuildAll {
     }
 }
 
+# Same lookup as resolveWippyBinary() in scripts/run-dev.mjs: $env:WIPPY, then
+# ./wippy.exe, then wippy on PATH.
+function Resolve-WippyBinary {
+    if ($env:WIPPY) { return $env:WIPPY }
+    if (Test-Path './wippy.exe') { return './wippy.exe' }
+    return 'wippy'
+}
+
+function Invoke-WippyLint {
+    $wippyBin = Resolve-WippyBinary
+    # Two runs, as in the Makefile. See the comment there.
+    foreach ($profileArgs in @(@(), @('--profile', 'session-forms-fixtures'))) {
+        Write-Host "==> $wippyBin lint --level error --ns app,app.* $profileArgs" -ForegroundColor Cyan
+        & $wippyBin lint --level error --ns 'app,app.*' @profileArgs
+        if ($LASTEXITCODE -ne 0) { throw "wippy lint failed (exit $LASTEXITCODE)" }
+    }
+}
+
 function Show-Help {
     Write-Host "make - Windows mirror of the Makefile (via make.bat -> make.ps1)`n"
     Write-Host "Targets:"
@@ -201,12 +222,14 @@ function Show-Help {
     Write-Host "  tile-helper        Materialize the wippy/dashboards tile helper into the demo tiles"
     Write-Host "                     (-DashboardsWapp <file> or -DashboardsDir <checkout>)"
     Write-Host "  test-pkg-<name>    Typecheck and unit-test a package (e.g. test-pkg-app-nav)"
+    Write-Host "  verify             build + lint + wippy lint --level error for app, app.*"
     Write-Host "  test-attention     Run Attention acceptance in Chromium"
     Write-Host "  test-attention-touch Run Attention touch acceptance in Chromium"
     Write-Host "  test-attention-helpers Run Attention codec and helper checks"
     Write-Host "  clean-build        Wipe node_modules + reinstall + rebuild"
     Write-Host "  dev                npm run dev in frontend/applications/main"
     Write-Host "  run                build, then ./wippy.exe run -c"
+    Write-Host "  run-dev            build, then node scripts/run-dev.mjs (generic local launcher)"
     Write-Host "  prepare-e2e        Prepare an isolated app with test agents"
     Write-Host "  run-e2e            build, prepare-e2e, then run the isolated app"
     Write-Host "  help               Show this message`n"
@@ -257,6 +280,13 @@ try {
         }
         '^tile-helper$' {
             Invoke-TileHelper
+            break
+        }
+        '^verify$' {
+            # Same steps as the Makefile's verify target.
+            Invoke-BuildAll
+            foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            Invoke-WippyLint
             break
         }
         '^test-attention$' {
@@ -313,6 +343,12 @@ try {
             finally {
                 Pop-Location
             }
+            break
+        }
+        '^run-dev$' {
+            Invoke-BuildAll
+            node scripts/run-dev.mjs
+            if ($LASTEXITCODE -ne 0) { throw "run-dev.mjs failed (exit $LASTEXITCODE)" }
             break
         }
         default {

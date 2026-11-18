@@ -25,18 +25,20 @@
  * Requires `npx playwright install chromium` once on this machine.
  */
 import { expect, test } from '@playwright/test'
-import { DEMO_IFRAME_SELECTOR, HOST_IFRAME_SELECTOR, loginAsAdmin, navigateHostTo } from './helpers/login'
+import { getDemoFrame, getHostFrame, loginAsAdmin } from './helpers/login'
 
 test.describe('proxy bridge round-trip', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
+    // `app.views:iframe-demo` has no sidebar entry point in the current
+    // build (the Host boots with its sidebar closed, see
+    // `navigateHostTo`'s doc comment) — reach it by its own registered
+    // mountRoute instead.
+    await page.goto('/demo')
   })
 
   test('all four bridge interactions over the demo page', async ({ page }) => {
-    await navigateHostTo(page, 'Iframe Demo')
-
-    const hostFrame = page.frameLocator(HOST_IFRAME_SELECTOR)
-    const demoFrame = hostFrame.frameLocator(DEMO_IFRAME_SELECTOR).first()
+    const demoFrame = await getDemoFrame(page)
 
     // Switch the iframe-demo to its /bridge route. Anchor the name regex so a
     // future "Bridge Console"-style tab can't accidentally match.
@@ -74,7 +76,7 @@ test.describe('proxy bridge round-trip', () => {
     // ── Verify __bridgeLog window-scoped history matches the DOM log ──
     // bridge.vue mirrors every log line into window.__bridgeLog so tests
     // (and future tooling) can read it without scraping the <pre>.
-    const windowLog = await demoFrame.locator('body').evaluate<string[]>(
+    const windowLog = await demoFrame.locator('body').evaluate(
       () => (window as unknown as { __bridgeLog?: string[] }).__bridgeLog ?? [],
     )
     expect(windowLog.length).toBeGreaterThan(0)
@@ -84,22 +86,25 @@ test.describe('proxy bridge round-trip', () => {
   })
 
   test('<w-iframe> registered inside the host frame', async ({ page }) => {
-    await navigateHostTo(page, 'Iframe Demo')
-    const hostFrame = page.frameLocator(HOST_IFRAME_SELECTOR)
     // <w-iframe> is registered by the proxy inside the iframe-demo's window.
-    const demoFrame = hostFrame.frameLocator(DEMO_IFRAME_SELECTOR).first()
-    const wIframeRegistered = await demoFrame.locator('body').evaluate<boolean>(
+    const demoFrame = await getDemoFrame(page)
+    await demoFrame.locator('body').waitFor({ timeout: 15_000 })
+    const wIframeRegistered = await demoFrame.locator('body').evaluate(
       () => typeof customElements.get('w-iframe') === 'function',
     )
     expect(wIframeRegistered).toBe(true)
   })
 
   test('<w-artifact> registered inside the host frame', async ({ page }) => {
-    await navigateHostTo(page, 'Iframe Demo')
-    const hostFrame = page.frameLocator(HOST_IFRAME_SELECTOR)
-    // <w-artifact> is the host's wrapper element; it must be registered
-    // in the host-side document so the host can mount iframe-demo via it.
-    const wArtifactRegistered = await hostFrame.locator('body').evaluate<boolean>(
+    // <w-artifact> is the Host's own wrapper element (used to embed pages
+    // and artifacts generally, not specifically to mount this page — see
+    // `DEMO_IFRAME_SELECTOR`'s doc comment); it registers on the Host's own
+    // document. Wait for the demo page to settle first so the check does
+    // not race the Host's own boot sequence.
+    const demoFrame = await getDemoFrame(page)
+    await demoFrame.locator('body').waitFor({ timeout: 15_000 })
+    const hostFrame = await getHostFrame(page)
+    const wArtifactRegistered = await hostFrame.locator('body').evaluate(
       () => typeof customElements.get('w-artifact') === 'function',
     )
     expect(wArtifactRegistered).toBe(true)

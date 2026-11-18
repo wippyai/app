@@ -1,6 +1,6 @@
 {
   "name": "@example/user-status",
-  "version": "0.0.68",
+  "version": "0.0.69",
   "specification": "wippy-component-1.0",
   "title": "User Status Tile",
   "description": "Plugin tile of the dashboards proof of concept (stage E2): lists the users with status and groups. It uses @wippy/dashboards-tile-helper (from the wippy/dashboards module) for the tile protocol and writes only its rendering.",
@@ -12,16 +12,16 @@
   ],
   "dependencies": {
     "@wippy/dashboards-tile-helper": "*",
-    "@wippy-fe/theme": "^0.0.68",
-    "@wippy-fe/webcomponent-core": "^0.0.68",
-    "@wippy-fe/webcomponent-vue": "^0.0.68"
+    "@wippy-fe/theme": "^0.0.69",
+    "@wippy-fe/webcomponent-core": "^0.0.69",
+    "@wippy-fe/webcomponent-vue": "^0.0.69"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-vue": "^5.0.0",
-    "@wippy-fe/proxy": "^0.0.68",
-    "@wippy-fe/vite-plugin": "^0.0.68",
+    "@wippy-fe/proxy": "^0.0.69",
+    "@wippy-fe/vite-plugin": "^0.0.69",
     "ajv": "^8.17.1",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.0.0",
@@ -34,7 +34,7 @@
     "yaml": "^2.5.0"
   },
   "peerDependencies": {
-    "@wippy-fe/proxy": "^0.0.68",
+    "@wippy-fe/proxy": "^0.0.69",
     "vue": "^3.5.0"
   },
   "wippy": {

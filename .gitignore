@@ -14,7 +14,7 @@ CLAUDE.md
 test-results/
 
 .local/
+*.tsbuildinfo
 
-# Machine-local module replacements (wippy run --config .wippy.workspace.yaml --profile workspace).
+# Machine-local module replacements (wippy run --config .wippy.yaml --config .wippy.workspace.yaml --profile workspace).
 .wippy.workspace.yaml
-
