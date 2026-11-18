@@ -75,6 +75,9 @@ function Invoke-TileHelper {
     # One materialize per make.bat call serves every demo tile.
     if ($script:tileHelperDone) { return }
     $wippy = Resolve-WippyBinary
+    # A file path (./wippy.exe or a relative $env:WIPPY) must survive the
+    # module's make.bat, which runs pack from its own test folder.
+    if (Test-Path $wippy -PathType Leaf) { $wippy = (Resolve-Path $wippy).Path }
     $wapp = $script:DashboardsWapp
     if (-not $wapp) { $wapp = $env:DASHBOARDS_WAPP }
     if (-not $wapp) {
