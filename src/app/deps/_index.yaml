@@ -173,12 +173,12 @@ entries:
   # Dashboard pages declared as data, built by the chat agent (trait
   # wippy.dashboards.agent:trait in src/app/agents). Its requirements default
   # to this app's ids (app:db, app:api, app:gateway, app:processes,
-  # app.security:user). Not on the hub yet: a local checkout comes in through
-  # the gitignored .wippy.workspace.yaml (see README "Dashboards").
+  # app.security:user). wippy.lock pins the published version; for module
+  # development a local checkout can replace it (README "Dashboards").
   - name: dashboards
     kind: ns.dependency
     component: wippy/dashboards
-    version: '*'
+    version: '>=v0.0.1'
 
   - name: wc-voice
     kind: ns.dependency

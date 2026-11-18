@@ -68,10 +68,13 @@ export async function monitor(page: Page, name: string): Promise<void> {
     const reason = r.failure()?.errorText ?? ''
     const path = pathOf(r.url())
     const line = `${r.method()} ${path} ${reason}`
-    // The one expected failure: a navigation (sign-in, a direct link) cancels the Host's own module
-    // loads under /webcomponents-<version>/. Any other aborted request, such as a point read, an API
-    // call or a tile bundle, is a problem.
-    if (reason === 'net::ERR_ABORTED' && r.method() === 'GET' && /^\/webcomponents-[\d.]+\//.test(path))
+    // The expected failures: a navigation (sign-in, a direct link) cancels the Host's own loads, its
+    // modules under /webcomponents-<version>/ and, since Host 1.0.69, its Iconify icon sets at the
+    // site root (/tabler.json). This app serves no such file, so that request gets the app's HTML;
+    // a cancelled one is still the Host's, not the app's. Any other aborted request, such as a point
+    // read, an API call or a tile bundle, is a problem.
+    const hostLoad = /^\/webcomponents-[\d.]+\//.test(path) || /^\/[a-z0-9-]+\.json$/.test(path)
+    if (reason === 'net::ERR_ABORTED' && r.method() === 'GET' && hostLoad)
       watch.aborted.push(line)
     else
       watch.problems.push({ text: `failed: ${line}` })

@@ -32,6 +32,9 @@ modules:
     - name: wippy/bootloader
       version: 0.3.18
       hash: c7e71b358539b450b49b55e725f60f2dac8218e1c596cf3a473ce71e36b10a9b
+    - name: wippy/dashboards
+      version: 0.0.1
+      hash: be9f54e92e24b3c40bf0878c486d4b190a4cb5fb85ebe6d54545424241e938ad
     - name: wippy/dataflow
       version: 0.7.35
       hash: 5fcb01e1f5a8b379e167fbf2349bd237fa749c917c24fd54c35f01060b4953ae

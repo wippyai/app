@@ -12,7 +12,8 @@ param(
     [switch]$SkipInstall,
     # Source of the tile helper (see tile-helper): a wippy/dashboards .wapp, or
     # a checkout of the module. Default to $env:DASHBOARDS_WAPP and
-    # $env:DASHBOARDS_DIR, then to a sibling checkout, then to .wippy/vendor.
+    # $env:DASHBOARDS_DIR, then to the replacement in .wippy.workspace.yaml,
+    # then to the installed module at the locked version.
     [string]$DashboardsWapp = '',
     [string]$DashboardsDir = '',
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -66,10 +67,11 @@ $lintDirs = @(
 
 # Mirrors the Makefile's tile-helper: materializes @wippy/dashboards-tile-helper
 # (artifact wippy.dashboards:tile_helper_fs) into each demo tile's .wippy/npm,
-# which the tile's package.json lists as an npm workspace. The .wapp comes from
-# -DashboardsWapp, else a checkout in -DashboardsDir (packed with its make.bat
-# pack), else the installed module in .wippy/vendor/wippy at the version that
-# wippy.lock names, so the tiles match the engine that runs.
+# which the tile's package.json lists as an npm workspace. The tiles must match
+# the engine that runs, so the .wapp comes from -DashboardsWapp, else a module
+# checkout packed with its make.bat pack (-DashboardsDir, else the
+# wippy/dashboards replacement in .wippy.workspace.yaml), else the installed
+# module in .wippy/vendor/wippy at the version that wippy.lock names.
 $script:tileHelperDone = $false
 function Invoke-TileHelper {
     # One materialize per make.bat call serves every demo tile.
@@ -83,8 +85,18 @@ function Invoke-TileHelper {
     if (-not $wapp) {
         $dir = $script:DashboardsDir
         if (-not $dir) { $dir = $env:DASHBOARDS_DIR }
-        if (-not $dir) { $dir = Join-Path $PSScriptRoot '../wippy-dashboards' }
-        if (Test-Path (Join-Path $dir 'wippy.yaml')) {
+        if (-not $dir -and (Test-Path '.wippy.workspace.yaml')) {
+            $line = Select-String -Path '.wippy.workspace.yaml' -Pattern '^\s*wippy/dashboards:\s*(.+)$' | Select-Object -First 1
+            if ($line) {
+                # A YAML scalar: a quoted value ends at its closing quote; an
+                # unquoted one ends before an inline comment. Inner spaces stay.
+                $value = $line.Matches[0].Groups[1].Value.Trim()
+                if ($value -match '^"([^"]*)"' -or $value -match "^'([^']*)'") { $dir = $Matches[1] }
+                else { $dir = ($value -replace '\s+#.*$', '').Trim() }
+            }
+        }
+        if ($dir) {
+            if (-not (Test-Path (Join-Path $dir 'wippy.yaml'))) { throw "no wippy/dashboards checkout at $dir" }
             $previousWippyBin = $env:WIPPY_BIN
             $env:WIPPY_BIN = $wippy
             try { & (Join-Path $dir 'make.bat') pack }

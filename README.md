@@ -128,11 +128,15 @@ Dashboard pages come from the module `wippy/dashboards` (repository `git.wippy.a
 - `frontend/web-components/run-timeline` and `user-status`: demo plugin tiles.
 - `src/dashboards_fixtures`: test points and placeholder tiles for `e2e/dashboards.spec.ts`. They set `catalog: false`, so the agent never offers them.
 
-The module is not on the hub yet. Until it is, clone it next to this repository and load it as a local replacement:
+The module comes from hub.wippy.ai: `wippy.lock` pins the published version, and `wippy install` downloads it. This branch, `demo/dashboards`, is the module's demo and follows its newest published version; tags named `working-dashboard-demo-<version>` mark commits verified with that published version.
 
-1. Clone `git@git.wippy.ai:wippy/dashboard.git` to a sibling folder, for example `../wippy-dashboards`.
+The demo tiles build against `@wippy/dashboards-tile-helper`, an npm package that the module ships inside its `.wapp` (artifact `wippy.dashboards:tile_helper_fs`). `make tile-helper` runs `wippy artifacts materialize` into each tile's `.wippy/npm`, which the tile's `package.json` lists as an npm workspace; the build targets of the two tiles run it for you, so `make build` needs the Wippy CLI and an installed module. The tiles must match the engine that runs, so it takes the installed module at the version `wippy.lock` names, unless a module checkout replaces it (below). With `make.bat`, set `WIPPY` to the Wippy CLI when it is neither `./wippy.exe` nor on `PATH`.
+
+To work on the module itself against this demo:
+
+1. Clone `git@git.wippy.ai:wippy/dashboard.git`, for example to `../wippy-dashboards`.
 2. In the gitignored `.wippy.workspace.yaml`, add `wippy/dashboards: <path of the clone>` under `profiles.workspace.workspace.replacements`, and start with `wippy run -c --config .wippy.yaml --config .wippy.workspace.yaml --profile workspace`. List `.wippy.yaml` first: any `--config` stops it from loading on its own, and it keeps the Session Forms fixtures off.
-3. The demo tiles build against `@wippy/dashboards-tile-helper`, an npm package that the module ships inside its `.wapp` (artifact `wippy.dashboards:tile_helper_fs`). `make tile-helper` runs `wippy artifacts materialize` into each tile's `.wippy/npm`, which the tile's `package.json` lists as an npm workspace; the build targets of the two tiles run it for you. It takes the `.wapp` from `DASHBOARDS_WAPP` when set, else packs the clone in `DASHBOARDS_DIR` (default `../wippy-dashboards`), else uses the installed module in `.wippy/vendor/wippy`. With `make.bat`, pass `-DashboardsWapp <file>` or `-DashboardsDir <path>`, and set `WIPPY` to the Wippy CLI when it is neither `./wippy.exe` nor on `PATH`.
+3. `make tile-helper` then packs that clone (its `make pack`) instead of using the installed module. `DASHBOARDS_WAPP` (a `.wapp` file) and `DASHBOARDS_DIR` (a checkout) override the choice; with `make.bat`, pass `-DashboardsWapp <file>` or `-DashboardsDir <path>`.
 
 ## Session Forms demo
 

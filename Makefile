@@ -24,21 +24,28 @@ test-attention-helpers:
 # @wippy/dashboards-tile-helper, which the wippy/dashboards module ships as a
 # build-time npm package (artifact wippy.dashboards:tile_helper_fs). tile-helper
 # materializes it into each tile's .wippy/npm, which the tile's package.json
-# lists as an npm workspace. The .wapp it reads, in this order:
+# lists as an npm workspace. The tiles must match the engine that runs, so the
+# .wapp it reads is, in this order:
 #   1. DASHBOARDS_WAPP, when set;
-#   2. a checkout of the module in DASHBOARDS_DIR (default: a sibling folder),
-#      packed with its `make pack` (local development, before publication);
+#   2. a module checkout, packed with its `make pack`: DASHBOARDS_DIR when set,
+#      else the wippy/dashboards replacement in .wippy.workspace.yaml, if any
+#      (a plain, "double" or 'single' quoted path; escaped quotes inside it are
+#      not supported);
 #   3. the installed module in .wippy/vendor/wippy (after `wippy install`), at
-#      the version wippy.lock names, so the tiles match the engine that runs.
+#      the version wippy.lock names.
 WIPPY ?= wippy
-DASHBOARDS_DIR ?= ../wippy-dashboards
+DASHBOARDS_DIR ?=
 DASHBOARDS_WAPP ?=
 TILE_HELPER_CONSUMERS := run-timeline user-status
 
 tile-helper:
-	@set -e; wapp="$(DASHBOARDS_WAPP)"; \
-	if [ -z "$$wapp" ] && [ -f "$(DASHBOARDS_DIR)/wippy.yaml" ]; then \
-	  $(MAKE) -C "$(DASHBOARDS_DIR)" pack WIPPY="$(WIPPY)"; wapp="$(DASHBOARDS_DIR)/.wippy/dist/dashboards.wapp"; \
+	@set -e; wapp="$(DASHBOARDS_WAPP)"; dir="$(DASHBOARDS_DIR)"; \
+	if [ -z "$$wapp" ] && [ -z "$$dir" ] && [ -f .wippy.workspace.yaml ]; then \
+	  dir=$$(sed -n 's/^ *wippy\/dashboards: *//p' .wippy.workspace.yaml | tr -d '\r' | head -1 | sed -e 's/^"\([^"]*\)".*$$/\1/;t' -e "s/^'\([^']*\)'.*$$/\1/;t" -e 's/[[:space:]][[:space:]]*#.*$$//;s/[[:space:]]*$$//'); \
+	fi; \
+	if [ -z "$$wapp" ] && [ -n "$$dir" ]; then \
+	  test -f "$$dir/wippy.yaml" || { echo "no wippy/dashboards checkout at $$dir" >&2; exit 1; }; \
+	  $(MAKE) -C "$$dir" pack WIPPY="$(WIPPY)"; wapp="$$dir/.wippy/dist/dashboards.wapp"; \
 	fi; \
 	if [ -z "$$wapp" ]; then \
 	  ver=$$(sed -n '/- name: wippy\/dashboards *$$/{n;s/^ *version: *//p;}' wippy.lock | tr -d '\r'); \

@@ -52,10 +52,12 @@ function active(page: Page) {
 
 /**
  * Waits until the home page runs: its sidebar shows and Home is active. Only then does its router
- * follow Host navigation, so an in-shell navigation sent earlier would be lost.
+ * follow Host navigation, so an in-shell navigation sent earlier would be lost. The Host's first
+ * page load after sign-in took up to 8 s in local runs, so this wait gets the same 20 s as the
+ * other page loads in this file.
  */
 async function shellReady(page: Page) {
-  await expect(active(page)).toHaveText('Home')
+  await expect(active(page)).toHaveText('Home', { timeout: 20_000 })
 }
 
 /** Marks the home page's window, so a later check proves it was not reloaded. */

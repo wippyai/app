@@ -31,11 +31,19 @@ Test:
   tags:
     - hetzner
 
+# The demo tiles build against the tile helper inside the installed
+# wippy/dashboards module (make tile-helper), so the frontend jobs need the
+# Wippy CLI and `wippy install` before `make build`. Debian-based Node image,
+# because the Wippy CLI is not built for Alpine's musl.
 Frontend_checks:
   stage: test
-  image: node:${NODE_VERSION}-alpine
+  image: node:${NODE_VERSION}-bookworm-slim
   before_script:
-    - apk add --no-cache make
+    - apt-get update -qq && apt-get install -y -qq curl make > /dev/null
+    # The installer writes ~/.wippy/env but does not change this shell's PATH.
+    - curl -fsSL https://hub.wippy.ai/install.sh -o /tmp/wippy-install.sh && WIPPY_NO_MODIFY_PATH=1 sh /tmp/wippy-install.sh
+    - . "$HOME/.wippy/env"
+    - wippy install
   script:
     # Typecheck and unit tests of the headless sidebar package.
     - make test-pkg-app-nav NPM_INSTALL='npm ci'
@@ -47,9 +55,12 @@ Frontend_checks:
 
 Build_frontend:
   stage: build
-  image: node:${NODE_VERSION}-alpine
+  image: node:${NODE_VERSION}-bookworm-slim
   before_script:
-    - apk add --no-cache make
+    - apt-get update -qq && apt-get install -y -qq curl make > /dev/null
+    - curl -fsSL https://hub.wippy.ai/install.sh -o /tmp/wippy-install.sh && WIPPY_NO_MODIFY_PATH=1 sh /tmp/wippy-install.sh
+    - . "$HOME/.wippy/env"
+    - wippy install
   script:
     - make build NPM_INSTALL='npm ci'
   artifacts:

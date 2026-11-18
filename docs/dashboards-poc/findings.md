@@ -1,6 +1,6 @@
 # Dashboards POC: findings
 
-Status: POC complete, 11 November 2026. The chat demo and the app's own live sidebar were added on 16 November 2026. The branch is pushed as a draft pull request; nothing is published.
+Status: POC complete, 11 November 2026. The chat demo and the app's own live sidebar were added on 16 November 2026. The POC branch is pushed as a draft pull request. On 18 November 2026 the engine was published on the hub as `wippy/dashboards` 0.0.1, and the demo continues on the branch `demo/dashboards`, which installs that version.
 
 The POC builds the frame from the dashboards specification v6.8 on `app-template-raw`, a plain Wippy application with no Kickside modules. It shows two generated pages on the template's own data: LLM usage at `/reports/llm-usage` and App activity at `/ops/app-activity`. `wippy/dashboards` is Wippy core and works on its own. Kickside is one extension of it, and the POC does not touch Kickside.
 
@@ -104,16 +104,18 @@ These changes come from the build. Each one names the section of spec v6.8 it ch
 | Repository | Branch | Commits |
 |---|---|---|
 | app-template-raw | `feat/dashboards-poc`, worktree `.local/worktrees/dashboards-poc`, draft pull request wippyai/app#42 | 7f2e349 to 8496d58 for the POC, then the chat demo and the live sidebar, on `origin/master` 3606075 |
+| app-template-raw | `demo/dashboards` (from 18 November 2026), same worktree | The demo on the published module; tags `working-dashboard-demo-<version>` |
+| wippy-dashboards (git.wippy.ai `wippy/dashboard`) | `feat/module-from-poc` | The engine as the module `wippy/dashboards`, published as 0.0.1 (tag `v0.0.1`) |
 | gen-2-chat | `feat/layout-tree-size`, worktree `.local/worktrees/dashboards-layout-size` | 2523942: size on `@wippy-fe/layout` tree nodes |
 | web-components | `feat/chartjs-click-event`, worktree `.local/worktrees/chartjs-click` | 7d47955, f3286ee: `chart-click` event; 1f5c564: the chart fills its host |
 
-The tracked `wippy.lock` pins hub versions only. The chart click needs the local chart branch until `wippy-swiss/chartjs` 0.2.0 is released: put it in a gitignored `.wippy.workspace.yaml` (a `workspace` profile with `workspace.replacements`, Wippy 0.3.26a or later). Without it the charts draw, but a bar click does nothing. The template vendors the patched `@wippy-fe/layout` build until that patch is released.
+The tracked `wippy.lock` pins hub versions only, including `wippy/dashboards` 0.0.1. The chart click needs the local chart branch until `wippy-swiss/chartjs` 0.2.0 is released: put it in a gitignored `.wippy.workspace.yaml` (a `workspace` profile with `workspace.replacements`, Wippy 0.3.26a or later). Without it the charts draw, but a bar click does nothing. The template vendors the patched `@wippy-fe/layout` build until that patch is released.
 
 ## How to run the POC
 
 1. The app reads `.env` and keeps its data in `.wippy/app.db`. The local checkout listens on `127.0.0.1:8086`, because its `.env` sets that port.
 2. After a `wippy.lock` change, run `wippy install`.
-3. Build the front end: `make.bat build` on Windows, `make build` elsewhere. To build one package, use the `build-wc-<name>` or `build-app-<name>` target.
+3. Build the front end: `make.bat build` on Windows, `make build` elsewhere. To build one package, use the `build-wc-<name>` or `build-app-<name>` target. The two demo tiles take the tile helper from the installed `wippy/dashboards` module, so the build needs the Wippy CLI (`WIPPY`) and step 2 first.
 4. Start the app with `.env` loaded: `wippy run -c --config .wippy.yaml --config .wippy.workspace.yaml --profile workspace -o app:gateway:addr=:8086`. List `.wippy.yaml` first, because any `--config` stops it from loading on its own.
 5. The restore service publishes the stored pages again at each start. To rebuild the two demo pages from their specs, sign in as the admin and send `POST /api/v1/demo/build`. The browser suite does this itself.
 6. For the chat demo, sign in, open "Ask Wippy" and ask for a dashboard. The showcase request in `e2e/dashboards-chat.spec.ts` (`ADMIN_PROMPT`) uses every tile kind; a short one is "Build me a dashboard of LLM usage: total tokens, tokens by day per model, and a table by model, with a model filter." The new page joins the sidebar's "Dashboards" group and opens inside the app.
