@@ -1,0 +1,28 @@
+{
+  "users": [
+    {
+      "groups": [
+        "app.security:admin"
+      ],
+      "name": "Default Administrator",
+      "status": "active",
+      "user_id": "admin@navi.local"
+    },
+    {
+      "groups": [
+        "app.security:user"
+      ],
+      "name": "Test Target",
+      "status": "active",
+      "user_id": "target@wippy.local"
+    },
+    {
+      "groups": [
+        "app.security:user"
+      ],
+      "name": "Test Viewer",
+      "status": "active",
+      "user_id": "viewer@wippy.local"
+    }
+  ]
+}

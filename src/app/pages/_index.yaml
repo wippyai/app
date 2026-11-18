@@ -1,0 +1,69 @@
+version: "1.0"
+namespace: app.pages
+
+# Live page list for the frontend.
+#
+# `signal` sends the content-free WebSocket topic `pages` to every connected
+# user whenever the nav-relevant meta of any view.page entry changes. Clients
+# then read /api/public/pages/list again with their own token. The Web Host's
+# built-in nav and the app's own sidebar (frontend/packages/app-nav) both
+# listen for it. It watches registry commits, so it covers pages from every
+# module, including pages written at runtime.
+
+entries:
+  - name: signal
+    kind: process.lua
+    meta:
+      comment: Sends the topic `pages` to all connected users when the set of view.page entries changes
+    source: file://signal.lua
+    method: main
+    modules:
+      - events
+      - registry
+      - channel
+      - time
+      - logger
+
+  - name: signal_service
+    kind: process.service
+    meta:
+      comment: Runs the page-change signal for the life of the app
+    process: app.pages:signal
+    host: app:processes
+    lifecycle:
+      auto_start: true
+      depends_on:
+        - app:processes
+      security:
+        actor:
+          id: app.pages.signal
+        groups:
+          - app.pages:watchers
+
+  # Read view.page entries (they live in many namespaces) and message the relay
+  # hub, whose process id is not known in advance.
+  - name: watchers_policy
+    kind: security.policy
+    meta:
+      comment: The page-change signal may read registry entries and send to the relay hub
+    groups:
+      - app.pages:watchers
+    policy:
+      resources: '*'
+      actions:
+        - registry.get
+        - process.send
+      effect: allow
+
+  # Watch the registry's events only, not other event systems.
+  - name: watchers_events_policy
+    kind: security.policy
+    meta:
+      comment: The page-change signal may subscribe to registry events only
+    groups:
+      - app.pages:watchers
+    policy:
+      resources: registry
+      actions:
+        - events.subscribe
+      effect: allow

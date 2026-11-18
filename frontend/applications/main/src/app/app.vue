@@ -1,16 +1,21 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import Button from 'primevue/button'
 import Avatar from 'primevue/avatar'
-import { useApi, useHost, useWippy } from '../composables/useWippy'
+import { config, on } from '@wippy-fe/proxy'
+import { isUnder, mountPrefix, normalizePath, useAppNav, usePageList } from '@example/app-nav'
+import SidebarItem from '../components/sidebar-item.vue'
+import { useApi, useHost } from '../composables/useWippy'
+import { NOTE_NAVIGATION, PAGE_LIST } from '../constants'
+import { NAV_GROUPS, NAV_ITEMS } from '../nav'
 
 const router = useRouter()
 const route = useRoute()
 const api = useApi()
 const host = useHost()
-const instance = useWippy()
+const unsubscribes: Array<() => void> = []
 
 const collapsed = ref(false)
 const logoUrl = '/app/wippy-logo.svg'
@@ -51,42 +56,128 @@ function cycleTheme() {
   setTheme(themeOptions[(idx + 1) % themeOptions.length].mode)
 }
 
-instance.on('action:navigate', (value: unknown) => {
-  const data = value as NavigateAction
-  const path = typeof data.data?.path === 'string'
-    ? data.data.path
-    : typeof data.path === 'string' ? data.path : null
-  if (path) router.push(path)
+// One live list of the pages this viewer may open, for the sidebar and for the
+// catch-all route that shows pages inside this app. It reads the list again on
+// the backend's `pages` signal, and it stops listening when this component goes.
+const pageList = usePageList({ api, on: (topic, callback) => on(topic, callback) })
+provide(PAGE_LIST, pageList)
+
+// This app's own page id and mount prefix (/home), from its entry in the page list.
+const ownPageId = config.selfPageId ?? config.context?.resourceId
+const ownPrefix = computed(() => {
+  const own = pageList.pages.value.find(page => page.id === ownPageId)
+  return own?.mountRoute ? mountPrefix(own.mountRoute) : null
 })
 
-interface NavItem {
-  path: string
-  name: string
-  label: string
-  icon: string
-  hostNav?: boolean
+// An app path: one leading slash, no scheme or host, no backslash. Agent
+// tools check this too; the app does not rely on that.
+function isAppPath(path: string): boolean {
+  return path.startsWith('/') && !path.startsWith('//') && !path.includes('\\')
 }
 
-const navItems: NavItem[] = [
-  { path: '/', name: 'home', label: 'Home', icon: 'tabler:home' },
-  { path: '/users', name: 'users', label: 'Users', icon: 'tabler:users' },
-  { path: '/components', name: 'components', label: 'Components', icon: 'tabler:components' },
-  { path: '/nested-nav', name: 'nested-nav', label: 'Nested Nav', icon: 'tabler:route-2' },
-  { path: '/research', name: 'research', label: 'Web Research', icon: 'tabler:world-search' },
-  { path: '/c/keeper:main', name: 'keeper', label: 'Keeper', icon: 'tabler:shield-code', hostNav: true },
-]
+// Waits that are still open, so unmounting can end them.
+const openWaits = new Set<() => void>()
 
-const currentName = computed(() => route.name)
-const currentUser = ref<{ email: string; full_name: string } | null>(null)
-const wippyToken = ref<string | null>(null)
+// The first page list, which tells this app its own prefix. The wait ends when
+// the list is read, or when the list gave up after all its tries.
+function whenListReady(): Promise<void> {
+  if (pageList.ready.value || pageList.gaveUp.value)
+    return Promise.resolve()
+  return new Promise((resolve) => {
+    const finish = () => {
+      stop()
+      openWaits.delete(finish)
+      resolve()
+    }
+    const stop = watch([pageList.ready, pageList.gaveUp], ([ready, gaveUp]) => (ready || gaveUp) && finish())
+    openWaits.add(finish)
+  })
+}
 
-function navigate(item: NavItem) {
-  if (item.hostNav) {
-    host.navigate(item.path)
+// An agent path waits only while the first page list is still loading. It is
+// dropped when any other navigation starts after it was asked for: a newer
+// agent path, a sidebar click or a hosted page's own navigation (counted the
+// moment they happen, through noteNavigation), and any other route change,
+// such as a link inside a page or back and forward (counted by beforeEach).
+// The route change that openPath itself starts is not counted.
+let navigationSeq = 0
+let ownTarget: string | null = null
+function noteNavigation() {
+  navigationSeq++
+}
+provide(NOTE_NAVIGATION, noteNavigation)
+const stopRouteCount = router.beforeEach((to) => {
+  if (ownTarget !== null && to.fullPath === ownTarget) {
+    ownTarget = null
     return
   }
-  router.push(item.path)
+  noteNavigation()
+})
+
+// Opens an app path with the router. A host URL inside this app (/home/users)
+// opens its app route (/users); a route here may be a registry page.
+function goTo(path: string) {
+  const prefix = ownPrefix.value
+  let target = path
+  if (prefix && prefix !== '/' && path.startsWith(prefix) && isUnder(normalizePath(path), prefix)) {
+    // Keep any query: /home/components?tab=chat opens /components?tab=chat.
+    const rest = path.slice(prefix.length)
+    target = rest.startsWith('/') ? rest : `/${rest}`
+  }
+  const full = router.resolve(target).fullPath
+  ownTarget = full
+  void router.push(target).finally(() => {
+    if (ownTarget === full)
+      ownTarget = null
+  })
 }
+
+// Host paths (/c/..., /chat/...) leave this app; app paths open here. With the
+// page list loaded the path opens at once; before that it waits for the list,
+// which tells this app its own prefix.
+function openPath(path: string) {
+  if (!isAppPath(path))
+    return
+  noteNavigation()
+  const seq = navigationSeq
+  if (path.startsWith('/c/') || path.startsWith('/chat/')) {
+    host.navigate(path)
+    return
+  }
+  if (pageList.ready.value || pageList.gaveUp.value) {
+    goTo(path)
+    return
+  }
+  void whenListReady().then(() => {
+    if (seq === navigationSeq)
+      goTo(path)
+  })
+}
+
+// The sidebar: the app's own items plus the registry pages of NAV_GROUPS,
+// live as pages are published or removed. A page whose path one of this app's
+// own routes already uses (for example /users) opens at /page/<page id>.
+const { tree: navTree, activeKey, open: openItem } = useAppNav({
+  items: NAV_ITEMS,
+  pageList,
+  groups: NAV_GROUPS,
+  exclude: ownPageId ? [ownPageId] : [],
+  isTaken: path => router.resolve(path).name !== 'hosted-page',
+  currentPath: computed(() => route.path),
+  navigate: {
+    route: (path) => {
+      noteNavigation()
+      router.push(path)
+    },
+    host: (path) => {
+      noteNavigation()
+      host.navigate(path)
+    },
+  },
+})
+
+const currentUser = ref<{ email: string; full_name: string } | null>(null)
+const wippyToken = ref<string | null>(null)
 
 function userInitials(user: { email: string; full_name: string }): string {
   if (user.full_name) {
@@ -136,10 +227,28 @@ onMounted(() => {
   fetchMe()
   fetchWippyAgent()
   themeMode.value = host.getThemeMode()
-  instance.on('@theme', (mode: unknown) => {
+  unsubscribes.push(on('@theme', (mode: unknown) => {
     if (themeOptions.some(option => option.mode === mode))
       themeMode.value = mode as ThemeMode
-  })
+  }))
+  // An agent tool (NavigateTo) asks the UI to open a path.
+  unsubscribes.push(on('action:navigate', (value: unknown) => {
+    const data = value as NavigateAction
+    const path = typeof data.data?.path === 'string'
+      ? data.data.path
+      : typeof data.path === 'string' ? data.path : null
+    if (path)
+      openPath(path)
+  }))
+})
+
+onUnmounted(() => {
+  unsubscribes.splice(0).forEach(unsubscribe => unsubscribe())
+  stopRouteCount()
+  // Drop any navigation still waiting for the list, and end its wait.
+  navigationSeq++
+  for (const finish of [...openWaits])
+    finish()
 })
 </script>
 
@@ -167,29 +276,48 @@ onMounted(() => {
 
       <nav
         aria-label="Main navigation"
-        class="flex-1 px-2 py-1 space-y-0.5"
+        class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 py-1 space-y-0.5"
       >
-        <button
-          v-for="item in navItems"
-          :key="item.name"
-          class="w-full flex items-center rounded-lg text-sm transition-colors"
-          :class="[
-            collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-3 py-2',
-            currentName === item.name
-              ? 'bg-primary/10 text-primary font-medium'
-              : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800',
-          ]"
-          :aria-current="currentName === item.name ? 'page' : undefined"
-          :title="collapsed ? item.label : undefined"
-          @click="navigate(item)"
+        <template
+          v-for="(node, index) in navTree"
+          :key="node.key"
         >
-          <Icon
-            :icon="item.icon"
-            class="w-[18px] h-[18px] shrink-0"
-            aria-hidden="true"
+          <SidebarItem
+            v-if="node.type === 'item'"
+            :item="node.item"
+            :active="activeKey === node.item.key"
+            :collapsed="collapsed"
+            @open="openItem"
           />
-          <span v-if="!collapsed">{{ item.label }}</span>
-        </button>
+          <div
+            v-else
+            role="group"
+            :aria-labelledby="collapsed ? undefined : `nav-group-${index}`"
+            :aria-label="collapsed ? node.group.label : undefined"
+            class="pt-3 space-y-0.5"
+          >
+            <div
+              v-if="!collapsed"
+              :id="`nav-group-${index}`"
+              class="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-surface-400"
+            >
+              {{ node.group.label }}
+            </div>
+            <div
+              v-else
+              class="mx-2 mb-1 border-t border-surface-200 dark:border-surface-700"
+              aria-hidden="true"
+            />
+            <SidebarItem
+              v-for="item in node.group.items"
+              :key="item.key"
+              :item="item"
+              :active="activeKey === item.key"
+              :collapsed="collapsed"
+              @open="openItem"
+            />
+          </div>
+        </template>
       </nav>
 
       <!-- Color theme switch: segmented (expanded) / single cycling icon (collapsed) -->

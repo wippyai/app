@@ -48,6 +48,7 @@
     "lint:fix": "eslint src --ext .ts,.vue --fix"
   },
   "dependencies": {
+    "@example/app-nav": "file:../../packages/app-nav",
     "@wippy-fe/theme": "^0.0.69"
   },
   "devDependencies": {

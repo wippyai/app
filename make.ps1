@@ -10,6 +10,11 @@ param(
     [Parameter(Position = 0)]
     [string]$Target = 'help',
     [switch]$SkipInstall,
+    # Source of the tile helper (see tile-helper): a wippy/dashboards .wapp, or
+    # a checkout of the module. Default to $env:DASHBOARDS_WAPP and
+    # $env:DASHBOARDS_DIR, then to a sibling checkout, then to .wippy/vendor.
+    [string]$DashboardsWapp = '',
+    [string]$DashboardsDir = '',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$RuntimeArguments = @()
 )
@@ -33,12 +38,21 @@ $wcs = @(
     @{ name = 'markdown';        dir = 'frontend/web-components/markdown';        out = 'static/wc/markdown' }
     @{ name = 'model-gallery';   dir = 'frontend/web-components/model-gallery';   out = 'static/wc/model-gallery' }
     @{ name = 'counter-persist'; dir = 'frontend/web-components/counter-persist'; out = 'static/wc/counter-persist' }
+    @{ name = 'run-timeline'; dir = 'frontend/web-components/run-timeline'; out = 'static/wc/run-timeline'; tileHelper = $true }
+    @{ name = 'user-status'; dir = 'frontend/web-components/user-status'; out = 'static/wc/user-status'; tileHelper = $true }
+)
+
+# Headless TypeScript packages with a test-pkg-<name> target (install,
+# typecheck, unit tests). Mirrors the Makefile's test-pkg-* recipes.
+$pkgs = @(
+    @{ name = 'app-nav'; dir = 'frontend/packages/app-nav' }
 )
 
 # Subset that runs `npm run lint` - mirrors Makefile's `lint:` recipe.
 $lintDirs = @(
     'frontend/applications/main'
     'frontend/applications/session-forms-demo'
+    'frontend/packages/app-nav'
     'frontend/web-components/reaction-bar'
     'frontend/web-components/websocket-log'
     'frontend/web-components/chart-circle'
@@ -46,7 +60,53 @@ $lintDirs = @(
     'frontend/web-components/markdown'
     'frontend/web-components/model-gallery'
     'frontend/web-components/counter-persist'
+    'frontend/web-components/run-timeline'
+    'frontend/web-components/user-status'
 )
+
+# Mirrors the Makefile's tile-helper: materializes @wippy/dashboards-tile-helper
+# (artifact wippy.dashboards:tile_helper_fs) into each demo tile's .wippy/npm,
+# which the tile's package.json lists as an npm workspace. The .wapp comes from
+# -DashboardsWapp, else a checkout in -DashboardsDir (packed with its make.bat
+# pack), else the installed module in .wippy/vendor/wippy at the version that
+# wippy.lock names, so the tiles match the engine that runs.
+$script:tileHelperDone = $false
+function Invoke-TileHelper {
+    # One materialize per make.bat call serves every demo tile.
+    if ($script:tileHelperDone) { return }
+    $wippy = Resolve-WippyBinary
+    # A file path (./wippy.exe or a relative $env:WIPPY) must survive the
+    # module's make.bat, which runs pack from its own test folder.
+    if (Test-Path $wippy -PathType Leaf) { $wippy = (Resolve-Path $wippy).Path }
+    $wapp = $script:DashboardsWapp
+    if (-not $wapp) { $wapp = $env:DASHBOARDS_WAPP }
+    if (-not $wapp) {
+        $dir = $script:DashboardsDir
+        if (-not $dir) { $dir = $env:DASHBOARDS_DIR }
+        if (-not $dir) { $dir = Join-Path $PSScriptRoot '../wippy-dashboards' }
+        if (Test-Path (Join-Path $dir 'wippy.yaml')) {
+            $previousWippyBin = $env:WIPPY_BIN
+            $env:WIPPY_BIN = $wippy
+            try { & (Join-Path $dir 'make.bat') pack }
+            finally { $env:WIPPY_BIN = $previousWippyBin }
+            if ($LASTEXITCODE -ne 0) { throw "make.bat pack failed in $dir (exit $LASTEXITCODE)" }
+            $wapp = Join-Path $dir '.wippy/dist/dashboards.wapp'
+        }
+    }
+    if (-not $wapp -and (Test-Path 'wippy.lock')) {
+        $lock = Get-Content 'wippy.lock' -Raw
+        if ($lock -match '(?m)-\s*name:\s*wippy/dashboards\s*\r?\n\s*version:\s*(\S+)') {
+            $installed = ".wippy/vendor/wippy/dashboards-$($Matches[1]).wapp"
+            if (Test-Path $installed) { $wapp = (Resolve-Path $installed).Path }
+        }
+    }
+    if (-not $wapp) { throw 'no wippy/dashboards .wapp: pass -DashboardsWapp or -DashboardsDir, or run wippy install' }
+    foreach ($t in ($script:wcs | Where-Object { $_.tileHelper })) {
+        & $wippy artifacts materialize $wapp wippy.dashboards:tile_helper_fs --root "$($t.dir)/.wippy"
+        if ($LASTEXITCODE -ne 0) { throw "materializing the tile helper into $($t.dir) failed (exit $LASTEXITCODE)" }
+    }
+    $script:tileHelperDone = $true
+}
 
 function Invoke-Recipe {
     param(
@@ -54,6 +114,7 @@ function Invoke-Recipe {
         [Parameter(Mandatory)][string]$Out,
         [switch]$Clean
     )
+    if (($script:wcs | Where-Object { $_.dir -eq $Dir -and $_.tileHelper })) { Invoke-TileHelper }
     Push-Location $Dir
     try {
         Write-Host "==> $Dir" -ForegroundColor Cyan
@@ -88,6 +149,12 @@ function Invoke-Lint {
     Push-Location $Dir
     try {
         Write-Host "==> lint $Dir" -ForegroundColor Cyan
+        # No build installs a headless package, so its lint installs it first
+        # (the Makefile's lint does the same for these packages).
+        if (($script:pkgs | Where-Object { $_.dir -eq $Dir }) -and -not $SkipInstall) {
+            npm install
+            if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
+        }
         # Lint in eslintrc mode, as the Makefile does (see the comment there).
         $env:ESLINT_USE_FLAT_CONFIG = 'false'
         npm run lint
@@ -100,6 +167,25 @@ function Invoke-Lint {
         else {
             Remove-Item 'Env:ESLINT_USE_FLAT_CONFIG' -ErrorAction SilentlyContinue
         }
+        Pop-Location
+    }
+}
+
+function Invoke-PackageTest {
+    param([Parameter(Mandatory)][string]$Dir)
+    Push-Location $Dir
+    try {
+        Write-Host "==> test $Dir" -ForegroundColor Cyan
+        if (-not $SkipInstall) {
+            npm install
+            if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Dir (exit $LASTEXITCODE)" }
+        }
+        npm run typecheck
+        if ($LASTEXITCODE -ne 0) { throw "npm run typecheck failed in $Dir (exit $LASTEXITCODE)" }
+        npm test
+        if ($LASTEXITCODE -ne 0) { throw "npm test failed in $Dir (exit $LASTEXITCODE)" }
+    }
+    finally {
         Pop-Location
     }
 }
@@ -136,6 +222,9 @@ function Show-Help {
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
+    Write-Host "  tile-helper        Materialize the wippy/dashboards tile helper into the demo tiles"
+    Write-Host "                     (-DashboardsWapp <file> or -DashboardsDir <checkout>)"
+    Write-Host "  test-pkg-<name>    Typecheck and unit-test a package (e.g. test-pkg-app-nav)"
     Write-Host "  verify             build + lint + wippy lint --level error for app, app.*"
     Write-Host "  test-attention     Run Attention acceptance in Chromium"
     Write-Host "  test-attention-touch Run Attention touch acceptance in Chromium"
@@ -149,6 +238,7 @@ function Show-Help {
     Write-Host "  help               Show this message`n"
     Write-Host "Apps:           $($apps.name -join ', ')"
     Write-Host "Web components: $($wcs.name -join ', ')"
+    Write-Host "Packages:       $($pkgs.name -join ', ')"
 }
 
 # Top-level dispatch wrapped in try/catch so a thrown error surfaces as a
@@ -179,8 +269,20 @@ try {
             Invoke-Recipe -Dir $item.dir -Out $item.out
             break
         }
+        '^test-pkg-(.+)$' {
+            $name = $Matches[1]
+            $item = $pkgs | Where-Object { $_.name -eq $name }
+            if (-not $item) { throw "Unknown package: $name. Run 'make help' for the list." }
+            Invoke-PackageTest -Dir $item.dir
+            break
+        }
         '^lint$' {
+            Invoke-TileHelper
             foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            break
+        }
+        '^tile-helper$' {
+            Invoke-TileHelper
             break
         }
         '^verify$' {

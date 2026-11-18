@@ -84,11 +84,13 @@ src/app/               Backend (Wippy Lua), namespace `app`
   models/              app.models     LLM model registry
   research/            app.research   Web Research demo: agent + HTTP GET tool + dataflow
   views/               app.views      frontend page registration (view.page)
+  pages/               app.pages      sends `pages` when the page list changes
   deps/                app.deps       module dependencies (facade, keeper, llm, ...)
   env/                 app.env        environment storage
 
 frontend/
   applications/main/   Vue 3 admin app (the page you see)
+  packages/app-nav/    headless model of the live sidebar (see Navigation)
   web-components/       standalone example components (mermaid, markdown, charts, ...)
   docs/                frontend and theming guides
 
@@ -102,6 +104,35 @@ cd frontend/applications/main && npm run dev   # frontend watch mode
 make build                                     # rebuild all bundles to static/
 wippy run -c                                   # server
 ```
+
+## Navigation
+
+The app draws its own sidebar and hides the Web Host's built-in nav (`hide_nav_bar: "true"` in `src/app/deps/_index.yaml`). The app's sections (Users, Components, Web Research and the others) are routes inside one page, `app.views:main`, and the Host nav can list only whole pages. Its sidebar also has no place for the logo, the theme switch, the user card or "Ask Wippy".
+
+The sidebar is still live. It lists two kinds of items:
+
+- **The app's own items**, declared in `frontend/applications/main/src/nav.ts` (`NAV_ITEMS`).
+- **Pages from the registry** whose `meta.group` is in `NAV_GROUPS`, for example the `Dashboards` group. Other modules add such pages at run time, and the sidebar lists the pages each viewer may open.
+
+When a module publishes, changes or removes a `view.page`, the service `src/app/pages` sends the WebSocket topic `pages`. The sidebar then reads `/api/public/pages/list` again, so a new page joins the sidebar while the app is open. The Host's built-in nav listens for the same topic.
+
+A registry page opens inside the home page, next to the sidebar, at the start of its own mount route. For example, `/reports/llm-usage/:part(.*)*` opens at `/home/reports/llm-usage`. A page whose path one of the app's own routes already uses (for example `/users`) opens at `/home/page/<page id>` instead. The home page declares `meta.page_outlet: true`, so modules that hand out page links, such as the dashboards agent, point them there. Each page is still a regular `view.page` and also opens on its own route.
+
+The logic is in the headless package [`frontend/packages/app-nav`](frontend/packages/app-nav/README.md): it merges the items, orders them with the Host nav's rules, keeps the list live and resolves paths. The app keeps the look: `src/app/app.vue`, `src/components/sidebar-item.vue` and `src/pages/hosted-page.vue`. To add a group, put its name in `NAV_GROUPS`. To add an item of your own, add it to `NAV_ITEMS`.
+
+## Dashboards
+
+Dashboard pages come from the module `wippy/dashboards` (repository `git.wippy.ai` `wippy/dashboard`). The app declares it in `src/app/deps/_index.yaml`, and the chat agent includes its trait `wippy.dashboards.agent:trait`, so a chat request can build a page. The app keeps the demo around it:
+
+- `src/demo_actor`, `src/demo_run_timeline`, `src/demo_user_status` and `src/demo_seed`: demo data points, actions and users.
+- `frontend/web-components/run-timeline` and `user-status`: demo plugin tiles.
+- `src/dashboards_fixtures`: test points and placeholder tiles for `e2e/dashboards.spec.ts`. They set `catalog: false`, so the agent never offers them.
+
+The module is not on the hub yet. Until it is, clone it next to this repository and load it as a local replacement:
+
+1. Clone `git@git.wippy.ai:wippy/dashboard.git` to a sibling folder, for example `../wippy-dashboards`.
+2. In the gitignored `.wippy.workspace.yaml`, add `wippy/dashboards: <path of the clone>` under `profiles.workspace.workspace.replacements`, and start with `wippy run -c --config .wippy.yaml --config .wippy.workspace.yaml --profile workspace`. List `.wippy.yaml` first: any `--config` stops it from loading on its own, and it keeps the Session Forms fixtures off.
+3. The demo tiles build against `@wippy/dashboards-tile-helper`, an npm package that the module ships inside its `.wapp` (artifact `wippy.dashboards:tile_helper_fs`). `make tile-helper` runs `wippy artifacts materialize` into each tile's `.wippy/npm`, which the tile's `package.json` lists as an npm workspace; the build targets of the two tiles run it for you. It takes the `.wapp` from `DASHBOARDS_WAPP` when set, else packs the clone in `DASHBOARDS_DIR` (default `../wippy-dashboards`), else uses the installed module in `.wippy/vendor/wippy`. With `make.bat`, pass `-DashboardsWapp <file>` or `-DashboardsDir <path>`, and set `WIPPY` to the Wippy CLI when it is neither `./wippy.exe` nor on `PATH`.
 
 ## Session Forms demo
 
