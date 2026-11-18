@@ -170,6 +170,14 @@ entries:
       - name: server
         value: app:gateway
 
+  # Dashboard pages declared as data (pages API, page app, board and built-in
+  # tiles). Its requirements default to this app's ids (app:db, app:api,
+  # app:gateway, app:processes, app.security:user), so it needs no parameters.
+  - name: dashboards
+    kind: ns.dependency
+    component: wippy/dashboards
+    version: '>=v0.0.1'
+
   - name: wc-voice
     kind: ns.dependency
     component: wippy-swiss/voice

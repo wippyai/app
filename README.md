@@ -138,6 +138,10 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 
 The four job phrases (`slow tool`, `fail after text`, `limit after text`, `artifact and ask`) also work in a form answer. Type one as the Other text of a question and the next turn runs that phrase, the same way `work slowly` delays the reply. A late answer keeps its late-answer reply. The plain fixture agent has no job tools and replies "I can't run jobs here."
 
+## Dashboards
+
+The app installs the `wippy/dashboards` module (`src/app/deps/_index.yaml`), which publishes dashboard pages declared as data. It adds the pages API under `/api/v1/dashboards`, the page app and web components at `/app/wippy-dashboards`, the built-in tiles, and the agent trait `wippy.dashboards.agent:trait`, which this template does not attach to an agent yet. Its tables live in the app database. A full demo with data points, plugin tiles and the chat path is on the `demo/dashboards` branch.
+
 ## Frontend & theming
 
 All frontend, theming, and web-component guidance lives in [`frontend/docs/`](frontend/docs/README.md). The one rule worth stating up front: customize appearance through the **facade** (`src/app/deps/_index.yaml`) — `css_variables` / `custom_css` propagate to every page and component; per-app CSS does not. See [`frontend/docs/theming.md`](frontend/docs/theming.md).
