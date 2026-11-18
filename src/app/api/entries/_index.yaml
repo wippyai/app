@@ -44,6 +44,50 @@ entries:
     func: agents_by_name
     path: /agents/by-name
 
+  - name: agents_details
+    kind: function.lua
+    meta:
+      comment: Gets one agent's details for the Web Host composer (start prompts)
+      router: app:api
+    source: file://agents_details.lua
+    modules:
+      - http
+      - registry
+    method: handler
+    pool:
+      size: 2
+
+  - name: agents_details.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: GET
+    func: agents_details
+    path: /agents/details
+
+  - name: tools_by_name
+    kind: function.lua
+    meta:
+      comment: Gets tool titles by the names that tool calls carry
+      router: app:api
+    source: file://tools_by_name.lua
+    modules:
+      - http
+      - registry
+    imports:
+      tools: wippy.agent.discovery:tools
+    method: handler
+    pool:
+      size: 2
+
+  - name: tools_by_name.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: GET
+    func: tools_by_name
+    path: /tools/by-name
+
   - name: list_models
     kind: function.lua
     meta:
