@@ -166,8 +166,6 @@ entries:
   # The checkpoint options apply to the agent that sets them, so other agents
   # keep the default checkpoint behavior. They set a 5000 token threshold and
   # use the fixture model for the summary.
-  # The agent has both forms traits because it exercises both tools, and a
-  # real agent should have only one of them.
   - name: fixture_agent
     kind: registry.entry
     meta:

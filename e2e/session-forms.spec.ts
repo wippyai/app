@@ -11,8 +11,7 @@ import { sessionMessages } from './helpers/session-messages'
  */
 
 const DEMO_PAGE_IFRAME_SELECTOR = pageIframeSelector('app.views:session-forms-demo')
-// The fixture agent has both forms traits (ask_user and ask_user_fields). The
-// steering fixture agent has only ask_user.
+// Which tools each fixture agent has: README.md, Dev fixtures.
 const FIXTURE_REGISTRY_ID = 'app.session_forms_demo:fixture_agent'
 const STEERING_FIXTURE_REGISTRY_ID = 'app.session_forms_demo:steering_fixture_agent'
 const CHAT_INPUT_PLACEHOLDER = 'Type a message'
