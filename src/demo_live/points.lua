@@ -4,7 +4,7 @@ local values = require("values")
 
 -- The queue length now. A backend loop (ticker.lua) pushes the same number each second.
 local function queue_length()
-    return values.frame(values.queue_length(os.time()))
+    return values.queue_frame(os.time())
 end
 
 -- The calling viewer's own number: the same for a viewer on every read, different between viewers.

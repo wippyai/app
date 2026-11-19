@@ -18,13 +18,19 @@ function M.base_for(user)
     return 100 + sum % 100
 end
 
--- A frame with one number, as the kpi tile reads it.
-function M.frame(n)
+-- A frame with one number, as the kpi tile reads it. The field must equal the point's
+-- declared field, so a point that declares a unit passes the same unit here.
+function M.frame(n, unit)
     return {
         schema = FRAME,
-        fields = { { name = "value", type = "number", role = "measure", nullable = false } },
+        fields = { { name = "value", type = "number", role = "measure", unit = unit, nullable = false } },
         rows = { { n } },
     }
+end
+
+-- The queue length frame: the queue_length point declares the unit "jobs".
+function M.queue_frame(t)
+    return M.frame(M.queue_length(t), "jobs")
 end
 
 return M

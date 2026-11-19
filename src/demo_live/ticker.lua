@@ -19,7 +19,7 @@ local function main()
                 return true
             end
         else
-            local sent, err = live.push(POINT, ARGS, values.frame(values.queue_length(os.time())))
+            local sent, err = live.push(POINT, ARGS, values.queue_frame(os.time()))
             -- No subscription service yet (the app is starting) is not worth a log line each second.
             if not sent and err and err.code ~= "unavailable" then
                 logger:warn("push refused", { code = err.code, message = err.message })
