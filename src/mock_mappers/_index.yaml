@@ -1,0 +1,491 @@
+version: "1.0"
+namespace: mock.mappers
+
+# The five example mappers of the mapper contract (wippy.data:mapper_v1, section 6), as declared
+# functions with their rules and examples. This module is a PLACEHOLDER: the real home of mappers
+# is defined later (see README.md). It does not depend on wippy/dashboards; dashboards finds these
+# entries by their type, wippy.data.mapper, and calls their functions.
+#
+#   rows_to_frame        rows to a frame with the columns that the parameters list
+#   bucket_by_time       rows to a series: day, week or month buckets of a time column
+#   sum_by               rows to a category frame: one row per value of a column, with sums
+#   top_n                rows to a category frame: the n largest values, with an optional "Other" row
+#   first_row_to_record  the first row as a record
+#
+# Rules shared by all (README.md): number values only (a decimal or another type gives an error that
+# names the column), empty cells are left out of sums and of counts of a column, no rows give a frame
+# with its fields and no rows, a column missing from every row is an error, weeks start on Monday,
+# and a bucket is named by its first day as YYYY-MM-DD.
+
+entries:
+  # ── libraries and functions ──────────────────────────────────────────
+  - name: lib
+    kind: library.lua
+    meta:
+      comment: Helpers of the example mappers (pure; the time module reads timestamps in a named zone)
+    source: file://lib.lua
+    modules:
+      - time
+
+  - name: rows_to_frame_func
+    kind: function.lua
+    meta:
+      comment: Mapper function of rows_to_frame
+    source: file://mappers.lua
+    method: rows_to_frame
+    imports:
+      lib: mock.mappers:lib
+
+  - name: bucket_by_time_func
+    kind: function.lua
+    meta:
+      comment: Mapper function of bucket_by_time
+    source: file://mappers.lua
+    method: bucket_by_time
+    imports:
+      lib: mock.mappers:lib
+
+  - name: sum_by_func
+    kind: function.lua
+    meta:
+      comment: Mapper function of sum_by
+    source: file://mappers.lua
+    method: sum_by
+    imports:
+      lib: mock.mappers:lib
+
+  - name: top_n_func
+    kind: function.lua
+    meta:
+      comment: Mapper function of top_n
+    source: file://mappers.lua
+    method: top_n
+    imports:
+      lib: mock.mappers:lib
+
+  - name: first_row_to_record_func
+    kind: function.lua
+    meta:
+      comment: Mapper function of first_row_to_record
+    source: file://mappers.lua
+    method: first_row_to_record
+    imports:
+      lib: mock.mappers:lib
+
+  # ── self-test (admin only) ───────────────────────────────────────────
+  # GET /api/v1/demo/mappers/selftest runs every example of every mapper in this module.
+  - name: deny_selftest
+    kind: security.policy
+    meta:
+      comment: app.security:user may not run the mapper self-test
+    groups:
+      - app.security:user
+    policy:
+      resources: mock.mappers:selftest
+      actions: mock.mappers.selftest
+      effect: deny
+
+  - name: selftest
+    kind: function.lua
+    meta:
+      comment: Runs every example of every mock mapper and returns the results (administrators only)
+    source: file://selftest.lua
+    method: handler
+    modules:
+      - http
+      - registry
+      - funcs
+      - security
+    pool:
+      size: 1
+
+  - name: selftest.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: GET
+    func: selftest
+    path: /demo/mappers/selftest
+
+  # ── mappers ──────────────────────────────────────────────────────────
+  - name: rows_to_frame
+    kind: registry.entry
+    meta:
+      type: wippy.data.mapper
+      implements: wippy.data:mapper_v1
+      title: Rows to frame
+      description: Turns rows into a table frame with the columns that the parameters list, in that order, each with a name, type, role and unit. Rows keep their input order. Use it for tables, options, series, categories and single numbers when the source already gives one row per output row. A column with no value is an empty cell in a nullable field and an error in any other.
+      func: mock.mappers:rows_to_frame_func
+      input_schema:
+        type: array
+        items: { type: object }
+      params_schema:
+        type: object
+        additionalProperties: false
+        required: [fields]
+        properties:
+          fields:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              additionalProperties: false
+              required: [from, type]
+              properties:
+                from: { type: string, description: The source column }
+                name: { type: string, description: The field name; the column name when missing }
+                type: { enum: [number, decimal, string, date, time, boolean] }
+                role: { enum: [dimension, measure] }
+                unit: { type: string }
+                additive: { type: boolean }
+                nullable: { type: boolean, description: "true when a missing value becomes an empty cell; default false" }
+      output:
+        format: wippy.dashboard_frame/v1
+      max_input_rows: 10000
+      examples:
+        - params:
+            fields:
+              - { from: day, type: date, role: dimension }
+              - { from: tokens, type: number, role: measure, unit: tokens, additive: true }
+          context: { time_zone: UTC }
+          input:
+            - { day: "2026-11-18", tokens: 120, ignored: x }
+            - { day: "2026-11-19", tokens: 80 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: day, type: date, role: dimension, nullable: false }
+              - { name: tokens, type: number, role: measure, unit: tokens, additive: true, nullable: false }
+            rows: [["2026-11-18", 120], ["2026-11-19", 80]]
+        - params:
+            fields:
+              - { from: day, type: date, role: dimension }
+              - { from: tokens, type: number, role: measure, unit: tokens, additive: true }
+          input: []
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: day, type: date, role: dimension, nullable: false }
+              - { name: tokens, type: number, role: measure, unit: tokens, additive: true, nullable: false }
+            rows: []
+        - description: Equal values keep their input order, and a column can be renamed.
+          params:
+            fields:
+              - { from: model_id, name: model, type: string, role: dimension }
+              - { from: calls, type: number }
+          input:
+            - { model_id: b, calls: 2 }
+            - { model_id: a, calls: 2 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: model, type: string, role: dimension, nullable: false }
+              - { name: calls, type: number, nullable: false }
+            rows: [["b", 2], ["a", 2]]
+        - description: A missing value is an empty cell in a nullable field. A decimal travels as text.
+          params:
+            fields:
+              - { from: name, type: string, nullable: true }
+              - { from: price, type: decimal }
+          input:
+            - { name: a, price: "12.50" }
+            - { price: "-0.10" }
+            - { name: { "$null": true }, price: "3" }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: name, type: string, nullable: true }
+              - { name: price, type: decimal, nullable: false }
+            rows: [["a", "12.50"], [{ "$null": true }, "-0.10"], [{ "$null": true }, "3"]]
+
+  - name: bucket_by_time
+    kind: registry.entry
+    meta:
+      type: wippy.data.mapper
+      implements: wippy.data:mapper_v1
+      title: Bucket by time
+      description: Groups rows into day, week or month buckets of a time column and sums a value or counts rows, optionally per group. Gives a series frame sorted by bucket, then by group. A bucket is named by its first day as a date, a week starts on Monday, and the bucket is read in the page's time zone.
+      func: mock.mappers:bucket_by_time_func
+      input_schema:
+        type: array
+        items: { type: object }
+      params_schema:
+        type: object
+        additionalProperties: false
+        required: [time, bucket, value]
+        properties:
+          time: { type: string, description: The column with a date or timestamp }
+          bucket: { enum: [day, week, month] }
+          value: { type: string, description: The column to sum, or "*" to count rows }
+          group: { type: string, description: Optional column to split by }
+      output:
+        format: wippy.dashboard_frame/v1
+      max_input_rows: 10000
+      examples:
+        - params: { time: created_at, bucket: day, value: "*" }
+          context: { time_zone: UTC }
+          input:
+            - { created_at: "2026-11-18T10:00:00Z" }
+            - { created_at: "2026-11-18T11:00:00Z" }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: day, type: date, role: dimension, nullable: false }
+              - { name: count, type: number, role: measure, additive: true, nullable: false }
+            rows: [["2026-11-18", 2]]
+        - description: A week starts on Monday. A timestamp with an offset is read in the context time zone (here UTC), so a Monday-morning timestamp at +01:00 belongs to the week before.
+          params: { time: created_at, bucket: week, value: tokens }
+          context: { time_zone: UTC }
+          input:
+            - { created_at: "2026-11-14T10:00:00Z", tokens: 7 }
+            - { created_at: "2026-11-16T00:30:00+01:00", tokens: 10 }
+            - { created_at: "2026-11-18T10:00:00Z", tokens: 5 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: week, type: date, role: dimension, nullable: false }
+              - { name: tokens, type: number, role: measure, additive: true, nullable: false }
+            rows: [["2026-11-09", 17], ["2026-11-16", 5]]
+        - description: A month is named by its first day. In one bucket, groups sort in byte order (a tie of buckets).
+          params: { time: day, bucket: month, value: tokens, group: model }
+          context: { time_zone: UTC }
+          input:
+            - { day: "2026-10-31", tokens: 1, model: b }
+            - { day: "2026-11-02", tokens: 2, model: b }
+            - { day: "2026-11-03", tokens: 3, model: a }
+            - { day: "2026-11-20", tokens: 4, model: b }
+            - { day: "2026-11-21", tokens: 5, model: a }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: month, type: date, role: dimension, nullable: false }
+              - { name: model, type: string, role: dimension, nullable: false }
+              - { name: tokens, type: number, role: measure, additive: true, nullable: false }
+            rows: [["2026-10-01", b, 1], ["2026-11-01", a, 8], ["2026-11-01", b, 6]]
+        - params: { time: created_at, bucket: day, value: "*" }
+          context: { time_zone: UTC }
+          input: []
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: day, type: date, role: dimension, nullable: false }
+              - { name: count, type: number, role: measure, additive: true, nullable: false }
+            rows: []
+        - description: Empty and missing values are left out of a sum.
+          params: { time: created_at, bucket: day, value: tokens }
+          context: { time_zone: UTC }
+          input:
+            - { created_at: "2026-11-18T10:00:00Z", tokens: 4 }
+            - { created_at: "2026-11-18T11:00:00Z", tokens: { "$null": true } }
+            - { created_at: "2026-11-18T12:00:00Z" }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: day, type: date, role: dimension, nullable: false }
+              - { name: tokens, type: number, role: measure, additive: true, nullable: false }
+            rows: [["2026-11-18", 4]]
+
+  - name: sum_by
+    kind: registry.entry
+    meta:
+      type: wippy.data.mapper
+      implements: wippy.data:mapper_v1
+      title: Sum by
+      description: Groups rows by the values of one text column and sums one or more number columns for each value. Gives a category frame with one row per value, sorted by that value in byte order. Empty values are left out of the sums.
+      func: mock.mappers:sum_by_func
+      input_schema:
+        type: array
+        items: { type: object }
+      params_schema:
+        type: object
+        additionalProperties: false
+        required: [by, values]
+        properties:
+          by: { type: string, description: The column to group by }
+          values:
+            type: array
+            minItems: 1
+            items: { type: string }
+            description: The columns to sum
+      output:
+        format: wippy.dashboard_frame/v1
+      max_input_rows: 10000
+      examples:
+        - params: { by: model_id, values: [prompt_tokens, completion_tokens] }
+          input:
+            - { model_id: b, prompt_tokens: 10, completion_tokens: 1 }
+            - { model_id: a, prompt_tokens: 5, completion_tokens: 2 }
+            - { model_id: a, prompt_tokens: 7, completion_tokens: 3 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: model_id, type: string, role: dimension, nullable: false }
+              - { name: prompt_tokens, type: number, role: measure, additive: true, nullable: false }
+              - { name: completion_tokens, type: number, role: measure, additive: true, nullable: false }
+            rows: [["a", 12, 5], ["b", 10, 1]]
+        - params: { by: model_id, values: [prompt_tokens] }
+          input: []
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: model_id, type: string, role: dimension, nullable: false }
+              - { name: prompt_tokens, type: number, role: measure, additive: true, nullable: false }
+            rows: []
+        - description: Equal sums sort by the group value in byte order, so a capital letter comes first.
+          params: { by: k, values: [v] }
+          input:
+            - { k: b, v: 1 }
+            - { k: a, v: 1 }
+            - { k: B, v: 1 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: k, type: string, role: dimension, nullable: false }
+              - { name: v, type: number, role: measure, additive: true, nullable: false }
+            rows: [["B", 1], ["a", 1], ["b", 1]]
+        - description: Empty values are left out of a sum; a group with only empty values sums to 0.
+          params: { by: k, values: [v] }
+          input:
+            - { k: a, v: 2 }
+            - { k: a, v: { "$null": true } }
+            - { k: b }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: k, type: string, role: dimension, nullable: false }
+              - { name: v, type: number, role: measure, additive: true, nullable: false }
+            rows: [["a", 2], ["b", 0]]
+
+  - name: top_n
+    kind: registry.entry
+    meta:
+      type: wippy.data.mapper
+      implements: wippy.data:mapper_v1
+      title: Top n
+      description: Gives the n rows with the largest value of a number column, largest first, as a category frame. Rows with equal values keep their input order. With other set to true, a last row named "Other" holds the sum of the remaining rows; that needs the consumer's output field for the value to be additive, and the mapper refuses otherwise.
+      func: mock.mappers:top_n_func
+      input_schema:
+        type: array
+        items: { type: object }
+      params_schema:
+        type: object
+        additionalProperties: false
+        required: [by, value, n]
+        properties:
+          by: { type: string, description: The text column that names each row }
+          value: { type: string, description: The number column to rank by }
+          n: { type: integer, minimum: 1, maximum: 100 }
+          other: { type: boolean, description: "true to add an Other row with the sum of the rest; needs an additive output field" }
+      output:
+        format: wippy.dashboard_frame/v1
+      max_input_rows: 10000
+      examples:
+        - description: Equal values keep their input order (a tie).
+          params: { by: name, value: v, n: 2 }
+          input:
+            - { name: a, v: 5 }
+            - { name: b, v: 5 }
+            - { name: c, v: 1 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: name, type: string, role: dimension, nullable: false }
+              - { name: v, type: number, role: measure, additive: false, nullable: false }
+            rows: [["a", 5], ["b", 5]]
+        - description: With other, the rest is summed into a last row. The consumer's output marks the value as additive.
+          params: { by: name, value: v, n: 1, other: true }
+          context:
+            output:
+              shape: category
+              fields:
+                - { name: name, type: string, role: dimension, nullable: false }
+                - { name: v, type: number, role: measure, additive: true, nullable: false }
+          input:
+            - { name: a, v: 5 }
+            - { name: b, v: 3 }
+            - { name: c, v: 1 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: name, type: string, role: dimension, nullable: false }
+              - { name: v, type: number, role: measure, additive: true, nullable: false }
+            rows: [["a", 5], ["Other", 4]]
+        - params: { by: name, value: v, n: 3 }
+          input: []
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: name, type: string, role: dimension, nullable: false }
+              - { name: v, type: number, role: measure, additive: false, nullable: false }
+            rows: []
+        - description: With fewer rows than n there is no Other row.
+          params: { by: name, value: v, n: 5, other: true }
+          context:
+            output:
+              shape: category
+              fields:
+                - { name: name, type: string, role: dimension, nullable: false }
+                - { name: v, type: number, role: measure, additive: true, nullable: false }
+          input:
+            - { name: a, v: 2 }
+            - { name: b, v: 1 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: name, type: string, role: dimension, nullable: false }
+              - { name: v, type: number, role: measure, additive: true, nullable: false }
+            rows: [["a", 2], ["b", 1]]
+        - description: A row with an empty value is left out.
+          params: { by: name, value: v, n: 5 }
+          input:
+            - { name: a, v: 2 }
+            - { name: b, v: { "$null": true } }
+            - { name: c, v: 1 }
+          output:
+            schema: wippy.dashboard_frame/v1
+            fields:
+              - { name: name, type: string, role: dimension, nullable: false }
+              - { name: v, type: number, role: measure, additive: false, nullable: false }
+            rows: [["a", 2], ["c", 1]]
+
+  - name: first_row_to_record
+    kind: registry.entry
+    meta:
+      type: wippy.data.mapper
+      implements: wippy.data:mapper_v1
+      title: First row to record
+      description: Builds a record from the first row, optionally keeping only the listed columns. With no rows it gives an empty record, which a tile shows as empty. Use it for one sentence or one set of values.
+      func: mock.mappers:first_row_to_record_func
+      input_schema:
+        type: array
+        items: { type: object }
+      params_schema:
+        type: object
+        additionalProperties: false
+        properties:
+          fields:
+            type: array
+            items: { type: string }
+            description: The columns to keep; all when missing
+      output:
+        schema: { type: object }
+      max_input_rows: 10000
+      examples:
+        - params: {}
+          input:
+            - { a: 1, b: x }
+            - { a: 2, b: y }
+          output: { a: 1, b: x }
+        - params: {}
+          input: []
+          output: {}
+        - params: { fields: [b] }
+          input:
+            - { a: 1, b: x }
+          output: { b: x }
+        - description: Equal rows give the first (a tie).
+          params: {}
+          input:
+            - { a: 1 }
+            - { a: 1 }
+          output: { a: 1 }
