@@ -15,6 +15,7 @@ export default defineConfig({
       // One entry file per tag. Each entry file owns its own define(import.meta.url, ...).
       entry: {
         'fx-states': resolve(__dirname, 'src/fx-states.ts'),
+        'fx-states-replace': resolve(__dirname, 'src/fx-states-replace.ts'),
         'fx-size': resolve(__dirname, 'src/fx-size.ts'),
         'fx-onload': resolve(__dirname, 'src/fx-onload.ts'),
         'fx-api': resolve(__dirname, 'src/fx-api.ts'),

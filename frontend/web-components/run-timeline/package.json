@@ -91,7 +91,7 @@
     "build": "vite build",
     "build:debug": "vite build --mode development",
     "dev": "vite build --watch",
-    "lint": "eslint src --ext .ts,.vue",
+    "lint": "eslint src --ext .ts,.vue && check-tile-source src",
     "lint:fix": "eslint src --ext .ts,.vue --fix",
     "test": "vitest run"
   },

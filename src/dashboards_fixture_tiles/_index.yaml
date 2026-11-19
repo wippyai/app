@@ -107,6 +107,43 @@ entries:
               extra:
                 text: Example text
 
+  # The same tile as fx-states with a claim that sets state_display: computing is replace. A page that sets
+  # only refreshing keeps this claim's computing (replace) and the default of error (keep).
+  - name: fx-states-replace
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: fx-states-replace
+      tag_name: fx-states-replace
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/fixture-tiles
+      entry_point: fx-states-replace.js
+      catalog: false
+      implements:
+        - interface: wippy.dashboards:tile_v1
+          version: 1.0.0
+          descriptor:
+            tile: fixture.states_replace
+            tile_version: 1.0.0
+            title: Fixture states with a claim preference
+            description: Test tile that draws its own states and whose claim says computing is replaced by a panel. Not for dashboards.
+            draws_states: true
+            state_display: { computing: replace }
+            inputs:
+              main:
+                shape: record
+            fields:
+              text: { input: main, role: dimension, types: [string] }
+            options_schema: { type: object }
+            events: {}
+            size:
+              fit: any
+            examples:
+              main:
+                text: Example text
+
   - name: fx-size
     kind: registry.entry
     meta:

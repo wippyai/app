@@ -32,7 +32,7 @@
   "wippy": {
     "tagName": "fx-states",
     "type": "widget",
-    "description": "Fixture tile of the dashboards browser tests. It is not used by hand: the dashboard board creates it and sets the tile_v1 attributes. The bundle holds four tags: fx-states (draws its own states and records its requests in window.__fx), fx-size (container rules per size class), fx-onload (changes data when it loads) and fx-api (calls an API that a regular viewer may not use).",
+    "description": "Fixture tile of the dashboards browser tests. It is not used by hand: the dashboard board creates it and sets the tile_v1 attributes. The bundle holds five tags: fx-states (draws its own states and records its requests in window.__fx), fx-states-replace (the same tile, whose claim sets computing: replace), fx-size (container rules per size class), fx-onload (changes data when it loads) and fx-api (calls an API that a regular viewer may not use).",
     "props": {
       "type": "object",
       "properties": {

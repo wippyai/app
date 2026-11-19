@@ -25,7 +25,7 @@ const ARTIFACT_PAGE = {
   tiles: {
     byid: { type: 'artifact', options: { artifact_id: 'app.views:iframe-demo', artifact_type: 'page' } },
     bytag: { type: 'artifact', options: { tag: 'fx-api', props: { 'thread-id': '42', 'readonly': true } } },
-    missing: { type: 'artifact', options: { artifact_id: 'no-such-artifact-id', artifact_type: 'artifact' } },
+    missing: { type: 'artifact', options: { artifact_id: 'no-such-artifact-id', artifact_type: 'component' } },
   },
   rows: [['byid'], ['bytag', 'missing']],
 }
@@ -53,6 +53,9 @@ test.describe('RC1-21: the artifact tile', () => {
       const host = artifact.evaluate(el => el.shadowRoot?.querySelector('w-artifact')?.outerHTML ?? '')
       expect(await host).toContain('app.views:iframe-demo')
       expect(await host).toContain('type="page"')
+      // The Host loaded the fixture page: <w-artifact> is ready and its frame holds content.
+      await expect(f.locator('[data-tile-id="byid"] w-artifact')).toHaveAttribute('status', 'ready', { timeout: 20_000 })
+      await expect(f.frameLocator('[data-tile-id="byid"] w-artifact iframe').locator('body')).toHaveText(/\S/, { timeout: 20_000 })
 
       // By tag: the installed component is created, with its props as attributes.
       await expect(f.locator('[data-tile-id="bytag"] dash-artifact')).toHaveCount(1)
@@ -61,6 +64,8 @@ test.describe('RC1-21: the artifact tile', () => {
         return inner ? { thread: inner.getAttribute('thread-id'), readonly: inner.getAttribute('readonly') } : null
       })
       expect(props).toEqual({ thread: '42', readonly: 'true' })
+      // The component loaded and ran: it answered its API call (the admin may use it), it is not pending.
+      await expect.poll(() => f.locator('[data-tile-id="bytag"] dash-artifact').evaluate(el => el.shadowRoot?.querySelector('fx-api')?.shadowRoot?.querySelector('[data-fx-api-status]')?.textContent?.trim()), { timeout: 20_000 }).toBe('allowed')
 
       // A missing artifact shows an error in the tile, not a blank space.
       const error = f.locator('[data-tile-id="missing"] dash-artifact').locator('[data-artifact-error]')
