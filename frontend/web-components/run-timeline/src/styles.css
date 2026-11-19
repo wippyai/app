@@ -44,7 +44,7 @@
 }
 
 .run-timeline__status--bad {
-  color: var(--p-red-500);
+  color: var(--p-danger-color);
   font-weight: 600;
 }
 

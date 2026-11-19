@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "specification": "wippy-component-1.0",
   "title": "Run Timeline",
-  "description": "Plugin tile of the dashboards proof of concept. It shows the latest workflow run as a tree. The tile uses @wippy/dashboards-tile-helper (from the wippy/dashboards module) for the tile protocol and writes only its rendering.",
+  "description": "Dashboard tile that shows the latest workflow run as a tree. The tile uses @wippy/dashboards-tile-helper (from the wippy/dashboards module) for the tile protocol and writes only its rendering.",
   "browser": "dist/run-timeline.js",
   "files": [
     "dist/",
@@ -56,22 +56,27 @@
         },
         "data-sources": {
           "type": "object",
-          "description": "Map from input name to { url, args, refresh_ms, live_topic }. run-timeline reads the input main."
+          "default": {},
+          "description": "Map from input name to { url, args, live }. run-timeline reads the input main."
         },
         "actions": {
           "type": "object",
+          "default": {},
           "description": "Map from action name to { url, confirm }. run-timeline has no actions."
         },
         "fields": {
           "type": "object",
+          "default": {},
           "description": "Map from the tile field names to data field names. run-timeline has none."
         },
         "options": {
           "type": "object",
+          "default": {},
           "description": "Tile options. run-timeline has none."
         },
         "params": {
           "type": "object",
+          "default": {},
           "description": "Current values of the page parameters the tile declares."
         },
         "mode": {

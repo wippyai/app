@@ -46,7 +46,7 @@ describe('users point and user-status tile', () => {
     expect((point.output as { shape: string }).shape).toBe('schema')
     expect((tile.inputs as { main: { shape: string } }).main.shape).toBe('schema')
     expect(tile.default_data).toEqual({ main: { point: 'demo.user_status:users', args: {} } })
-    expect(point.live_topic).toBe('dash.users.changed')
+    expect(point.live).toEqual({ signal: { audience: 'all', topic: 'dash:users:changed' } })
     expect(component.tag_name).toBe('user-status')
     expect(tile.tile).toBe('demo.user_status')
   })

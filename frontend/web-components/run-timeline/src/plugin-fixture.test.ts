@@ -13,9 +13,12 @@ import { readTimeline } from './lib/timeline'
 // When the function output stops matching the schema, a broken copy below shows how this test fails.
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the test reads loose YAML and edits loose JSON */
+/** One loose JSON object: the YAML and the broken copies below have no fixed type, so `any` stays on this one alias. */
+type Loose = Record<string, any>
+
 interface Entry {
   name: string
-  meta: Record<string, any>
+  meta: Loose
 }
 
 const indexUrl = new URL('../../../../src/demo_run_timeline/_index.yaml', import.meta.url)
@@ -31,7 +34,7 @@ function entry(name: string): Entry {
 const point = entry('latest_run')
 // The tile claim sits on the component entry, in meta.implements (tile contract section 2).
 const componentEntry = entry('run-timeline')
-const tile: { meta: Record<string, any> } = { meta: componentEntry.meta.implements[0].descriptor }
+const tile: { meta: Loose } = { meta: componentEntry.meta.implements[0].descriptor }
 const pointSchema = point.meta.output.schema
 const tileSchema = tile.meta.inputs.main.schema
 
@@ -81,15 +84,15 @@ describe('plugin demo.run_timeline: saved function output', () => {
   })
 
   it.each([
-    ['a run field is missing', (d: any) => { delete d.run.commits }],
-    ['a duration is a string', (d: any) => { d.nodes[0].duration_ms = '7171' }],
-    ['a duration is not a whole number', (d: any) => { d.nodes[0].duration_ms = 7171.5 }],
-    ['the start time has no offset', (d: any) => { d.run.started_at = '2026-06-16 20:43:42' }],
-    ['a node has an extra key', (d: any) => { d.nodes[1].extra = true }],
-    ['a node has no children list', (d: any) => { delete d.nodes[1].children }],
-    ['a child node is missing its status', (d: any) => { delete d.nodes[0].children[0].status }],
-    ['the nodes are not a list', (d: any) => { d.nodes = {} }],
-    ['the run is renamed', (d: any) => { d.latest = d.run; delete d.run }],
+    ['a run field is missing', (d: Loose) => { delete d.run.commits }],
+    ['a duration is a string', (d: Loose) => { d.nodes[0].duration_ms = '7171' }],
+    ['a duration is not a whole number', (d: Loose) => { d.nodes[0].duration_ms = 7171.5 }],
+    ['the start time has no offset', (d: Loose) => { d.run.started_at = '2026-06-16 20:43:42' }],
+    ['a node has an extra key', (d: Loose) => { d.nodes[1].extra = true }],
+    ['a node has no children list', (d: Loose) => { delete d.nodes[1].children }],
+    ['a child node is missing its status', (d: Loose) => { delete d.nodes[0].children[0].status }],
+    ['the nodes are not a list', (d: Loose) => { d.nodes = {} }],
+    ['the run is renamed', (d: Loose) => { d.latest = d.run; delete d.run }],
   ])('fails the schema and the tile when %s', (_name, damage) => {
     const broken = copy(latestRun)
     damage(broken)
@@ -98,10 +101,10 @@ describe('plugin demo.run_timeline: saved function output', () => {
   })
 
   it.each([
-    ['a run field is missing', (d: any) => { delete d.run.commits }],
-    ['a duration is a string', (d: any) => { d.nodes[0].duration_ms = '7171' }],
-    ['the nodes are not a list', (d: any) => { d.nodes = {} }],
-    ['the run is renamed', (d: any) => { d.latest = d.run; delete d.run }],
+    ['a run field is missing', (d: Loose) => { delete d.run.commits }],
+    ['a duration is a string', (d: Loose) => { d.nodes[0].duration_ms = '7171' }],
+    ['the nodes are not a list', (d: Loose) => { d.nodes = {} }],
+    ['the run is renamed', (d: Loose) => { d.latest = d.run; delete d.run }],
   ])('makes the tile report an error when %s', (_name, damage) => {
     const broken = copy(latestRun)
     damage(broken)
