@@ -105,7 +105,7 @@ wippy run -c                                   # server
 
 ## Session Forms demo
 
-The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks a delivery-preference question with a form. The agent uses the `wippy.session.forms:ask_user` trait from the `wippy/session` module and the same model as Ask Wippy.
+The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks for delivery details or delivery preferences with a form. The agent uses the `wippy.session.forms:ask_user_fields` trait from the `wippy/session` module, whose `ask_user_fields` tool takes choice questions and the standard fields (text, textarea, number, email, date and checkbox). The `wippy.session.forms:ask_user` trait has the `ask_user` tool, which takes choice questions only. The agent has one forms trait, because attaching both would offer the model two form tools. It uses the same model as Ask Wippy.
 
 ### Dev fixtures
 
@@ -119,13 +119,19 @@ make run-dev
 
 `SESSION_FORMS_DEV_FIXTURES=true` also enables the test-only endpoint, which answers 404 otherwise and is open to admin users only. Passing `--config` replaces the default `.wippy.yaml`, so when you pass your own config file, add `--config .wippy.yaml` before it so the fixtures stay off.
 
-The fixture agents reply to these phrases, and anything else gets "Say 'ask me' to get a form." The plain fixture agent has no forms trait, so it answers "ask me" with "I can't create forms here." A form answer gets "Thanks, noted:" followed by the answer, or a late-answer notice when the form was answered after the conversation moved on.
+The fixture agent has both forms traits because it exercises both tools, and a real agent should have only one of them. The steering fixture agent has only `wippy.session.forms:ask_user`, and the plain fixture agent has neither.
+
+The fixture agents reply to these phrases, and anything else gets "Say 'ask me' to get a form." A phrase that needs a tool the agent does not have gets "I can't create forms here." for `ask_user` and "I can't create forms with these fields here." for `ask_user_fields`. A tool result other than `read_form`, such as a form the server refused, gets "Tool result from <tool>:" followed by the result on one line. A form answer gets "Thanks, noted:" followed by the answer, or a late-answer notice when the form was answered after the conversation moved on. For a form with a field that is not a choice, the answer is each answered field as `id=value`, separated by `; `, with a checkbox as `yes` or `no` and a skipped field left out.
 
 | Phrase | Reply |
 |---|---|
-| `ask me` | Asks a single-question delivery form. |
-| `ask me many` | Asks a four-question order form. |
-| `ask me several` | Asks one required several-answer question with an Other box, so Enter with nothing ticked shows the tick-one message. |
+| `ask me` | Asks a single-question delivery form through `ask_user`. |
+| `ask me many` | Asks a four-question order form through `ask_user`. |
+| `ask me several` | Asks one required several-answer question with an Other box through `ask_user`, so Enter with nothing ticked shows the tick-one message. |
+| `ask me delivery` | Asks a delivery-details form with text, email, date, number, textarea and checkbox fields through `ask_user_fields`. |
+| `ask me preferences` | Asks a form with one choice question, three checkboxes and a short text note through `ask_user_fields`. |
+| `ask me limits` | Asks a form with a number that has a step of 0.25 and bounds, a text capped at 2000 characters, a textarea capped at 8000 characters, and an optional email and date, through `ask_user_fields`. |
+| `ask me delivery via ask_user` | Sends the delivery-details form to `ask_user`. The server refuses it with `unsupported_type`, and the reply quotes the refusal. |
 | `propose action` | Replies with a plan that waits for confirmation. |
 | `work slowly` | Replies after 25 seconds. |
 | `read form <id>` | Calls `read_form` for that form id. |
@@ -136,7 +142,7 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 | `limit after text` | Writes "Starting the quick job again." and calls a quick tool. Use the Session Forms Limit Fixture agent, whose turn allows one model step: the next step hits the turn limit. On the other agents the reply after the tool is "Quick job finished." |
 | `artifact and ask` | In one model round, calls a tool that returns an inline artifact and calls `ask_user`. The round has no text. |
 
-The four job phrases (`slow tool`, `fail after text`, `limit after text`, `artifact and ask`) also work in a form answer. Type one as the Other text of a question and the next turn runs that phrase, the same way `work slowly` delays the reply. A late answer keeps its late-answer reply. The plain fixture agent has no job tools and replies "I can't run jobs here."
+The four job phrases (`slow tool`, `fail after text`, `limit after text`, `artifact and ask`) also work in a form answer. Type one as the Other text of a question and the next turn runs that phrase, the same way `work slowly` delays the reply. A late answer keeps its late-answer reply, and the answer to a form with standard fields gets the id=value reply above even if a field holds one of the phrases. The plain fixture agent has no job tools and replies "I can't run jobs here."
 
 ## Frontend & theming
 

@@ -284,19 +284,33 @@ pnpm test:e2e:headed
   `request('echo')`. It checks each one in the parent event log and in
   `window.__bridgeLog`. The other two tests check that `<w-iframe>` and
   `<w-artifact>` are registered as custom elements.
-- `session-forms.spec.ts` has six tests against the scripted fixture agents. In
+- `session-forms.spec.ts` runs against the scripted fixture agents and needs the
+  Session Forms dev fixtures. Six tests cover choice forms and job phrases. In
   the first, the agent asks for a form, the test answers it, and the form stays
   answered after a reload. In the second, the test answers a form after the
   conversation has moved on, and the agent replies with the late-answer notice.
   The third presses Enter on the required several-answer form (`ask me several`)
-  with nothing ticked and expects the tick-one message. The last four run the
+  with nothing ticked and expects the tick-one message. The last three run the
   job phrases: `fail after text` and `limit after text` (Limit Fixture agent) as
   the Other text of a form, where the text and tool call stay, the error follows
   and the card reads interrupted, and `artifact and ask`, where the note shows
   once before and after the answer. The 25 second `slow tool` phrase has no
-  test. All fail on a console error. Needs the Session Forms dev fixtures. The suite
-  skips itself unless `SESSION_FORMS_DEV_FIXTURES=true` is set in the
-  environment or `.env` of the test run.
+  test. Eight more tests cover the standard fields on the `ask me delivery` and
+  `ask me preferences` forms, which the fixture asks through `ask_user_fields`.
+  They check browser-side checks, the server's `pattern_mismatch` refusal,
+  typed and picked dates, unticked checkboxes, and the exact saved values after
+  a reload. Four more tests use the `ask me limits` form: a floating `step`
+  (0.5 accepted, 0.3 refused), the text cap of 2000 and the textarea cap of 8000
+  (one more character refused, the cap accepted and stored in full), an optional
+  email and date left blank and stored as unanswered, and a send held for 3
+  seconds (the Submit button reads "Sending…" with a spinner, keeps focus and is
+  not `disabled`, and the status region says "Sending your answer…"). They read
+  the stored values through the messages API. One test uses the steering
+  fixture agent, which has only `ask_user`, and checks that the server refuses a form with standard fields on
+  `ask_user` with `unsupported_type` and that the agent gets the refusal. Most
+  tests fail on a console error. Every test in the file is skipped unless
+  `SESSION_FORMS_DEV_FIXTURES=true` is set in the environment or `.env` of the
+  test run.
 - `iframe-engine.spec.ts` checks the default iframe render engine. A page renders
   as a srcdoc iframe, the fragment gateway is never requested, and `$W` and
   state work. It is skipped when `WIPPY_ENGINE=fragment`.

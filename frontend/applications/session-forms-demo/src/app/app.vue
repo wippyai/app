@@ -25,22 +25,22 @@ const AGENTS: DemoAgent[] = [
   {
     title: 'Forms demo',
     registryId: 'app.agents:forms_demo',
-    description: 'Uses the configured model.',
+    description: 'Uses the configured model and the ask_user_fields tool. Say "I want to book a delivery" for a delivery-details form (name, email, phone, date, parcel count, notes and consent), or "set my delivery preferences" for a delivery method, three checkboxes and a short note. It confirms your answers in one sentence.',
   },
   {
     title: 'Session Forms Fixture',
     registryId: 'app.session_forms_demo:fixture_agent',
-    description: 'Deterministic dev fixture with no external model call. Say "ask me" to get the same form, or answer it to get a scripted confirmation.',
+    description: 'Deterministic dev fixture with no external model call and both form tools. Say "ask me" for one delivery question or "ask me many" for a four-question order form, both through ask_user. Say "ask me delivery" for the delivery-details form or "ask me preferences" for the preferences form, both through ask_user_fields. Answer a form to get a scripted confirmation that lists the saved values.',
   },
   {
     title: 'Session Forms Steering Fixture',
     registryId: 'app.session_forms_demo:steering_fixture_agent',
-    description: 'Same deterministic fixture with Session steering, so you can keep typing while a turn runs.',
+    description: 'Same deterministic fixture with Session steering, so you can keep typing while a turn runs. It has only the ask_user tool, so "ask me delivery via ask_user" shows the server refusing a form with standard fields.',
   },
   {
     title: 'Session Forms Plain Fixture',
     registryId: 'app.session_forms_demo:plain_fixture_agent',
-    description: 'Same deterministic fixture without the forms trait. Say "ask me" and it replies that it can\'t create forms here.',
+    description: 'Same deterministic fixture without a form tool. Say "ask me" and it replies that it can\'t create forms here.',
   },
   {
     title: 'Session Forms Limit Fixture',
@@ -99,10 +99,11 @@ function openChat(agent: DemoAgent) {
         Session forms
       </h2>
       <p class="text-xs text-surface-500 mt-1">
-        The agents here ask a delivery-preference question with a form. Forms
-        demo talks to a real model. When the app runs with the Session Forms
-        dev fixtures on, four scripted fixture agents that never leave this
-        server are listed as well.
+        The agents here ask delivery questions with forms that hold choice
+        questions and the standard fields (text, email, date, number, textarea
+        and checkbox). Forms demo talks to a real model. When the app runs with
+        the Session Forms dev fixtures on, four scripted fixture agents that
+        never leave this server are listed as well.
       </p>
     </header>
 

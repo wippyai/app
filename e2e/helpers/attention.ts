@@ -5,6 +5,9 @@ import process from 'node:process'
 import { expect } from '@playwright/test'
 import { loginAsAdmin } from './login'
 import { attentionSnapshotsFromAttachments } from './attention-v2'
+import { sessionMessages } from './session-messages'
+
+export { sessionMessages }
 
 export type AttentionEngine = 'iframe' | 'fragment'
 export type AttentionLayout = 'compat' | 'managed'
@@ -2113,17 +2116,6 @@ export async function terminalResultsForAction(page: Page, actionId: string): Pr
   return messages.filter((item): item is CapturedUiActionResult => (
     item.type === 'session_ui_action_result' && item.data.in_reply_to_action_id === actionId
   ))
-}
-
-export async function sessionMessages(page: Page, sessionId: string): Promise<PersistedMessage[]> {
-  const frame = await proxyFrame(page)
-  return frame.evaluate(async (id) => {
-    const instance = await (window as any).getWippyApi()
-    const response = await instance.api.get('/api/v1/sessions/messages', {
-      params: { cursor: '', limit: 100, session_id: id },
-    })
-    return response.data?.messages ?? []
-  }, sessionId)
 }
 
 export async function waitForPersistedMessage(
