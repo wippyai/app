@@ -4,11 +4,11 @@ namespace: demo.run_timeline
 # Plugin 1 of the dashboards proof of concept: one module with a tile and its declared function.
 #   read_latest_run   function  reads the latest workflow run from app:db and returns it as a tree
 #   latest_run        point     wippy.dashboards.point declaration of that function (contracts 5.1)
-#   run_timeline      tile      wippy.dashboards.tile descriptor, tile_type demo.run_timeline (contracts 5.3)
-#   run-timeline      component view.component of the tag, built from frontend/web-components/run-timeline
+#   run-timeline      component view.component of the tag, built from frontend/web-components/run-timeline;
+#                               its meta.implements is the tile claim of the tile demo.run_timeline
 # A page places the tile with only { "type": "demo.run_timeline" }: the engine adds the default point.
 #
-# The JSON schema of the data appears twice, in the point's `output.schema` and in the tile's
+# The JSON schema of the data appears twice, in the point's `output.schema` and in the claim's
 # `inputs.main.schema`. The two copies must stay equal. The test
 # frontend/web-components/run-timeline/src/plugin-fixture.test.ts reads both from this file,
 # checks that they are equal, and validates a saved function output against them.
@@ -84,42 +84,46 @@ entries:
                               duration_ms: { type: integer, minimum: 0 }
                               children: { type: array }
 
-  - name: run_timeline
+  # ── web component, with its tile claim (tile contract section 2) ──────
+  # The claim replaces the wippy.dashboards.tile entry of version 0.0.1.
+  - name: run-timeline
     kind: registry.entry
     meta:
-      type: wippy.dashboards.tile
-      title: Run timeline
-      tile_type: demo.run_timeline
-      tag: run-timeline
-      inputs:
-        main:
-          shape: schema
-          schema:
-            type: object
-            additionalProperties: false
-            required: [run, nodes]
-            properties:
-              run:
-                type: object
-                additionalProperties: false
-                required: [type, status, started_at, duration_ms, commits]
-                properties:
-                  type: { type: string }
-                  status: { type: string }
-                  started_at: { type: string, pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$' }
-                  duration_ms: { type: integer, minimum: 0 }
-                  commits: { type: integer, minimum: 0 }
-              nodes:
-                type: array
-                items:
+      type: view.component
+      name: run-timeline
+      tag_name: run-timeline
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/run-timeline
+      entry_point: run-timeline.js
+      implements:
+        - interface: "wippy.dashboards:tile_v1"
+          version: "1.0.0"
+          descriptor:
+            tile: demo.run_timeline
+            tile_version: "1.0.0"
+            title: Run timeline
+            description: The latest workflow run as a tree of its steps with their status and duration. Use it to show what a workflow did.
+            inputs:
+              main:
+                shape: schema
+                schema:
                   type: object
                   additionalProperties: false
-                  required: [type, status, duration_ms, children]
+                  required: [run, nodes]
                   properties:
-                    type: { type: string }
-                    status: { type: string }
-                    duration_ms: { type: integer, minimum: 0 }
-                    children:
+                    run:
+                      type: object
+                      additionalProperties: false
+                      required: [type, status, started_at, duration_ms, commits]
+                      properties:
+                        type: { type: string }
+                        status: { type: string }
+                        started_at: { type: string, pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$' }
+                        duration_ms: { type: integer, minimum: 0 }
+                        commits: { type: integer, minimum: 0 }
+                    nodes:
                       type: array
                       items:
                         type: object
@@ -139,26 +143,32 @@ entries:
                                 type: { type: string }
                                 status: { type: string }
                                 duration_ms: { type: integer, minimum: 0 }
-                                children: { type: array }
-      fields: []
-      options_schema:
-        type: object
-      events: {}
-      params: []
-      default_data:
-        main: demo.run_timeline:latest_run
-      default_actions: {}
-      min_size: { w: 240px, h: 200px }
-      default_size: { w: 50%, h: 340px }
-
-  - name: run-timeline
-    kind: registry.entry
-    meta:
-      type: view.component
-      name: run-timeline
-      tag_name: run-timeline
-      announced: true
-      secure: false
-      auto_register: true
-      url: /app/wc/run-timeline
-      entry_point: run-timeline.js
+                                children:
+                                  type: array
+                                  items:
+                                    type: object
+                                    additionalProperties: false
+                                    required: [type, status, duration_ms, children]
+                                    properties:
+                                      type: { type: string }
+                                      status: { type: string }
+                                      duration_ms: { type: integer, minimum: 0 }
+                                      children: { type: array }
+            options_schema:
+              type: object
+            events: {}
+            default_data:
+              main: { point: "demo.run_timeline:latest_run", args: {} }
+            # An outline below 640 px, the full tree above (tile contract section 5.3).
+            size:
+              fit: full
+              size_classes: { medium: 640 }
+            examples:
+              main:
+                run: { type: dataflow, status: completed, started_at: "2026-11-18T10:00:00Z", duration_ms: 1200, commits: 3 }
+                nodes:
+                  - type: step
+                    status: completed
+                    duration_ms: 800
+                    children:
+                      - { type: task, status: completed, duration_ms: 300, children: [] }
