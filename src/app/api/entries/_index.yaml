@@ -52,7 +52,8 @@ entries:
     source: file://agents_details.lua
     modules:
       - http
-      - registry
+    imports:
+      agent_registry: wippy.agent.discovery:registry
     method: handler
     pool:
       size: 2
