@@ -1,0 +1,140 @@
+-- Test endpoints of the live demo, for the browser tests (e2e/dashboards-live.spec.ts).
+--   POST /api/v1/demo/live/push-me          { value }   pushes my_load to the calling user only
+--   POST /api/v1/demo/live/signal           { }         a signal to the viewers of queue_length (admin)
+--   POST /api/v1/demo/live/restart-service  { }         ends the subscription service, so the app restarts it (admin)
+--   POST /api/v1/demo/live/withdraw         { on }      takes the right to view the live page from regular users, or gives it back (admin)
+local http = require("http")
+local json = require("json")
+local security = require("security")
+local registry = require("registry")
+local live = require("live")
+local values = require("values")
+local logger = require("logger"):named("demo.live")
+
+local MY_LOAD = "demo.live:my_load"
+local QUEUE_LENGTH = "demo.live:queue_length"
+local SERVICE = "wippy.dashboards.live"
+local WITHDRAW_ID = "demo.live:withdraw_view"
+local ADMIN_ACTION, ADMIN_RESOURCE = "demo.live.admin", "demo.live:service"
+
+local function body_table(req)
+    local raw = req:body()
+    if raw == nil or raw == "" then
+        return {}
+    end
+    local decoded = json.decode(raw)
+    return type(decoded) == "table" and decoded or {}
+end
+
+local function reply(res, status, body)
+    res:set_status(status)
+    res:write_json(body)
+end
+
+local function admin_only(res)
+    if security.can(ADMIN_ACTION, ADMIN_RESOURCE) then
+        return true
+    end
+    reply(res, http.STATUS.FORBIDDEN, { error = { code = "denied", message = "Admin only" } })
+    return false
+end
+
+local function push_me()
+    local req, res = http.request(), http.response()
+    res:set_content_type(http.CONTENT.JSON)
+    local value = body_table(req).value
+    if type(value) ~= "number" then
+        return reply(res, http.STATUS.BAD_REQUEST, { error = { code = "invalid_args", message = "value must be a number" } })
+    end
+    local actor = security.actor()
+    local result, err = live.push(MY_LOAD, {}, values.frame(value), { user = actor and actor:id() })
+    if not result then
+        logger:warn("push-me refused", { code = err.code, message = err.message })
+        return reply(res, http.STATUS.BAD_REQUEST, { error = { code = err.code, message = err.message } })
+    end
+    reply(res, http.STATUS.OK, { pushed = true, seq = result.seq, delivered = result.delivered })
+end
+
+local function signal()
+    local res = http.response()
+    res:set_content_type(http.CONTENT.JSON)
+    if not admin_only(res) then
+        return
+    end
+    local result, err = live.signal(QUEUE_LENGTH, { queue = "mail" })
+    if not result then
+        return reply(res, http.STATUS.BAD_REQUEST, { error = { code = err.code, message = err.message } })
+    end
+    reply(res, http.STATUS.OK, { delivered = result.delivered })
+end
+
+local function restart_service()
+    local res = http.response()
+    res:set_content_type(http.CONTENT.JSON)
+    if not admin_only(res) then
+        return
+    end
+    local pid = process.registry.lookup(SERVICE)
+    if not pid then
+        return reply(res, http.STATUS.SERVICE_UNAVAILABLE, { error = { code = "not_running", message = "The subscription service is not running" } })
+    end
+    local ok, err = process.terminate(pid)
+    if not ok then
+        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "terminate_failed", message = tostring(err) } })
+    end
+    reply(res, http.STATUS.OK, { terminated = true })
+end
+
+-- Regular users lose the right to view the live page while the policy entry exists.
+local function withdraw()
+    local req, res = http.request(), http.response()
+    res:set_content_type(http.CONTENT.JSON)
+    if not admin_only(res) then
+        return
+    end
+    local on = body_table(req).on == true
+    local exists = registry.get(WITHDRAW_ID) ~= nil
+    if on == exists then
+        return reply(res, http.STATUS.OK, { withdrawn = on })
+    end
+    local snap, serr = registry.snapshot()
+    if serr then
+        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(serr) } })
+    end
+    local changes, cerr = snap:changes()
+    if cerr then
+        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(cerr) } })
+    end
+    if on then
+        local _, err = changes:create({
+            id = WITHDRAW_ID,
+            kind = "security.policy",
+            meta = { comment = "Runtime policy of the live demo: regular users may not view the live page" },
+            data = {
+                groups = { "app.security:user" },
+                policy = { resources = "page:wippy.dashboards.pages:live_demo", actions = "view", effect = "deny" },
+            },
+        })
+        if err then
+            return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(err) } })
+        end
+    else
+        -- delete returns the changeset, which is not an error; only the second value is.
+        local _, err = changes:delete(WITHDRAW_ID)
+        if err then
+            return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(err) } })
+        end
+    end
+    local _, aerr = changes:apply()
+    if aerr then
+        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(aerr) } })
+    end
+    -- Check what the registry holds now, so a change that did not happen is an error.
+    local now_exists = registry.get(WITHDRAW_ID) ~= nil
+    if now_exists ~= on then
+        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = "the policy entry did not change" } })
+    end
+    reply(res, http.STATUS.OK, { withdrawn = on })
+end
+
+return { push_me = push_me, signal = signal, restart_service = restart_service, withdraw = withdraw }

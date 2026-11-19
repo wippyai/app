@@ -1,0 +1,270 @@
+version: "1.0"
+namespace: demo.live
+
+# The live demo of wippy/dashboards RC1 (real-time contract, docs/contracts/live-v1.md):
+#   queue_length   point   a stream with audience page, pushed once a second by the loop `ticker`,
+#                          and signals to viewers; shown in a built-in kpi tile
+#   my_load        point   a stream with audience viewer: each push names one viewer; used by the
+#                          two-viewer browser test
+# Both set catalog: false, so the dashboards agent never offers them. The browser tests are in
+# e2e/dashboards-live.spec.ts. Test endpoints (admin only, except push-me) are in api.lua.
+
+entries:
+  # ── shared numbers and the point functions ───────────────────────────
+  - name: values
+    kind: library.lua
+    meta:
+      comment: The numbers of the live demo, the same for a read and for a push
+    source: file://values.lua
+
+  - name: read_queue_length
+    kind: function.lua
+    meta:
+      comment: The queue length now, as a frame with one number
+    source: file://points.lua
+    method: queue_length
+    modules:
+      - security
+    imports:
+      values: demo.live:values
+    pool:
+      size: 2
+
+  - name: read_my_load
+    kind: function.lua
+    meta:
+      comment: The calling viewer's own number, as a frame with one number
+    source: file://points.lua
+    method: my_load
+    modules:
+      - security
+    imports:
+      values: demo.live:values
+    pool:
+      size: 2
+
+  # ── point declarations (data point contract section 2) ───────────────
+  - name: queue_length
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Queue length
+      description: The number of waiting jobs in a queue, pushed once a second (demo of a stream)
+      func: demo.live:read_queue_length
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties:
+          queue: { type: string, maxLength: 40 }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, unit: jobs, nullable: false }
+      example:
+        args: { queue: mail }
+        data:
+          schema: wippy.dashboard_frame/v1
+          fields:
+            - { name: value, type: number, role: measure, unit: jobs, nullable: false }
+          rows: [[45]]
+      live_read: true
+      live:
+        signal:
+          audience: viewers
+        stream:
+          audience: page
+          mode: replace
+          max_rate_hz: 5
+
+  - name: my_load
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: My load
+      description: A number that belongs to the viewer who reads it (demo of a stream with audience viewer)
+      func: demo.live:read_my_load
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data:
+          schema: wippy.dashboard_frame/v1
+          fields:
+            - { name: value, type: number, role: measure, nullable: false }
+          rows: [[150]]
+      live_read: true
+      live:
+        stream:
+          audience: viewer
+          mode: replace
+          max_rate_hz: 20
+
+  # ── the backend loop that pushes the queue length ────────────────────
+  - name: ticker
+    kind: process.lua
+    meta:
+      comment: Pushes the queue length once a second with live.push
+    source: file://ticker.lua
+    method: main
+    modules:
+      - time
+      - logger
+    imports:
+      live: wippy.dashboards:live
+      values: demo.live:values
+
+  - name: ticker_service
+    kind: process.service
+    meta:
+      comment: Runs the queue length loop for the life of the app
+    process: demo.live:ticker
+    host: app:processes
+    lifecycle:
+      auto_start: true
+      depends_on:
+        - app:processes
+      security:
+        actor:
+          id: demo.live.ticker
+        groups:
+          - demo.live:pushers
+
+  # live.push looks up the subscription service, sends to it and listens for its answer, and
+  # reads the point's declaration from the registry.
+  - name: pushers_policy
+    kind: security.policy
+    meta:
+      comment: The ticker may talk to the subscription service and read declarations
+    groups:
+      - demo.live:pushers
+    policy:
+      resources: '*'
+      actions:
+        - process.registry.lookup
+        - process.send
+        - process.listen
+        - registry.get
+        - registry.find
+      effect: allow
+
+  # ── test endpoints ───────────────────────────────────────────────────
+  - name: push_me
+    kind: function.lua
+    meta:
+      comment: POST /api/v1/demo/live/push-me; pushes my_load to the calling user only
+    source: file://api.lua
+    method: push_me
+    modules:
+      - http
+      - json
+      - security
+      - registry
+      - logger
+    imports:
+      live: wippy.dashboards:live
+      values: demo.live:values
+    pool:
+      size: 2
+
+  - name: push_me.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: push_me
+    path: /demo/live/push-me
+
+  - name: signal
+    kind: function.lua
+    meta:
+      comment: POST /api/v1/demo/live/signal; a signal to the viewers of queue_length, admin only
+    source: file://api.lua
+    method: signal
+    modules:
+      - http
+      - json
+      - security
+      - registry
+      - logger
+    imports:
+      live: wippy.dashboards:live
+      values: demo.live:values
+    pool:
+      size: 1
+
+  - name: signal.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: signal
+    path: /demo/live/signal
+
+  - name: restart_service
+    kind: function.lua
+    meta:
+      comment: POST /api/v1/demo/live/restart-service; ends the subscription service so that the app starts it again, admin only
+    source: file://api.lua
+    method: restart_service
+    modules:
+      - http
+      - json
+      - security
+      - registry
+      - logger
+    imports:
+      live: wippy.dashboards:live
+      values: demo.live:values
+    pool:
+      size: 1
+
+  - name: restart_service.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: restart_service
+    path: /demo/live/restart-service
+
+  - name: withdraw
+    kind: function.lua
+    meta:
+      comment: POST /api/v1/demo/live/withdraw; takes the right to view the live page from regular users, or gives it back, admin only
+    source: file://api.lua
+    method: withdraw
+    modules:
+      - http
+      - json
+      - security
+      - registry
+      - logger
+    imports:
+      live: wippy.dashboards:live
+      values: demo.live:values
+    pool:
+      size: 1
+
+  - name: withdraw.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: withdraw
+    path: /demo/live/withdraw
+
+  # Only the admin group may use the admin endpoints. The user group is denied.
+  - name: deny_admin_endpoints
+    kind: security.policy
+    meta:
+      comment: app.security:user may not use the admin test endpoints of the live demo
+    groups:
+      - app.security:user
+    policy:
+      resources: demo.live:service
+      actions: demo.live.admin
+      effect: deny
