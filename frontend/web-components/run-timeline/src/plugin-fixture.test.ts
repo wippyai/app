@@ -29,7 +29,9 @@ function entry(name: string): Entry {
 }
 
 const point = entry('latest_run')
-const tile = entry('run_timeline')
+// The tile claim sits on the component entry, in meta.implements (tile contract section 2).
+const componentEntry = entry('run-timeline')
+const tile: { meta: Record<string, any> } = { meta: componentEntry.meta.implements[0].descriptor }
 const pointSchema = point.meta.output.schema
 const tileSchema = tile.meta.inputs.main.schema
 
@@ -46,12 +48,12 @@ describe('plugin demo.run_timeline: declarations', () => {
     expect(point.meta.type).toBe('wippy.dashboards.point')
     expect(point.meta.func).toBe(`${index.namespace}:read_latest_run`)
     expect(point.meta.output.shape).toBe('schema')
-    expect(tile.meta.type).toBe('wippy.dashboards.tile')
-    expect(tile.meta.tile_type).toBe(index.namespace)
-    expect(tile.meta.tag).toBe('run-timeline')
+    expect(componentEntry.meta.implements[0].interface).toBe('wippy.dashboards:tile_v1')
+    expect(tile.meta.tile).toBe(index.namespace)
+    expect(componentEntry.meta.tag_name).toBe('run-timeline')
     expect(tile.meta.inputs.main.shape).toBe('schema')
-    expect(tile.meta.default_data).toEqual({ main: `${index.namespace}:latest_run` })
-    expect(tile.meta.default_actions).toEqual({})
+    expect(tile.meta.default_data).toEqual({ main: { point: `${index.namespace}:latest_run`, args: {} } })
+    expect(tile.meta.default_actions).toBeUndefined()
   })
 
   it('keeps the point output schema equal to the tile input schema', () => {
@@ -59,10 +61,9 @@ describe('plugin demo.run_timeline: declarations', () => {
   })
 
   it('serves the tag from the view.component entry', () => {
-    const component = entry('run-timeline')
-    expect(component.meta.type).toBe('view.component')
-    expect(component.meta.tag_name).toBe(tile.meta.tag)
-    expect(component.meta.url).toBe('/app/wc/run-timeline')
+    expect(componentEntry.meta.type).toBe('view.component')
+    expect(componentEntry.meta.tag_name).toBe('run-timeline')
+    expect(componentEntry.meta.url).toBe('/app/wc/run-timeline')
   })
 })
 

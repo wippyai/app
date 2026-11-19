@@ -29,7 +29,9 @@ function entry(name: string): Entry {
 }
 
 const point = entry('users').meta
-const tile = entry('user_status').meta
+// The tile claim sits on the component entry, in meta.implements (tile contract section 2).
+const component = entry('user-status').meta
+const tile = (component.implements as Array<{ descriptor: Record<string, unknown> }>)[0].descriptor
 const pointSchema = (point.output as { schema: object }).schema
 const tileSchema = ((tile.inputs as { main: { schema: object } }).main).schema
 
@@ -43,10 +45,10 @@ describe('users point and user-status tile', () => {
   it('declares the point and the tile for the same shape', () => {
     expect((point.output as { shape: string }).shape).toBe('schema')
     expect((tile.inputs as { main: { shape: string } }).main.shape).toBe('schema')
-    expect(tile.default_data).toEqual({ main: 'demo.user_status:users' })
+    expect(tile.default_data).toEqual({ main: { point: 'demo.user_status:users', args: {} } })
     expect(point.live_topic).toBe('dash.users.changed')
-    expect(tile.tag).toBe('user-status')
-    expect(tile.tile_type).toBe('demo.user_status')
+    expect(component.tag_name).toBe('user-status')
+    expect(tile.tile).toBe('demo.user_status')
   })
 
   it('uses one schema for the point output and the tile input', () => {
