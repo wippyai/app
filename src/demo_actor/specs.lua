@@ -161,9 +161,106 @@ function M.app_activity()
     }
 end
 
+-- The open point usage_rows, mapped for one tile: the page names a declared mapper (src/mock_mappers)
+-- with its parameters, and the output it expects. The page carries no mapping code.
+local function mapped_point(args, mapper, params, output)
+    return {
+        kind = "function",
+        ref = "demo.actor:usage_rows",
+        args = args,
+        mapper = { ref = "mock.mappers:" .. mapper, params = params },
+        output = output,
+    }
+end
+
+-- A page that maps one open point three ways with the example mappers: tokens per model
+-- (sum_by), the five largest calls and the rest (top_n) and calls per day (bucket_by_time).
+function M.llm_calls()
+    local by_model_args = { model = param("model") }
+    return {
+        spec = "wippy.dashboard_page/v1",
+        publish = true,
+        id = "llm_calls",
+        title = "LLM calls",
+        route = "/reports/llm-calls",
+        icon = "tabler:chart-dots",
+        order = 55,
+        actions = {},
+        params = {
+            model = { type = "select", label = "Model", options = { data = "models" } },
+        },
+        data = {
+            models = point("usage_models"),
+            by_model = mapped_point(by_model_args, "sum_by",
+                { by = "model_id", values = { "prompt_tokens", "completion_tokens" } },
+                {
+                    shape = "category",
+                    fields = {
+                        { name = "model_id", type = "string", role = "dimension", nullable = false },
+                        { name = "prompt_tokens", type = "number", role = "measure", additive = true, nullable = false },
+                        { name = "completion_tokens", type = "number", role = "measure", additive = true, nullable = false },
+                    },
+                }),
+            largest = mapped_point(by_model_args, "top_n",
+                { by = "timestamp", value = "total_tokens", n = 5, other = true },
+                {
+                    shape = "category",
+                    fields = {
+                        { name = "timestamp", type = "string", role = "dimension", nullable = false },
+                        { name = "total_tokens", type = "number", role = "measure", additive = true, nullable = false },
+                    },
+                }),
+            per_day = mapped_point(by_model_args, "bucket_by_time",
+                { time = "day", bucket = "day", value = "total_tokens" },
+                {
+                    shape = "series",
+                    fields = {
+                        { name = "day", type = "date", role = "dimension", nullable = false },
+                        { name = "total_tokens", type = "number", role = "measure", additive = true, nullable = false },
+                    },
+                }),
+        },
+        tiles = {
+            model_picker = { type = "control.select", param = "model", options = { label = "Model" } },
+            by_model = {
+                type = "chart",
+                data = { main = "by_model" },
+                fields = { x = "model_id", y = { "prompt_tokens", "completion_tokens" } },
+                options = { label = "Tokens by model" },
+            },
+            largest = { type = "table", data = { main = "largest" } },
+            per_day = {
+                type = "chart",
+                data = { main = "per_day" },
+                fields = { x = "day", y = { "total_tokens" } },
+                options = { label = "Tokens by day" },
+            },
+        },
+        layout = {
+            breakpoints = { lg = 1024 },
+            layouts = {
+                default = column(
+                    { "model_picker", "140px" },
+                    { "by_model", "320px" },
+                    { "largest", "300px" },
+                    { "per_day", "320px" }
+                ),
+                lg = {
+                    direction = "vertical",
+                    children = {
+                        row("140px", { "model_picker", "100%" }),
+                        row("340px", { "by_model", "50%" }, { "per_day", "50%" }),
+                        row("320px", { "largest", "100%" }),
+                    },
+                },
+            },
+        },
+    }
+end
+
 -- Publication order.
 function M.all()
-    return { M.llm_usage(), M.app_activity() }
+    return { M.llm_usage(), M.app_activity(), M.llm_calls() }
 end
 
 return M
