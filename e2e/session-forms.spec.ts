@@ -167,7 +167,7 @@ test.describe('Session Forms Fixture', () => {
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
-  test('limit after text -> the text and the tool call stay, the turn limit follows, and the card is not complete', async ({ page }) => {
+  test('limit after text -> the text and tool call stay, the turn limit follows, the card is not complete', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page, LIMIT_FIXTURE_REGISTRY_ID)
@@ -184,7 +184,7 @@ test.describe('Session Forms Fixture', () => {
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
-  test('artifact and ask -> the note and the form share one round, and the note shows once before and after the answer', async ({ page }) => {
+  test('artifact and ask -> the note and the form share one round, and the note shows once', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page)
@@ -291,6 +291,24 @@ async function retypeDate(control: Locator, text: string) {
   await typeDateKeyByKey(control, text)
 }
 
+/**
+ * Fills the delivery form: name, email and phone, then the optional date,
+ * parcel count and notes that are given, then ticks the consent box. The email
+ * and phone default to valid values, so a test passes only what it changes.
+ */
+async function fillDelivery(formCard: Locator, values: { email?: string, phone?: string, deliveryDate?: string, parcelCount?: string, notes?: string } = {}) {
+  await formCard.getByLabel('Full name').fill(DELIVERY_VALUES.fullName)
+  await formCard.getByLabel('Email address').fill(values.email ?? DELIVERY_VALUES.email)
+  await formCard.getByLabel('Phone number').fill(values.phone ?? DELIVERY_VALUES.phone)
+  if (values.deliveryDate)
+    await typeDateKeyByKey(formCard.getByLabel('Delivery date'), values.deliveryDate)
+  if (values.parcelCount)
+    await formCard.getByLabel('Number of parcels').fill(values.parcelCount)
+  if (values.notes)
+    await formCard.getByLabel('Delivery notes').fill(values.notes)
+  await formCard.getByRole('checkbox', { name: /agree to be contacted about this delivery/i }).click()
+}
+
 /** Counts answer submissions (POST /artifact/:id/state) the page makes. */
 function watchAnswerSubmissions(page: Page): string[] {
   const urls: string[] = []
@@ -302,7 +320,7 @@ function watchAnswerSubmissions(page: Page): string[] {
 }
 
 test.describe('Session Forms V2 standard fields', () => {
-  test('ask me delivery -> an invalid email blocks submit -> the corrected details are saved exactly and survive a reload', async ({ page }) => {
+  test('ask me delivery -> an invalid email blocks submit, then the corrected details are saved', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
     const answerSubmissions = watchAnswerSubmissions(page)
 
@@ -314,10 +332,8 @@ test.describe('Session Forms V2 standard fields', () => {
 
     const fullName = formCard.getByLabel('Full name')
     const email = formCard.getByLabel('Email address')
-    const phone = formCard.getByLabel('Phone number')
     const deliveryDate = formCard.getByLabel('Delivery date')
     const parcelCount = formCard.getByLabel('Number of parcels')
-    const notes = formCard.getByLabel('Delivery notes')
     const consent = formCard.getByRole('checkbox', { name: /agree to be contacted about this delivery/i })
     const submit = formCard.getByRole('button', { name: /^submit$/i })
 
@@ -327,13 +343,12 @@ test.describe('Session Forms V2 standard fields', () => {
     await expect(consent).not.toBeChecked()
     expect(answerSubmissions).toHaveLength(0)
 
-    await fullName.fill(DELIVERY_VALUES.fullName)
-    await email.fill(DELIVERY_VALUES.invalidEmail)
-    await phone.fill(DELIVERY_VALUES.phone)
-    await typeDateKeyByKey(deliveryDate, DELIVERY_VALUES.deliveryDate)
-    await parcelCount.fill(DELIVERY_VALUES.parcelCount)
-    await notes.fill(DELIVERY_VALUES.notes)
-    await consent.click()
+    await fillDelivery(formCard, {
+      email: DELIVERY_VALUES.invalidEmail,
+      deliveryDate: DELIVERY_VALUES.deliveryDate,
+      parcelCount: DELIVERY_VALUES.parcelCount,
+      notes: DELIVERY_VALUES.notes,
+    })
     await expect(consent).toBeChecked()
     await submit.click()
 
@@ -384,7 +399,7 @@ test.describe('Session Forms V2 standard fields', () => {
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
-  test('ask me delivery -> a phone number that breaks the pattern is sent, refused by the server with a 422 under Phone, kept as typed, and the corrected number is saved', async ({ page }) => {
+  test('ask me delivery -> a phone that breaks the pattern gets a 422 under Phone, then the fix is saved', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
     const answerSubmissions = watchAnswerSubmissions(page)
 
@@ -400,11 +415,7 @@ test.describe('Session Forms V2 standard fields', () => {
 
     // Everything but the phone number is valid. The browser never checks a
     // `pattern` (see the form's "Checks before sending"), so "abc" goes out.
-    await formCard.getByLabel('Full name').fill(DELIVERY_VALUES.fullName)
-    await formCard.getByLabel('Email address').fill(DELIVERY_VALUES.email)
-    await phone.fill(NOT_A_PHONE_NUMBER)
-    await typeDateKeyByKey(formCard.getByLabel('Delivery date'), DELIVERY_VALUES.deliveryDate)
-    await formCard.getByRole('checkbox', { name: /agree to be contacted about this delivery/i }).click()
+    await fillDelivery(formCard, { phone: NOT_A_PHONE_NUMBER, deliveryDate: DELIVERY_VALUES.deliveryDate })
 
     const refusal = page.waitForResponse(response => response.request().method() === 'POST' && SUBMIT_ANSWER_URL.test(response.url()))
     await submit.click()
@@ -441,7 +452,7 @@ test.describe('Session Forms V2 standard fields', () => {
     expect(consoleErrors.filter(message => !/status of 422/.test(message)), `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
-  test('ask me delivery -> a typed date that is not a valid date stays in the box with its error until it is corrected, and the corrected date is saved', async ({ page }) => {
+  test('ask me delivery -> an invalid typed date keeps its text and error until corrected, then it is saved', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
     const answerSubmissions = watchAnswerSubmissions(page)
 
@@ -455,10 +466,7 @@ test.describe('Session Forms V2 standard fields', () => {
     const status = formCard.getByRole('status')
 
     // Everything but the date is valid (the parcel count starts at 1).
-    await formCard.getByLabel('Full name').fill(DELIVERY_VALUES.fullName)
-    await formCard.getByLabel('Email address').fill(DELIVERY_VALUES.email)
-    await formCard.getByLabel('Phone number').fill(DELIVERY_VALUES.phone)
-    await formCard.getByRole('checkbox', { name: /agree to be contacted about this delivery/i }).click()
+    await fillDelivery(formCard)
 
     // A day that does not exist, typed one key at a time: the box keeps every
     // key, the submit names the date, and the text is still in the box after
@@ -510,7 +518,7 @@ test.describe('Session Forms V2 standard fields', () => {
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
-  test('ask me delivery -> the date box can be edited in the middle of the text without the caret jumping to the end', async ({ page }) => {
+  test('ask me delivery -> editing the date box in the middle keeps the caret in place', async ({ page }) => {
     await openFixtureChat(page)
     const formCard = await askForForm(page, 'ask me delivery')
     const deliveryDate = formCard.getByLabel('Delivery date')
@@ -528,24 +536,34 @@ test.describe('Session Forms V2 standard fields', () => {
     await expect(deliveryDate).toHaveValue('2026-08-15')
   })
 
-  test('ask me delivery -> the calendar picks a date by mouse and by keyboard, and its panel is readable in both themes', async ({ page }) => {
+  /** Opens the delivery form and anchors its date box, and so the calendar, on June 2026. */
+  async function openCalendarForm(page: Page) {
     await openFixtureChat(page)
     const formCard = await askForForm(page, 'ask me delivery')
     const deliveryDate = formCard.getByLabel('Delivery date')
-    const calendarButton = formCard.getByRole('button', { name: /choose date/i })
-    const calendar = formCard.getByRole('dialog', { name: /choose date/i })
-
-    // Typed text anchors the calendar on a known month.
     await typeDateKeyByKey(deliveryDate, '2026-06-15')
+    return {
+      formCard,
+      deliveryDate,
+      calendarButton: formCard.getByRole('button', { name: /choose date/i }),
+      calendar: formCard.getByRole('dialog', { name: /choose date/i }),
+    }
+  }
 
-    // By mouse: the button opens it, a day picks it, the box shows it.
+  test('ask me delivery -> the calendar button opens it and a day picks the date', async ({ page }) => {
+    const { deliveryDate, calendarButton, calendar } = await openCalendarForm(page)
+
     await calendarButton.click()
     await expect(calendar).toBeVisible()
     await calendar.getByText('20', { exact: true }).click()
     await expect(deliveryDate).toHaveValue('2026-06-20')
     await expect(calendar).toBeHidden()
+  })
 
-    // By keyboard: ArrowDown opens it, a second ArrowDown moves into the days,
+  test('ask me delivery -> the calendar picks a date by keyboard, and focus stays on the date box', async ({ page }) => {
+    const { deliveryDate, calendar } = await openCalendarForm(page)
+
+    // ArrowDown opens it, a second ArrowDown moves into the days,
     // the arrows move by day, Enter picks and gives focus back to the box.
     await deliveryDate.focus()
     await deliveryDate.press('ArrowDown')
@@ -595,6 +613,10 @@ test.describe('Session Forms V2 standard fields', () => {
     await page.keyboard.press('Escape')
     await expect(calendar).toBeHidden()
     await expect(deliveryDate).toHaveValue(keyboardPick)
+  })
+
+  test('ask me delivery -> the calendar panel is readable in both themes', async ({ page }) => {
+    const { formCard, calendarButton, calendar } = await openCalendarForm(page)
 
     // The calendar's own colours follow the form's forced theme. It opens in the
     // theme plugin's overlay layer, outside the themed container, and that layer
@@ -627,7 +649,7 @@ test.describe('Session Forms V2 standard fields', () => {
     }
   })
 
-  test('ask me preferences -> unticked checkboxes are saved as no, a skipped note stays skipped, and both survive a reload', async ({ page }) => {
+  test('ask me preferences -> unticked boxes save as no and a skipped note stays skipped, also after reload', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page)
@@ -733,7 +755,7 @@ async function storedAnswers(page: Page): Promise<Record<string, { question: str
 }
 
 test.describe('Session Forms V2 limits', () => {
-  test('ask me limits -> a step of 0.25 refuses 0.3 with its error and accepts 0.5, and the stored value is 0.5', async ({ page }) => {
+  test('ask me limits -> a step of 0.25 refuses 0.3 and accepts 0.5, and 0.5 is stored', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page)
@@ -769,7 +791,7 @@ test.describe('Session Forms V2 limits', () => {
     expect(consoleErrors.filter(message => !/status of 422/.test(message)), `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
-  test('ask me limits -> 2001 text and 8001 textarea characters are refused, 2000 and 8000 are accepted and stored in full', async ({ page }) => {
+  test('ask me limits -> 2001 text and 8001 textarea characters are refused, 2000 and 8000 are stored', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page)
@@ -863,7 +885,7 @@ test.describe('Session Forms V2 limits', () => {
     expect(consoleErrors, `console errors: ${consoleErrors.slice(0, 8).join(' | ')}`).toEqual([])
   })
 
-  test('ask me limits -> a slow send reads Sending…, spins, keeps focus on an enabled button, says so after 2 seconds, and then the form is answered', async ({ page }) => {
+  test('ask me limits -> a slow send shows Sending…, keeps focus, speaks after 2 seconds, then answers', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page)
@@ -911,7 +933,7 @@ const REFUSED_BY_ASK_USER_REPLY = /^Tool result from ask_user: .*unsupported_typ
 const NO_FIELD_FORMS_REPLY = 'I can\'t create forms with these fields here.'
 
 test.describe('Session Forms tools: ask_user and ask_user_fields', () => {
-  test('steering fixture (ask_user only) -> a form with standard fields sent to ask_user is refused with unsupported_type, and the agent gets the refusal', async ({ page }) => {
+  test('steering fixture -> a standard-fields form on ask_user is refused with unsupported_type', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page)
 
     await openFixtureChat(page, STEERING_FIXTURE_REGISTRY_ID)
