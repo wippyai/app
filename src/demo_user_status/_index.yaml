@@ -4,8 +4,8 @@ namespace: demo.user_status
 # Plugin 2 of the dashboards proof of concept (stage E2): the tile `user-status`
 # with its point, its live signal and its test endpoint, as one module.
 #   point       demo.user_status:users        wippy.dashboards.point, served by list_users
-#   tile        demo.user_status:user_status  wippy.dashboards.tile (tile_type demo.user_status)
-#   component   demo.user_status:user-status  view.component, frontend/web-components/user-status
+#   component   demo.user_status:user-status  view.component, frontend/web-components/user-status;
+#                                             its meta.implements is the tile claim of the tile demo.user_status
 #   signal      topic dash.users.changed      sent by publish_signal; POST /api/v1/demo/signal/users
 #   action      demo.user_status:set_status   wippy.dashboards.action, served by set_user_status (stage E3)
 #
@@ -57,52 +57,67 @@ entries:
                   groups: { type: array, items: { type: string } }
       live_topic: dash.users.changed
 
-  # ── tile descriptor (contracts section 5.3) ──────────────────────────
-  - name: user_status
-    kind: registry.entry
-    meta:
-      type: wippy.dashboards.tile
-      title: User status
-      tile_type: demo.user_status
-      tag: user-status
-      inputs:
-        main:
-          shape: schema
-          schema:
-            type: object
-            additionalProperties: false
-            required: [users]
-            properties:
-              users:
-                type: array
-                items:
-                  type: object
-                  additionalProperties: false
-                  required: [user_id, name, status, groups]
-                  properties:
-                    user_id: { type: string }
-                    name: { type: string }
-                    status: { type: string, enum: [active, inactive, suspended, pending] }
-                    groups: { type: array, items: { type: string } }
-      fields: []
-      options_schema:
-        type: object
-      events: {}
-      params: []
-      default_data:
-        main: demo.user_status:users
-      default_actions:
-        set_status: demo.user_status:set_status
-      min_size: { w: 320px, h: 160px }
-      default_size: { w: 50%, h: 280px }
-
-  # ── web component ────────────────────────────────────────────────────
+  # ── web component, with its tile claim (tile contract section 2) ──────
+  # The claim replaces the wippy.dashboards.tile entry of version 0.0.1. A page places the tile with
+  # only { "type": "demo.user_status" }: the engine adds the default point and action.
   - name: user-status
     kind: registry.entry
     meta:
       type: view.component
       name: user-status
       tag_name: user-status
+      implements:
+        - interface: "wippy.dashboards:tile_v1"
+          version: "1.0.0"
+          descriptor:
+            tile: demo.user_status
+            tile_version: "1.0.0"
+            title: User status
+            description: Lists the users of the app with their status and groups, and lets an admin set a status. Use it for a team overview.
+            inputs:
+              main:
+                shape: schema
+                schema:
+                  type: object
+                  additionalProperties: false
+                  required: [users]
+                  properties:
+                    users:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        required: [user_id, name, status, groups]
+                        properties:
+                          user_id: { type: string }
+                          name: { type: string }
+                          status: { type: string, enum: [active, inactive, suspended, pending] }
+                          groups: { type: array, items: { type: string } }
+            options_schema:
+              type: object
+            events: {}
+            actions:
+              set_status:
+                description: Sets the status of one user to active or inactive.
+                args:
+                  type: object
+                  required: [user_id, status]
+                  properties:
+                    user_id: { type: string }
+                    status: { enum: [active, inactive] }
+            default_data:
+              main: { point: "demo.user_status:users", args: {} }
+            default_actions:
+              set_status: "demo.user_status:set_status"
+            size:
+              fit: any
+              width: { min: 320 }
+              height: { min: 160, preferred: 280 }
+            examples:
+              main:
+                users:
+                  - { user_id: "u1", name: "Ada Lovelace", status: active, groups: [admin] }
+                  - { user_id: "u2", name: "Linus Torvalds", status: inactive, groups: [user] }
       announced: true
       secure: false
       auto_register: true
