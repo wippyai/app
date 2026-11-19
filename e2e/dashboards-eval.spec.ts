@@ -17,13 +17,14 @@ import {
   listedIds,
   openChat,
   pageIdOf,
-  numberPattern,
   pageProps,
   readPoint,
   removePage,
   renderedChart,
+  renderedKpi,
   renderedTable,
   renderedText,
+  sameNumber,
   send,
   spendStart,
   tableProblem,
@@ -357,6 +358,11 @@ async function checkFilterRereads(page: Page, pageId: string, props: PageProps, 
   }
 }
 
+/** The language of the browser, which is the locale that the tiles format numbers in. */
+async function locale(page: Page): Promise<string> {
+  return page.evaluate(() => navigator.language || 'en-US')
+}
+
 /** The index of a field in a frame, or -1. */
 function fieldIndex(frame: { fields: Array<{ name: string }> }, name: string | undefined): number {
   return name === undefined ? -1 : frame.fields.findIndex(f => f.name === name)
@@ -382,8 +388,11 @@ async function renderedProblem(page: Page, pageId: string, read: TileRead, direc
     const value = col >= 0 ? data.rows[0]?.[col] : undefined
     if (value === undefined || value === null)
       return null
-    const text = await renderedText(board, read.id)
-    return numberPattern(value).test(text) ? null : `the number tile draws "${text.slice(0, 60)}", not ${value}`
+    // The whole text of the value, read back as a number in the viewer's locale: 150 is not 15.
+    const text = await renderedKpi(board, read.id)
+    if (typeof text !== 'string')
+      return text === null ? `the number tile says it has no value, the data has ${value}` : 'the number tile drew no value'
+    return sameNumber(text, value, await locale(page)) ? null : `the number tile draws "${text.slice(0, 60)}", not ${value}`
   }
   if (type === 'chart') {
     const chart = await renderedChart(board, read.id)
@@ -393,7 +402,7 @@ async function renderedProblem(page: Page, pageId: string, read: TileRead, direc
     return chartProblem(chart, expectedChart(data, { x: slot('x')[0], y: slot('y'), series: slot('series')[0] ?? null }))
   }
   if (type === 'table')
-    return tableProblem(await renderedTable(board, read.id), data, slot('columns'))
+    return tableProblem(await renderedTable(board, read.id), data, slot('columns'), await locale(page))
   return null
 }
 

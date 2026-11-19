@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { chartProblem, expectedChart, isTokenSum, tableProblem, toolCalls, toolNames } from './dashboards-agent.support'
+import { chartProblem, expectedChart, isTokenSum, sameNumber, tableProblem, toolCalls, toolNames } from './dashboards-agent.support'
 
 /**
  * The reader of agent runs behind the Researcher test, on records in the shape that wippy/dataflow
@@ -82,10 +82,56 @@ test('a chart is compared label by label, not as a bag of numbers', () => {
 test('a table is compared cell by cell', () => {
   const drawn = [['2026-11-17', 'a', '5'], ['2026-11-17', 'b', '7'], ['2026-11-18', 'a', '11']]
   expect(tableProblem(drawn, frame)).toBeNull()
-  expect(tableProblem([['17 Nov 2026', 'a', '5'], ['17 Nov 2026', 'b', '7'], ['18 Nov 2026', 'a', '11']], frame)).toBeNull()
   expect(tableProblem(drawn.slice(1), frame)).toMatch(/2 rows/)
   expect(tableProblem([drawn[0], ['2026-11-17', 'b', '8'], drawn[2]], frame)).toMatch(/row 2, column 3/)
   expect(tableProblem([drawn[0], ['2026-11-17', 'x', '7'], drawn[2]], frame)).toMatch(/row 2, column 2/)
   // Only the shown columns count.
   expect(tableProblem([['a'], ['b'], ['a']], frame, ['model'])).toBeNull()
+})
+
+test('a number is read as a whole: 150 is not 15, and 15 tokens is not a number', () => {
+  const one = { fields: [{ name: 'n', type: 'number' }], rows: [[15]] as unknown[][] }
+  expect(tableProblem([['15']], one)).toBeNull()
+  expect(tableProblem([['150']], one)).toMatch(/draws "150", the data has 15/)
+  expect(tableProblem([['115']], one)).toMatch(/draws "115"/)
+  expect(tableProblem([['15 tokens']], one)).toMatch(/draws "15 tokens"/)
+  expect(tableProblem([['15.5']], one)).toMatch(/draws "15.5"/)
+  expect(sameNumber('150', 15)).toBe(false)
+})
+
+test('a number is read in the locale of the browser, with its grouping, sign and fraction digits', () => {
+  expect(sameNumber('550,135', 550135)).toBe(true)
+  expect(sameNumber('550.135', 550135, 'de-DE')).toBe(true)
+  expect(sameNumber('550,135', 550135, 'de-DE')).toBe(false)
+  expect(sameNumber('-0.10', '-0.10')).toBe(true)
+  expect(sameNumber('12.50', '12.50')).toBe(true)
+  expect(sameNumber('12.5', '12.50')).toBe(false)
+  expect(sameNumber('12,50', '12.50', 'de-DE')).toBe(true)
+  expect(sameNumber('12345678901234567890', '12345678901234567890')).toBe(true)
+  expect(sameNumber('0.0000000000000000000000001', 1e-25)).toBe(true)
+  expect(sameNumber('-5', -5)).toBe(true)
+  expect(sameNumber('5', -5)).toBe(false)
+})
+
+test('a date, a time and a text are drawn unchanged: another date does not pass', () => {
+  const drawn = [['2026-11-17', 'a', '5'], ['2026-11-17', 'b', '7'], ['2026-11-18', 'a', '11']]
+  expect(tableProblem([['1999-01-01', 'a', '5'], drawn[1], drawn[2]], frame)).toMatch(/row 1, column 1 draws "1999-01-01", the data has "2026-11-17"/)
+  // The viewer's format is not applied by the tile, so a reformatted date is a difference too.
+  expect(tableProblem([['17 Nov 2026', 'a', '5'], drawn[1], drawn[2]], frame)).toMatch(/row 1, column 1/)
+  const timed = { fields: [{ name: 't', type: 'time' }], rows: [['2026-11-19T12:00:00+01:00']] as unknown[][] }
+  expect(tableProblem([['2026-11-19T12:00:00+01:00']], timed)).toBeNull()
+  expect(tableProblem([['2026-11-19T11:00:00Z']], timed)).toMatch(/row 1, column 1/)
+})
+
+test('an empty source value draws as missing, and only that', () => {
+  const gaps = {
+    fields: [{ name: 'name', type: 'string' }, { name: 'n', type: 'number' }, { name: 'at', type: 'date' }],
+    rows: [['a', null, null], ['b', 2, '2026-11-17']] as unknown[][],
+  }
+  expect(tableProblem([['a', null, null], ['b', '2', '2026-11-17']], gaps)).toBeNull()
+  // A filled cell for an empty value, in a number column and in a date column.
+  expect(tableProblem([['a', '999', null], ['b', '2', '2026-11-17']], gaps)).toMatch(/row 1, column 2 draws "999", the data has no value/)
+  expect(tableProblem([['a', null, '2026-11-17'], ['b', '2', '2026-11-17']], gaps)).toMatch(/row 1, column 3 draws "2026-11-17", the data has no value/)
+  // A value that is there, drawn as missing.
+  expect(tableProblem([['a', null, null], ['b', null, '2026-11-17']], gaps)).toMatch(/row 2, column 2 is drawn as missing/)
 })

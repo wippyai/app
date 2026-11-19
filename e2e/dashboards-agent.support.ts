@@ -245,10 +245,23 @@ export async function renderedChart(board: FrameLocator, tileId: string): Promis
   return { labels: (parsed.labels ?? []).map(String), datasets: parsed.datasets ?? [] }
 }
 
-/** The text of every cell that a table tile drew, row by row. */
-export async function renderedTable(board: FrameLocator, tileId: string): Promise<string[][]> {
+/**
+ * The text of every cell that a table tile drew, row by row. An empty cell carries the attribute
+ * data-missing and a hidden "No value" for assistive tools: it comes back as null, not as that text.
+ */
+export async function renderedTable(board: FrameLocator, tileId: string): Promise<Array<Array<string | null>>> {
   return board.locator(`[data-tile-id="${tileId}"] tbody tr`).evaluateAll(rows =>
-    rows.map(row => Array.from(row.querySelectorAll('td')).map(cell => (cell.textContent ?? '').trim())))
+    rows.map(row => Array.from(row.querySelectorAll('td')).map(cell => (cell.hasAttribute('data-missing') ? null : (cell.textContent ?? '').trim()))))
+}
+
+/** The value a number tile drew: its text, or null when it says it has no value (data-missing). */
+export async function renderedKpi(board: FrameLocator, tileId: string): Promise<string | null | undefined> {
+  const value = board.locator(`[data-tile-id="${tileId}"] .dash-kpi__value`).first()
+  if (await value.count() === 0)
+    return undefined
+  if (await value.getAttribute('data-missing') !== null)
+    return null
+  return ((await value.textContent()) ?? '').trim()
 }
 
 /** The text a tile drew. */
@@ -339,13 +352,61 @@ export function chartProblem(drawn: RenderedChart, wanted: RenderedChart): strin
   return null
 }
 
+/** The text of a finite number as plain decimal text with no exponent (the function of the tile's format.ts). */
+export function decimalText(value: unknown): string {
+  const text = typeof value === 'number' ? String(value) : String(value)
+  const match = /^(-?)(\d+)(?:\.(\d+))?e([+-]\d+)$/.exec(text)
+  if (!match)
+    return text
+  const [, sign, whole, fraction = '', exponent] = match
+  const digits = whole + fraction
+  const shift = Number(exponent) + whole.length
+  if (shift <= 0)
+    return `${sign}0.${'0'.repeat(-shift)}${digits}`
+  if (shift >= digits.length)
+    return `${sign}${digits}${'0'.repeat(shift - digits.length)}`
+  return `${sign}${digits.slice(0, shift)}.${digits.slice(shift)}`
+}
+
 /**
- * Compares the cells that a table drew with the frame: one row for each row, in order, and in each
- * shown column the cell that the value gives. A number must be the number the cell holds (separators
- * aside), a text must be the text. A date or a time is drawn in the viewer's format, so its cell only
- * has to be filled. An empty value draws as missing and is not compared.
+ * The decimal text that a drawn number holds, or null when the text is not a number in the locale. The
+ * whole text must be a number: the grouping separators of the locale are taken out, its decimal sign
+ * becomes a point and its minus sign a hyphen, and what is left must be digits with an optional sign and
+ * fraction. "150" is not "15", and "15 tokens" is not a number.
  */
-export function tableProblem(drawn: string[][], frame: Frame, columns?: string[]): string | null {
+export function drawnDecimal(text: string, locale = 'en-US'): string | null {
+  const parts = new Intl.NumberFormat(locale, { minimumFractionDigits: 1 }).formatToParts(-1234567.5)
+  const group = parts.find(p => p.type === 'group')?.value
+  const decimal = parts.find(p => p.type === 'decimal')?.value ?? '.'
+  const minus = parts.find(p => p.type === 'minusSign')?.value ?? '-'
+  let t = text
+  if (group)
+    t = t.split(group).join('')
+  // Some locales group with a space or a narrow no-break space that the page writes as another one.
+  t = t.replace(/[\u00a0\u202f\u2009 ]/g, '')
+  t = t.split(minus).join('-')
+  if (decimal !== '.')
+    t = t.split(decimal).join('.')
+  return /^-?\d+(\.\d+)?$/.test(t) ? t : null
+}
+
+/** Does a drawn number equal a source number exactly, fraction digits and sign included? */
+export function sameNumber(text: string, value: unknown, locale = 'en-US'): boolean {
+  const drawn = drawnDecimal(text, locale)
+  return drawn !== null && drawn === decimalText(value)
+}
+
+/**
+ * Compares the cells that a table drew with the frame, exactly as dash-tiles draws them (lib/table.ts,
+ * lib/format.ts, app/dash-table.vue): one row for each row, in order, and in each shown column
+ *   - an empty source value draws a cell with data-missing (null here), and only that; a value that is
+ *     there never draws one;
+ *   - a number or a decimal draws its whole text in the grouping of the viewer's locale, so the cell must
+ *     read back as the same number, with the same fraction digits and sign;
+ *   - a date, a time, a text and a boolean draw their own text, unchanged.
+ * `locale` is the browser's (navigator.language); the default is English.
+ */
+export function tableProblem(drawn: Array<Array<string | null>>, frame: Frame, columns?: string[], locale = 'en-US'): string | null {
   if (drawn.length !== frame.rows.length)
     return `the table draws ${drawn.length} rows, the data has ${frame.rows.length}`
   const shown = (columns && columns.length > 0 ? columns : frame.fields.map(f => f.name))
@@ -355,21 +416,23 @@ export function tableProblem(drawn: string[][], frame: Frame, columns?: string[]
     for (let c = 0; c < shown.length; c++) {
       const value = frame.rows[r][shown[c]]
       const cell = drawn[r][c]
-      const type = frame.fields[shown[c]].type
-      if (value === null || value === undefined)
-        continue
+      const where = `row ${r + 1}, column ${c + 1}`
       if (cell === undefined)
-        return `row ${r + 1} has no cell for column ${c + 1}`
-      if (type === 'date' || type === 'time') {
-        if (cell === '')
-          return `row ${r + 1}, column ${c + 1} is empty, the data has ${value}`
+        return `${where} has no cell`
+      if (value === null || value === undefined) {
+        if (cell !== null)
+          return `${where} draws "${cell}", the data has no value`
+        continue
       }
-      else if (type === 'number' || type === 'decimal') {
-        if (!(cellNumber(cell) === Number(value) || numberPattern(value).test(cell)))
-          return `row ${r + 1}, column ${c + 1} draws "${cell}", the data has ${value}`
+      if (cell === null)
+        return `${where} is drawn as missing, the data has ${value}`
+      const type = frame.fields[shown[c]].type
+      if (type === 'number' || type === 'decimal') {
+        if (!sameNumber(cell, value, locale))
+          return `${where} draws "${cell}", the data has ${value}`
       }
-      else if (type === 'string' && cell !== String(value)) {
-        return `row ${r + 1}, column ${c + 1} draws "${cell}", the data has "${value}"`
+      else if (cell !== String(value)) {
+        return `${where} draws "${cell}", the data has "${value}"`
       }
     }
   }

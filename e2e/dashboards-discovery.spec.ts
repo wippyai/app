@@ -163,8 +163,8 @@ for (let run = 1; run <= RUNS; run++) {
           const rows = await renderedTable(board, tileId)
           const width = Math.max(0, ...rows.map(r => r.length))
           for (let col = 0; col < width; col++) {
-            const models = rows.map(r => r.find(cell => sums.has(cell)) ?? '')
-            const values = rows.map(r => (r[col] === undefined ? Number.NaN : cellNumber(r[col])))
+            const models = rows.map(r => r.find(cell => cell !== null && sums.has(cell)) ?? '')
+            const values = rows.map(r => (r[col] === undefined || r[col] === null ? Number.NaN : cellNumber(r[col]!)))
             seen.push(`${tileId}/column ${col}`)
             if (!values.some(Number.isNaN) && isTokenSum(models, values, sums))
               matched = `${tileId}/column ${col}`
