@@ -32,9 +32,20 @@ entries:
     meta:
       type: wippy.dashboards.point
       title: Latest workflow run
+      description: The latest workflow run with its steps as a tree, with status and duration. Use it to show what a workflow did.
       func: demo.run_timeline:read_latest_run
       live_read: true
       args_schema: { type: object, additionalProperties: false, properties: {} }
+      example:
+        args: {}
+        data:
+          run: { type: dataflow, status: completed, started_at: "2026-11-18T10:00:00Z", duration_ms: 1200, commits: 3 }
+          nodes:
+            - type: step
+              status: completed
+              duration_ms: 800
+              children:
+                - { type: task, status: completed, duration_ms: 300, children: [] }
       output:
         shape: schema
         schema:

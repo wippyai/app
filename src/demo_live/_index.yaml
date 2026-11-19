@@ -268,3 +268,17 @@ entries:
       resources: demo.live:service
       actions: demo.live.admin
       effect: deny
+
+  # The right of regular users to view the live page (RC1-08). It starts as allow. The endpoint withdraw
+  # changes its effect to deny and back at run time; an entry that exists from the start is the one that the
+  # policy engine is known to pick up when it changes (the access tests of app.dashboards_fixtures do the same).
+  - name: withdraw_view
+    kind: security.policy
+    meta:
+      comment: Lets app.security:user view the page live_demo; a test changes the effect to deny at run time
+    groups:
+      - app.security:user
+    policy:
+      resources: page:wippy.dashboards.pages:live_demo
+      actions: view
+      effect: allow

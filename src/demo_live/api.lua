@@ -2,7 +2,7 @@
 --   POST /api/v1/demo/live/push-me          { value }   pushes my_load to the calling user only
 --   POST /api/v1/demo/live/signal           { }         a signal to the viewers of queue_length (admin)
 --   POST /api/v1/demo/live/restart-service  { }         ends the subscription service, so the app restarts it (admin)
---   POST /api/v1/demo/live/withdraw         { on }      takes the right to view the live page from regular users, or gives it back (admin)
+--   POST /api/v1/demo/live/withdraw         { on }      sets the effect of the policy withdraw_view to deny or allow (admin)
 local http = require("http")
 local json = require("json")
 local security = require("security")
@@ -85,7 +85,8 @@ local function restart_service()
     reply(res, http.STATUS.OK, { terminated = true })
 end
 
--- Regular users lose the right to view the live page while the policy entry exists.
+-- Regular users lose the right to view the live page while the policy withdraw_view has the effect deny.
+-- The entry exists from the start with the effect allow, and this endpoint updates its effect.
 local function withdraw()
     local req, res = http.request(), http.response()
     res:set_content_type(http.CONTENT.JSON)
@@ -93,10 +94,26 @@ local function withdraw()
         return
     end
     local on = body_table(req).on == true
-    local exists = registry.get(WITHDRAW_ID) ~= nil
-    if on == exists then
+    local entry = registry.get(WITHDRAW_ID)
+    if not entry then
+        return reply(res, http.STATUS.NOT_FOUND, { error = { code = "registry", message = "the policy " .. WITHDRAW_ID .. " is missing" } })
+    end
+    local effect = on and "deny" or "allow"
+    local data = entry.data or {}
+    if data.policy and data.policy.effect == effect then
         return reply(res, http.STATUS.OK, { withdrawn = on })
     end
+    local policy = {}
+    for k, v in pairs(data.policy or {}) do
+        policy[k] = v
+    end
+    policy.effect = effect
+    local new_data = {}
+    for k, v in pairs(data) do
+        new_data[k] = v
+    end
+    new_data.policy = policy
+
     local snap, serr = registry.snapshot()
     if serr then
         return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(serr) } })
@@ -105,34 +122,18 @@ local function withdraw()
     if cerr then
         return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(cerr) } })
     end
-    if on then
-        local _, err = changes:create({
-            id = WITHDRAW_ID,
-            kind = "security.policy",
-            meta = { comment = "Runtime policy of the live demo: regular users may not view the live page" },
-            data = {
-                groups = { "app.security:user" },
-                policy = { resources = "page:wippy.dashboards.pages:live_demo", actions = "view", effect = "deny" },
-            },
-        })
-        if err then
-            return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(err) } })
-        end
-    else
-        -- delete returns the changeset, which is not an error; only the second value is.
-        local _, err = changes:delete(WITHDRAW_ID)
-        if err then
-            return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(err) } })
-        end
+    local _, uerr = changes:update({ id = WITHDRAW_ID, kind = entry.kind, meta = entry.meta, data = new_data })
+    if uerr then
+        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(uerr) } })
     end
     local _, aerr = changes:apply()
     if aerr then
         return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(aerr) } })
     end
     -- Check what the registry holds now, so a change that did not happen is an error.
-    local now_exists = registry.get(WITHDRAW_ID) ~= nil
-    if now_exists ~= on then
-        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = "the policy entry did not change" } })
+    local now = registry.get(WITHDRAW_ID)
+    if not now or not now.data or not now.data.policy or now.data.policy.effect ~= effect then
+        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = "the policy effect did not change" } })
     end
     reply(res, http.STATUS.OK, { withdrawn = on })
 end

@@ -34,9 +34,16 @@ entries:
     meta:
       type: wippy.dashboards.point
       title: Users
+      description: The users of the app with their status and groups. Use it for a team overview.
       func: demo.user_status:list_users
       live_read: true
       args_schema: { type: object, additionalProperties: false, properties: {} }
+      example:
+        args: {}
+        data:
+          users:
+            - { user_id: "u1", name: "Ada Lovelace", status: active, groups: [admin] }
+            - { user_id: "u2", name: "Linus Torvalds", status: inactive, groups: [user] }
       output:
         shape: schema
         schema:
@@ -202,6 +209,7 @@ entries:
     meta:
       type: wippy.dashboards.action
       title: Set user status
+      description: Sets the status of one user to active or inactive. An admin only; the caller's own account is refused.
       func: demo.user_status:set_user_status
       args_schema:
         type: object
