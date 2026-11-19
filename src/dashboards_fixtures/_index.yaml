@@ -4,8 +4,8 @@ namespace: app.dashboards_fixtures
 # Fixtures of the wippy/dashboards browser tests (e2e/dashboards-reads.spec.ts, e2e/dashboards.spec.ts):
 # points for each row of the state table of the data point contract (ready, empty, failed,
 # wrong data, slow, timeout, mapper failure), for the value rules (decimals, big integers, time
-# offsets, empty cells in each type, malformed values), a slow action, the placeholder tiles (the
-# dash-placeholder element ships in the module's dashboard-layout bundle), and policies for the
+# offsets, empty cells in each type, malformed values), a slow action, the placeholder tiles (now in app.dashboards_fixture_tiles; the
+# module no longer ships the dash-placeholder element), and policies for the
 # access checks. Every point and tile here sets catalog: false, so the dashboards agent never
 # offers them. The point no_schema is invalid on purpose: publication must refuse it.
 
@@ -718,80 +718,3 @@ entries:
       sensitive_fields: []
       refreshes:
         - numbers
-
-  # ── tile descriptors (contracts section 5.3) ─────────────────────────
-  - name: placeholder
-    kind: registry.entry
-    meta:
-      type: wippy.dashboards.tile
-      catalog: false
-      tile_type: placeholder
-      tag: dash-placeholder
-      inputs:
-        main:
-          shape: none
-      fields: []
-      options_schema:
-        type: object
-      events: {}
-      params: []
-      default_data: {}
-      default_actions: {}
-      min_size:
-        w: 160px
-        h: 96px
-      default_size:
-        w: 25%
-        h: 140px
-
-  # Variants for publication tests: a tile that needs a scalar, and a control.
-  - name: placeholder_scalar
-    kind: registry.entry
-    meta:
-      type: wippy.dashboards.tile
-      catalog: false
-      tile_type: placeholder.scalar
-      tag: dash-placeholder
-      inputs:
-        main:
-          shape: scalar
-      fields:
-        - value
-      options_schema:
-        type: object
-      events: {}
-      params: []
-      default_data: {}
-      default_actions: {}
-      min_size:
-        w: 160px
-        h: 96px
-      default_size:
-        w: 25%
-        h: 140px
-
-  - name: placeholder_select
-    kind: registry.entry
-    meta:
-      type: wippy.dashboards.tile
-      catalog: false
-      tile_type: placeholder.select
-      tag: dash-placeholder
-      inputs:
-        main:
-          shape: options
-      fields: []
-      options_schema:
-        type: object
-      events:
-        change:
-          type: object
-      params: []
-      default_data: {}
-      default_actions: {}
-      min_size:
-        w: 160px
-        h: 96px
-      default_size:
-        w: 25%
-        h: 140px

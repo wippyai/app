@@ -764,4 +764,55 @@ test.describe('stage B: page host and dashboard-layout', () => {
     console.log('bundles', JSON.stringify([...bundles]))
     expect(bundles.size).toBe(1)
   })
+
+  /**
+   * RC1-16, the retained instance. The Wippy docs name no keep-alive setting for a page, so this test finds out what
+   * the Host does and holds it to one rule: when page A is shown again, it is page A with the argument it had.
+   * If the Host kept A alive, it is the same instance too (same frame element, same board element, same typed
+   * text). If the Host mounted A again, the new instance starts clean. The test says which of the two it saw.
+   */
+  test('a page that is shown again is the same page with the same argument (retained or mounted again)', async ({ page }) => {
+    const A = 'iframe[name="wippy:page:wippy.dashboards.pages:coord_ph_one"]'
+    await openInShell(page, '/coord/ph-one/claude-haiku-4-5')
+    const one = pageFrame(page, 'coord_ph_one')
+    await expect(one.locator('[data-tile-id="t1"]')).toBeVisible({ timeout: 20_000 })
+    await expect(one.locator('dashboard-layout')).toHaveAttribute('sub-path', '/claude-haiku-4-5')
+    // Marks on the frame element, on the board and in the page's own window, and a typed text in a tile.
+    await page.locator(A).evaluate((el: any) => { el.__probe = 'frame' })
+    await one.locator('dashboard-layout').evaluate((el: any) => { el.__probe = 'board'; el.ownerDocument.defaultView.__probe = 'window' })
+    await one.locator('dash-placeholder[tile-id="t2"] input').fill('keep me')
+
+    // Page B takes the place of A.
+    await openInShell(page, '/coord/ph-two')
+    const two = pageFrame(page, 'coord_ph_two')
+    await expect(two.locator('[data-tile-id="x1"]')).toBeVisible({ timeout: 20_000 })
+    const keptWhileAway = await page.locator(A).count()
+
+    // Back to A: the route carries the argument.
+    await page.goBack()
+    await expect(page).toHaveURL(/\/coord\/ph-one\/claude-haiku-4-5$/)
+    await expect(one.locator('dashboard-layout')).toHaveAttribute('sub-path', '/claude-haiku-4-5', { timeout: 20_000 })
+    await expect(one.locator('[data-tile-id="t1"]')).toBeVisible()
+    await expect(one.locator('[data-tile-id="x1"]')).toHaveCount(0)
+    await expect(two.locator('[data-tile-id="t1"]')).toHaveCount(0)
+    await expect(page.locator(A)).toHaveCount(1)
+
+    const frameProbe = await page.locator(A).evaluate((el: any) => el.__probe ?? null)
+    const boardProbe = await one.locator('dashboard-layout').evaluate((el: any) => el.__probe ?? null)
+    const windowProbe = await one.locator('dashboard-layout').evaluate((el: any) => el.ownerDocument.defaultView.__probe ?? null)
+    const typed = await one.locator('dash-placeholder[tile-id="t2"] input').inputValue()
+    const retained = frameProbe === 'frame'
+    const verdict = retained ? 'retained: the Host kept the page instance' : 'mounted again: the Host built a new instance'
+    console.log('RC1-16', JSON.stringify({ keptWhileAway, frameProbe, boardProbe, windowProbe, typed, verdict }))
+    test.info().annotations.push({ type: 'host-page-retention', description: verdict })
+
+    if (retained) {
+      // One instance, all the way: frame, board, window and the typed text survive.
+      expect({ boardProbe, windowProbe, typed }).toEqual({ boardProbe: 'board', windowProbe: 'window', typed: 'keep me' })
+    }
+    else {
+      // A new instance: nothing of the old one is left, and the page is still the right one.
+      expect({ boardProbe, windowProbe, typed }).toEqual({ boardProbe: null, windowProbe: null, typed: '' })
+    }
+  })
 })

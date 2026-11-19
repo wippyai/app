@@ -19,6 +19,7 @@ export default defineConfig({
         'fx-size': resolve(__dirname, 'src/fx-size.ts'),
         'fx-onload': resolve(__dirname, 'src/fx-onload.ts'),
         'fx-api': resolve(__dirname, 'src/fx-api.ts'),
+        'dash-placeholder': resolve(__dirname, 'src/dash-placeholder.ts'),
       },
       name: 'FixtureTiles',
       fileName: (_format, entryName) => `${entryName}.js`,
