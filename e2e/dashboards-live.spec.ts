@@ -337,6 +337,10 @@ test.describe('streams and signals', () => {
     try {
       const withdrawn = await api(admin, 'POST', '/api/v1/demo/live/withdraw', { on: true })
       expect(withdrawn.status, withdrawn.body).toBe(200)
+      expect(JSON.parse(withdrawn.body)).toEqual({ withdrawn: true })
+      // The policy change applies to the viewer's next read: a direct read is refused at once.
+      const direct = await api(viewer, 'GET', `/api/v1/dashboards/pages/${PAGE}/points/queue?args=${encodeURIComponent('{"queue":"mail"}')}`)
+      expect(direct.status, direct.body).toBe(403)
       // The tile renews every 30 seconds: the renewal is refused, the data goes, the denied state shows.
       await expect(q).toHaveCount(0, { timeout: 60_000 })
       await expect(vf.locator('[data-tile-id="q"]')).toContainText(/access denied/i)
@@ -349,9 +353,13 @@ test.describe('streams and signals', () => {
       expect(late).toHaveLength(0)
     }
     finally {
-      await api(admin, 'POST', '/api/v1/demo/live/withdraw', { on: false })
+      const restored = await api(admin, 'POST', '/api/v1/demo/live/withdraw', { on: false })
+      expect(restored.status, restored.body).toBe(200)
+      expect(JSON.parse(restored.body)).toEqual({ withdrawn: false })
     }
-    // With access back, the tile subscribes again by itself after the usual wait.
+    // The right is back at the next read, and the tile subscribes again by itself after the usual wait.
+    const again = await api(viewer, 'GET', `/api/v1/dashboards/pages/${PAGE}/points/queue?args=${encodeURIComponent('{"queue":"mail"}')}`)
+    expect(again.status, again.body).toBe(200)
     await expect(q).toBeVisible({ timeout: 60_000 })
   })
 

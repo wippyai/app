@@ -119,7 +119,8 @@ local function withdraw()
             return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(err) } })
         end
     else
-        local err = changes:delete(WITHDRAW_ID)
+        -- delete returns the changeset, which is not an error; only the second value is.
+        local _, err = changes:delete(WITHDRAW_ID)
         if err then
             return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(err) } })
         end
@@ -127,6 +128,11 @@ local function withdraw()
     local _, aerr = changes:apply()
     if aerr then
         return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = tostring(aerr) } })
+    end
+    -- Check what the registry holds now, so a change that did not happen is an error.
+    local now_exists = registry.get(WITHDRAW_ID) ~= nil
+    if now_exists ~= on then
+        return reply(res, http.STATUS.INTERNAL_ERROR, { error = { code = "registry", message = "the policy entry did not change" } })
     end
     reply(res, http.STATUS.OK, { withdrawn = on })
 end
