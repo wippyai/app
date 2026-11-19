@@ -252,10 +252,39 @@ local function source_rows()
     return { { a = 1 } }
 end
 
+-- Refuses the viewer with a structured error; its text must never reach the viewer.
+local function refuse()
+    ran("refuse")
+    return nil, errors.new({
+        kind = errors.PERMISSION_DENIED,
+        message = "SECRET refusal text",
+        details = { code = "denied" },
+    })
+end
+
+-- The fixture mapper (mapper contract section 3): params.mode ok gives the example output, fail
+-- fails, block takes 3 seconds (longer than the deadline of blocked_mapper).
+local function mapper_modes(input)
+    local params = type(input) == "table" and type(input.params) == "table" and input.params or {}
+    if params.mode == "fail" then
+        ran("mapper_fail")
+        return nil, "the mapper failed on purpose"
+    end
+    if params.mode == "block" then
+        ran("mapper_block")
+        time.sleep("3s")
+    end
+    return {
+        schema = FRAME,
+        fields = { { name = "value", type = "number", role = "measure", nullable = false } },
+        rows = { { 1 } },
+    }
+end
+
 return {
     numbers = numbers, series = series, options = options, noop = noop,
     fails = fails, wrong_shape = wrong_shape, bad_cell = bad_cell, empty_series = empty_series,
     echo = echo, sleepy = sleepy, slow = slow, slow_action = slow_action,
     values = values, null_strict = null_strict, record_nulls = record_nulls, schema_nulls = schema_nulls,
-    source_rows = source_rows,
+    source_rows = source_rows, refuse = refuse, mapper_modes = mapper_modes,
 }

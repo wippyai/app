@@ -291,6 +291,32 @@ entries:
     pool:
       size: 1
 
+  - name: refuse_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: refuse
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 1
+
+  - name: mapper_modes_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: mapper_modes
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 1
+
   # ── point declarations (data point contract section 2) ───────────────
   - name: numbers
     kind: registry.entry
@@ -562,11 +588,11 @@ entries:
     meta:
       type: wippy.dashboards.point
       catalog: false
-      title: Fixture mapper that is gone
-      description: "A point whose mapper does not exist: the read answers mapping_failed."
+      title: Fixture mapper that fails
+      description: "A point whose mapper fails: the read answers mapping_failed."
       source: app.dashboards_fixtures:source_rows_fn
-      mapper: app.dashboards_fixtures:no_such_mapper
-      mapper_params: {}
+      mapper: app.dashboards_fixtures:mapper_fixture
+      mapper_params: { mode: fail }
       args_schema: { type: object, additionalProperties: false, properties: {} }
       output:
         shape: scalar
@@ -575,6 +601,65 @@ entries:
       example:
         args: {}
         data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
+
+  - name: blocked_mapper
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture mapper that blocks
+      description: "A point whose mapper takes 3 seconds but may take 1 second: the read answers timeout."
+      source: app.dashboards_fixtures:source_rows_fn
+      mapper: app.dashboards_fixtures:mapper_fixture
+      mapper_params: { mode: block }
+      deadline_ms: 1000
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
+
+  - name: refuse
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture refusal
+      description: "Its function refuses the viewer: the read answers denied with 403 and shows no text."
+      func: app.dashboards_fixtures:refuse_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
+
+  - name: mapper_fixture
+    kind: registry.entry
+    meta:
+      type: wippy.data.mapper
+      implements: wippy.data:mapper_v1
+      catalog: false
+      title: Fixture mapper
+      description: "Turns any rows into the number 1. The parameter mode makes it fail or block, for the read tests."
+      func: app.dashboards_fixtures:mapper_modes_fn
+      input_schema: { type: array, items: { type: object } }
+      params_schema:
+        type: object
+        additionalProperties: false
+        properties:
+          mode: { type: string, enum: [ok, fail, block] }
+      output: { format: wippy.dashboard_frame/v1 }
+      examples:
+        - params: { mode: ok }
+          context: { time_zone: UTC }
+          input: [{ a: 1 }]
+          output: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
 
   # G2: a point declaration with no args_schema. Publication must refuse it (invalid on purpose).
   - name: no_schema

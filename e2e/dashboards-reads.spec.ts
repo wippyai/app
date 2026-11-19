@@ -63,6 +63,8 @@ const SPECS: Record<string, unknown> = {
       slow: point('slow'),
       nullstrict: point('null_strict'),
       mapper: point('bad_mapper'),
+      blockedmapper: point('blocked_mapper'),
+      refuse: point('refuse'),
       echo: point('echo', { model: param('model'), limit: 5 }),
     },
     tiles: {
@@ -96,13 +98,19 @@ const SPECS: Record<string, unknown> = {
     tiles: { ok_kpi: { type: 'kpi', data: { main: 'ok' }, fields: { value: 'value' } } },
   }, ['ok_kpi']),
   reads_toggle: pageSpec('reads_toggle', '/reads/toggle', {
-    data: { ok: point('numbers'), slow: point('slow') },
+    data: {
+      ok: point('numbers'),
+      slow: point('slow'),
+      // The users point of the demo has a live signal (dash.users.changed), which the signal test sends.
+      users: { kind: 'function', ref: 'demo.user_status:users' },
+    },
     actions: { slow: point('slow_action') },
     tiles: {
       ok_kpi: { type: 'kpi', data: { main: 'ok' }, fields: { value: 'value' }, options: { label: 'Fixed number' } },
       slow_kpi: { type: 'kpi', data: { main: 'slow' }, fields: { value: 'value' }, options: { label: 'Slow number' } },
+      users_tile: { type: 'demo.user_status', data: { main: 'users' } },
     },
-  }, ['ok_kpi', 'slow_kpi']),
+  }, ['ok_kpi', 'slow_kpi', 'users_tile']),
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -358,6 +366,23 @@ test.describe('errors and slow data show the right state (RC1-05)', () => {
     expect(fixed.body.data.limit).toBe(5)
   })
 
+  test('a mapper that blocks ends at its deadline, and a function that refuses the viewer answers denied', async ({ browser }) => {
+    const admin = await signedIn(browser, 'admin', 'admin')
+    expectFailures(admin, { status: 403, path: '/api/v1/dashboards/pages/reads_states/points/refuse' })
+    const started = Date.now()
+    const blocked = await read(admin, 'reads_states', 'blockedmapper')
+    expect(blocked.status).toBe(200)
+    expect(blocked.body.state).toBe('failed')
+    expect(blocked.body.error.code).toBe('timeout')
+    expect(Date.now() - started).toBeLessThan(2900)
+
+    const refused = await read(admin, 'reads_states', 'refuse')
+    expect(refused.status).toBe(403)
+    expect(refused.body.state).toBe('denied')
+    expect(refused.body.data).toBeUndefined()
+    expect(refused.raw).not.toContain('SECRET')
+  })
+
   test('a read that takes longer than its deadline answers timeout', async ({ browser }) => {
     const admin = await signedIn(browser, 'admin', 'admin')
     const started = Date.now()
@@ -534,6 +559,34 @@ test.describe('withdrawn access is refused on every read path (RC1-08)', () => {
 
     // access is back: the same operation continues to its result
     await expect.poll(async () => (await read(viewer, 'reads_toggle', 'slow', {}, token)).body.state, { timeout: 20_000 }).toBe('ready')
+  })
+
+  test('the read that a live signal triggers is refused after the withdrawal', async ({ browser }) => {
+    const admin = await signedIn(browser, 'admin', 'admin')
+    const viewer = await signedIn(browser, 'viewer', 'viewer')
+    expectFailures(viewer, { status: 403, path: '/api/v1/dashboards/pages/reads_toggle/points/users' })
+    await viewer.setViewportSize({ width: 1920, height: 1000 })
+    await openInShell(viewer, '/reads/toggle')
+    const rows = pageFrame(viewer, 'reads_toggle').locator('[data-tile-id="users_tile"] tr[data-user-id]')
+    await expect(rows.first()).toBeVisible({ timeout: 20_000 })
+
+    // From here on, record every answer to a read of the users point that the open page sends.
+    const answers: number[] = []
+    viewer.on('response', (r) => {
+      if (r.url().includes('/pages/reads_toggle/points/users'))
+        answers.push(r.status())
+    })
+    await setAccess(admin, false)
+    try {
+      // The signal carries no data: the page reads the point again, as the viewer, and is refused.
+      const sent = await call(admin, 'POST', '/api/v1/demo/signal/users', {})
+      expect(sent.status, sent.raw).toBe(200)
+      await expect.poll(() => answers, { timeout: 15_000 }).toContain(403)
+      expect(answers.filter(status => status === 200)).toEqual([])
+    }
+    finally {
+      await setAccess(admin, true)
+    }
   })
 
   test('an open page is refused on reload after the withdrawal', async ({ browser }) => {
