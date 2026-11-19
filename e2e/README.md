@@ -295,7 +295,7 @@ pnpm test:e2e:headed
   the Other text of a form, where the text and tool call stay, the error follows
   and the card reads interrupted, and `artifact and ask`, where the note shows
   once before and after the answer. The 25 second `slow tool` phrase has no
-  test. Six more tests cover the standard fields on the `ask me delivery` and
+  test. Eight more tests cover the standard fields on the `ask me delivery` and
   `ask me preferences` forms, which the fixture asks through `ask_user_fields`.
   They check browser-side checks, the server's `pattern_mismatch` refusal,
   typed and picked dates, unticked checkboxes, and the exact saved values after
@@ -304,9 +304,9 @@ pnpm test:e2e:headed
   (one more character refused, the cap accepted and stored in full), an optional
   email and date left blank and stored as unanswered, and a send held for 3
   seconds (the Submit button reads "Sending…" with a spinner, keeps focus and is
-  not `disabled`, and the status region says "Sending your answers."). They read
-  the stored values through the messages API. One test uses the steering fixture agent, which has only
-  `ask_user`, and checks that the server refuses a form with standard fields on
+  not `disabled`, and the status region says "Sending your answer…"). They read
+  the stored values through the messages API. One test uses the steering
+  fixture agent, which has only `ask_user`, and checks that the server refuses a form with standard fields on
   `ask_user` with `unsupported_type` and that the agent gets the refusal. Most
   tests fail on a console error. Every test in the file is skipped unless
   `SESSION_FORMS_DEV_FIXTURES=true` is set in the environment or `.env` of the

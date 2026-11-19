@@ -914,7 +914,7 @@ test.describe('Session Forms V2 limits', () => {
     await expect(status).toHaveText('')
 
     // The status region speaks only once the send has run for 2 seconds.
-    await expect(status).toHaveText('Sending your answers.', { timeout: 2_900 })
+    await expect(status).toHaveText('Sending your answer…', { timeout: 2_900 })
     await expect(sending).toBeFocused()
     await expect(sending).not.toHaveAttribute('disabled')
 

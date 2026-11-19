@@ -2118,7 +2118,6 @@ export async function terminalResultsForAction(page: Page, actionId: string): Pr
   ))
 }
 
-
 export async function waitForPersistedMessage(
   page: Page,
   sessionId: string,

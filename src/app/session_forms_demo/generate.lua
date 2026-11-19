@@ -555,7 +555,7 @@ end
 -- a list as its items joined by ", ".
 local function value_text(value: any): string
     local kind = type(value)
-    if kind == "string" then return tostring(value) end
+    if kind == "string" then return value end
     if kind == "boolean" then return value and "yes" or "no" end
     if kind == "number" then
         if value == math.floor(value) and math.abs(value) < 1e15 then
