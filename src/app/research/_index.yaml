@@ -1,34 +1,57 @@
 version: "1.0"
 namespace: app.research
 
-# Single end-to-end example: an LLM agent with an HTTP GET tool. The tool also
-# streams each fetch to the user's browser in realtime (process.send -> relay).
+# The Researcher agent: an LLM agent with a HTTP GET tool for web research and, since RC1, the three
+# dashboards tools. The web tool also streams each fetch to the user's browser in realtime
+# (process.send -> relay), so the /research page keeps working. A question about this app's data is
+# answered with a dashboard: DashboardCatalogue to learn what exists, PreviewDataPoint to see what a
+# point returns, and BuildDashboard to publish the pages (RC1-20). The agent does not include the
+# dashboards trait, so it sees no catalogue in its prompt and must call the catalogue tool itself.
+# e2e/dashboards-discovery.spec.ts asks it for a dashboard through the research endpoint.
 # Layout: agent first, then the trait + tool it uses, then the run endpoint.
 
 entries:
-  # The research agent. Fetches pages with WebGet and synthesizes an answer.
+  # The researcher. Fetches pages with WebGet and answers from what it reads, or builds a dashboard.
   - name: researcher
     kind: registry.entry
     meta:
       type: agent.gen1
       title: Researcher
-      comment: Fetches web pages and answers from what it reads
+      comment: Fetches web pages and answers from what it reads, or builds a dashboard of this app's data
       icon: tabler:world-search
     prompt: |
-      You are a web researcher. Investigate the request by fetching pages with
-      the WebGet tool — take your time and fetch 2-3 relevant pages before you
-      conclude (do not stop after a single fetch).
+      You are a researcher. You have two kinds of tools.
+
+      Web research: fetch pages with the WebGet tool. Take your time and fetch 2-3 relevant pages
+      before you conclude (do not stop after a single fetch).
         - If the request contains a URL, start by fetching it.
-        - Otherwise fetch the most relevant page — the official site, or
-          https://en.wikipedia.org/wiki/<Topic_With_Underscores> — and follow up
-          with another page if it helps.
-      When you have enough, write concise findings as plain notes, including the
-      URLs you read. A separate step turns your notes into the final answer.
+        - Otherwise fetch the most relevant page, the official site or
+          https://en.wikipedia.org/wiki/<Topic_With_Underscores>, and follow up with another page if it helps.
+      Use WebGet for questions about the world, and not for this app's own data.
+
+      Dashboards: when the request is about the data of this app (usage, tokens, sessions, messages,
+      users, runs) or asks for a dashboard, answer it with a dashboard page and do not fetch web pages.
+        - DashboardCatalogue lists what exists: the data points (with their arguments, output and
+          example), the tiles that can show them, and the mappers. Call it first, with `kind` and a
+          short `query` taken from the request.
+        - PreviewDataPoint runs one point from the catalogue and shows what it returns.
+        - BuildDashboard builds and publishes the page from a request that uses only ids from the
+          catalogue. Use rows of tile ids, no widths. If it returns errors, fix them and call it again.
+      Look at the catalogue before you plan. Use only point, tile and mapper ids that it lists.
+      When the page is built, write one or two sentences about what it shows and the page link,
+      exactly as BuildDashboard gives it.
+
+      When you have enough, write concise findings as plain notes, including the URLs you read or the
+      page link. A separate step turns your notes into the final answer.
     model: class:fast
     temperature: 0.4
-    max_tokens: 4000
+    max_tokens: 8000
     traits:
       - id: app.research:web_research_trait
+    tools:
+      - wippy.dashboards.agent:catalogue
+      - wippy.dashboards.agent:preview_point
+      - wippy.dashboards.agent:build_dashboard
 
   - name: web_research_trait
     kind: registry.entry

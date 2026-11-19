@@ -158,3 +158,22 @@ test('a viewer without publish rights gets no page', async ({ page }) => {
   await page.waitForTimeout(1500)
   await shot(page, 'demo-3-viewer-refused')
 })
+
+test('a title that a page already uses is refused, and the agent asks the user', async ({ page }) => {
+  test.setTimeout(240_000)
+  test.skip(!builtId, 'needs the page that the first test built')
+  await page.setViewportSize({ width: 1400, height: 900 })
+  await loginAsAdmin(page)
+  const idsBefore = await listedIds(page)
+  await openChat(page)
+  const before = await page.locator(PAGE_LINK).count()
+  await send(page, `Build me a dashboard with the number of chat sessions. Title the page "${RUN_TITLE}".`)
+
+  // A build never replaces a page (RC1 decision B): the tool answers page_exists and the agent asks.
+  const reply = page.getByText(/already (exists|uses|taken)|another title|different title|new title|replace|what (would you like|do you want)/i)
+  await expect(reply.last()).toBeVisible({ timeout: 180_000 })
+  expect(await page.locator(PAGE_LINK).count()).toBe(before)
+  // And nothing changed: the page list is the same as before the request.
+  expect(await listedIds(page)).toEqual(idsBefore)
+  await shot(page, 'demo-4-title-taken')
+})
