@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { collectConsoleErrors } from './helpers/console'
 import { loginAsAdmin, pageIframeSelector } from './helpers/login'
+import { sessionMessages } from './helpers/session-messages'
 
 /**
  * Session Forms end-to-end checks. They drive the scripted fixture agent
@@ -696,26 +697,11 @@ const LIMITS_ANSWERED_MESSAGE = 'Sent my limits.'
 const TEXT_CAP = 2000
 const TEXTAREA_CAP = 8000
 
-/** The stored messages of the chat the page shows, read through the messages API. */
-async function storedMessages(page: Page): Promise<Array<{ type: string, data: string }>> {
+/** The stored messages of the chat the page shows. */
+function storedMessages(page: Page) {
   const sessionId = new URL(page.url()).pathname.match(/\/chat\/([^/?#]+)/)?.[1]
   expect(sessionId, `chat id in ${page.url()}`).toBeTruthy()
-  const token = await page.evaluate(() => {
-    try {
-      return JSON.parse(localStorage.getItem('@wippy_token_info') ?? 'null')?.token as string | undefined
-    }
-    catch {
-      return undefined
-    }
-  })
-  expect(token, 'signed-in token in localStorage').toBeTruthy()
-  const response = await page.request.get('/api/v1/sessions/messages', {
-    headers: { Authorization: `Bearer ${token}` },
-    params: { cursor: '', limit: 100, session_id: sessionId! },
-  })
-  expect(response.status()).toBe(200)
-  const body = await response.json() as { messages?: Array<{ type: string, data: string }> }
-  return body.messages ?? []
+  return sessionMessages(page, sessionId!)
 }
 
 /** Waits until the stored replies hold exactly one acknowledgement and returns it. */
