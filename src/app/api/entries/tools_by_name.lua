@@ -2,13 +2,6 @@ local http = require("http")
 local registry = require("registry")
 local tools = require("tools")
 
-local function split_string(str: string, sep: string): {string}
-    local fields: {string} = {}
-    local pattern = string.format("([^%s]+)", sep)
-    str:gsub(pattern, function(c) fields[#fields + 1] = c end)
-    return fields
-end
-
 local function handler()
     local res = http.response()
     local req = http.request()
@@ -55,7 +48,7 @@ local function handler()
 
     -- Unknown names are left out. The Web Host then shows the raw name.
     local result = {}
-    for _, name in ipairs(split_string(tools_param, ",")) do
+    for name in string.gmatch(tools_param, "[^,]+") do
         if by_name[name] then
             result[name] = by_name[name]
         end
