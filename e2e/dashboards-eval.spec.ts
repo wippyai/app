@@ -6,15 +6,22 @@ import type { CatalogueDoc, Envelope, PageProps } from './dashboards-agent.suppo
 import {
   PAGE_LINK,
   SPEND_CAP_USD,
+  SpendCapReached,
+  assertBudget,
+  boardFrame,
   catalogue,
   fixedArgs,
   frameStatuses,
   listedIds,
   openChat,
   pageIdOf,
+  numberPattern,
   pageProps,
   readPoint,
   removePage,
+  renderedChart,
+  renderedTable,
+  renderedText,
   send,
   spendStart,
   spentUsd,
@@ -336,6 +343,56 @@ async function checkFilterRereads(page: Page, pageId: string, props: PageProps, 
   }
 }
 
+/** The index of a field in a frame, or -1. */
+function fieldIndex(frame: { fields: Array<{ name: string }> }, name: string | undefined): number {
+  return name === undefined ? -1 : frame.fields.findIndex(f => f.name === name)
+}
+
+/**
+ * Compares what the board drew for a tile with the direct read of its point. Returns what differs, or
+ * null. A kpi must draw its number, a chart must plot the numbers of its y fields and label the values
+ * of its x field, a table must draw one row for each row of the data, and a text tile must draw its text.
+ * Plugin tiles draw their own markup, and the API read stands for them.
+ */
+async function renderedProblem(page: Page, pageId: string, read: TileRead, direct: Envelope): Promise<string | null> {
+  const data = direct.data
+  if (!data || !Array.isArray(data.rows))
+    return data && typeof data.text === 'string' && read.tile.tile === 'text'
+      ? ((await renderedText(await boardFrame(page, pageId), read.id)).includes(data.text) ? null : `the text tile does not draw "${data.text}"`)
+      : null
+  const board = await boardFrame(page, pageId)
+  const type = read.tile.tile
+  const slot = (name: string): string[] => [read.tile.fields[name] ?? []].flat()
+  if (type === 'kpi') {
+    const col = fieldIndex(data, slot('value')[0])
+    const value = col >= 0 ? data.rows[0]?.[col] : undefined
+    if (value === undefined || value === null)
+      return null
+    const text = await renderedText(board, read.id)
+    return numberPattern(value).test(text) ? null : `the number tile draws "${text.slice(0, 60)}", not ${value}`
+  }
+  if (type === 'chart') {
+    const chart = await renderedChart(board, read.id)
+    if (!chart)
+      return 'the chart tile drew no data'
+    const numbers = (list: unknown[]) => list.filter(v => v !== null && v !== undefined).map(Number).sort((a, b) => a - b)
+    const wanted = numbers(slot('y').flatMap(name => data.rows.map((r: unknown[]) => r[fieldIndex(data, name)])))
+    const drawn = numbers(chart.datasets.flatMap(d => d.data))
+    if (JSON.stringify(wanted) !== JSON.stringify(drawn))
+      return `the chart plots ${JSON.stringify(drawn).slice(0, 120)}, the data has ${JSON.stringify(wanted).slice(0, 120)}`
+    const x = fieldIndex(data, slot('x')[0])
+    const labels = [...new Set(data.rows.map((r: unknown[]) => String(r[x])))].sort()
+    if (x >= 0 && JSON.stringify([...new Set(chart.labels)].sort()) !== JSON.stringify(labels))
+      return 'the chart labels differ from the values of its x field'
+    return null
+  }
+  if (type === 'table') {
+    const rows = await renderedTable(board, read.id)
+    return rows.length === data.rows.length ? null : `the table draws ${rows.length} rows, the data has ${data.rows.length}`
+  }
+  return null
+}
+
 interface RunResult { request: number, run: number, pass: boolean, skipped: boolean, reasons: string[] }
 const results: RunResult[] = []
 
@@ -349,14 +406,19 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
   const naming = titles.length === 1
     ? ` Title the page "${titles[0]}".`
     : ` Title the pages ${titles.map(t => `"${t}"`).join(', ')}, in that order.`
+  // The cap is checked before each model request: this chat turn. The agent makes several model calls
+  // inside the turn, so the check goes on while the turn runs, and the run is abandoned at the cap.
+  await assertBudget(page)
   await send(page, req.text + naming + (req.consent ? CONSENT : ''))
 
   // Every page it asked for: one link for each, in the reply.
   const links = page.locator(PAGE_LINK)
-  try {
-    await expect.poll(() => links.count(), { timeout: 180_000, intervals: [2000] }).toBeGreaterThanOrEqual(before + titles.length)
+  const deadline = Date.now() + 180_000
+  while ((await links.count()) < before + titles.length && Date.now() < deadline) {
+    await assertBudget(page, 0)
+    await page.waitForTimeout(3000)
   }
-  catch {
+  if ((await links.count()) < before + titles.length) {
     reasons.push(`expected ${titles.length} page link(s) in the reply, got ${(await links.count()) - before}`)
     return
   }
@@ -437,6 +499,17 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
       }
       if (JSON.stringify(direct.data) !== JSON.stringify(mine.data))
         reasons.push(`${label}: the tile's data differs from a direct read of the point`)
+
+      // What the board draws equals the direct read: the numbers of a chart, the cells of a table, the
+      // value of a number, the text of a note. The data is live, so a difference is checked once more.
+      let drawn = await renderedProblem(page, pageId, tile, direct)
+      if (drawn) {
+        await page.waitForTimeout(2000)
+        direct = await directRead(page, need.point, need.bound ? model : null)
+        drawn = await renderedProblem(page, pageId, tile, direct)
+      }
+      if (drawn)
+        reasons.push(`${label}: ${drawn}`)
     }
 
     if (req.n === 3)
@@ -451,18 +524,18 @@ for (const req of REQUESTS) {
       await page.setViewportSize({ width: 1400, height: 900 })
       await loginAsAdmin(page)
       spendStart()
-      const spent = await spentUsd(page)
-      if (spent >= SPEND_CAP_USD) {
-        console.log(`request ${req.n} run ${run} not run: the spend cap of $${SPEND_CAP_USD} is reached ($${spent.toFixed(2)})`)
-        results.push({ request: req.n, run, pass: false, skipped: true, reasons: ['spend cap reached'] })
-        return
-      }
       const reasons: string[] = []
       const stamp = `${Date.now().toString(36).slice(-5)}${req.n}${run}`
       try {
         await evaluateRun(page, req, run, stamp, reasons)
       }
       catch (e) {
+        if (e instanceof SpendCapReached) {
+          // The cap stops the run, and the runs after it: a run that did not complete does not pass.
+          console.log(`request ${req.n} run ${run} stopped: ${e.message} (cap $${SPEND_CAP_USD})`)
+          results.push({ request: req.n, run, pass: false, skipped: true, reasons: [e.message] })
+          return
+        }
         reasons.push(`error: ${String(e).slice(0, 400)}`)
       }
       results.push({ request: req.n, run, pass: reasons.length === 0, skipped: false, reasons })
