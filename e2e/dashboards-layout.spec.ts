@@ -278,7 +278,7 @@ test.describe('RC1-07: layouts follow the container', () => {
     }
   })
 
-  test('the frame geometry holds: a 12 px gap in a row, the same footer height with and without text, and width.max stops growth', async ({ page }) => {
+  test('the frame geometry holds: a 14 px gap in a row, the same footer height with and without text, and width.max stops growth', async ({ page }) => {
     await answerLayoutReads(page)
     await openInShell(page, LAYOUT_PAGE.route)
     const f = pageFrame(page, LAYOUT_PAGE.id)
@@ -287,18 +287,18 @@ test.describe('RC1-07: layouts follow the container', () => {
     await expect.poll(() => breakpoint(page, LAYOUT_PAGE.id)).toBe('xl')
     const k1 = await box(f, '[data-tile-id="k1"]')
     const k2 = await box(f, '[data-tile-id="k2"]')
-    // The margins of two frames in a row make the 12 px gap.
-    expect((k2?.x ?? 0) - ((k1?.x ?? 0) + (k1?.w ?? 0))).toBe(12)
-    // kpi: width.max is 480 px of content, so a frame is at most 480 + 14 px wide at the largest board width.
-    expect(k1?.w ?? 0).toBeLessThanOrEqual(480 + 14 - 12)
-    // k5 shares a row with a text tile and reaches its width.max: it stops at 480 + 14 (its slot) less the margins of 12 px,
+    // The 7 px margins of two frames in a row make the 14 px gap (tile contract 5.6: the Card frame has no border).
+    expect((k2?.x ?? 0) - ((k1?.x ?? 0) + (k1?.w ?? 0))).toBe(14)
+    // kpi: width.max is 480 px of content, so its slot is at most 480 + 14 px and its frame at most 480 px.
+    expect(k1?.w ?? 0).toBeLessThanOrEqual(480 + 14 - 14)
+    // k5 shares a row with a text tile and reaches its width.max: it stops at 480 + 14 (its slot) less the margins of 14 px,
     // and the text tile takes the rest of the row.
     const k5 = await box(f, '[data-tile-id="k5"]')
     const tx2 = await box(f, '[data-tile-id="tx2"]')
     const canvas = await box(f, '[data-board-canvas]')
-    expect(k5?.w, 'k5 stops at width.max').toBe(480 + 14 - 12)
+    expect(k5?.w, 'k5 stops at width.max').toBe(480 + 14 - 14)
     expect((tx2?.w ?? 0), 'the text tile is wider than the capped kpi').toBeGreaterThan((k5?.w ?? 0) * 1.5)
-    expect(Math.abs(((tx2?.x ?? 0) + (tx2?.w ?? 0) + 6) - ((canvas?.x ?? 0) + (canvas?.w ?? 0))), 'the text tile reaches the end of the row').toBeLessThanOrEqual(2)
+    expect(Math.abs(((tx2?.x ?? 0) + (tx2?.w ?? 0) + 7) - ((canvas?.x ?? 0) + (canvas?.w ?? 0))), 'the text tile reaches the end of the row').toBeLessThanOrEqual(2)
     // The footer is one line of the same height in every tile, with or without text.
     const heights = await f.locator('[data-frame-footer]').evaluateAll(els => els.map(el => Math.round(el.getBoundingClientRect().height)))
     expect(new Set(heights)).toEqual(new Set([24]))
