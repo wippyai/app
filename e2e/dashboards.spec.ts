@@ -358,7 +358,14 @@ test.describe('stage D: arguments and interaction', () => {
     const f = pageFrame(page, 'llm_usage')
     await expect(f.locator('[data-tile-id="tokens"]')).toContainText(usage.total, { timeout: 20_000 })
     await expect.poll(() => chartLabels(f, 'by_day'), { timeout: 10_000 }).toBe(usage.days.length)
-    await page.waitForTimeout(800)
+    // The first reads of every tile must have ended before the count starts: a late first read of the
+    // select's options would otherwise look like a read caused by the click.
+    let last = -1
+    await expect.poll(() => {
+      const settled = reads.length === last
+      last = reads.length
+      return settled
+    }, { intervals: [700], timeout: 15_000 }).toBe(true)
     const before = reads.length
 
     await clickCategoryBar(f, 'by_day', '2026-08-31')
@@ -828,8 +835,14 @@ test.describe('stage B: page host and dashboard-layout', () => {
     const boardProbe = await one.locator('dashboard-layout').evaluate((el: any) => el.__probe ?? null)
     const windowProbe = await one.locator('dashboard-layout').evaluate((el: any) => el.ownerDocument.defaultView.__probe ?? null)
     const typed = await one.locator('dash-placeholder[tile-id="t2"] input').inputValue()
-    const retained = frameProbe === 'frame'
-    const verdict = retained ? 'retained: the Host kept the page instance' : 'mounted again: the Host built a new instance'
+    // Retained means the page's own document survived. The Host may keep the iframe element and still
+    // load the page again inside it; that is a new instance in the same frame.
+    const retained = windowProbe === 'window'
+    const verdict = retained
+      ? 'retained: the Host kept the page instance'
+      : frameProbe === 'frame'
+        ? 'mounted again in the same frame element: the Host kept the iframe and loaded the page again'
+        : 'mounted again: the Host built a new frame and instance'
     console.log('RC1-16', JSON.stringify({ keptWhileAway, frameProbe, boardProbe, windowProbe, typed, verdict }))
     test.info().annotations.push({ type: 'host-page-retention', description: verdict })
 
