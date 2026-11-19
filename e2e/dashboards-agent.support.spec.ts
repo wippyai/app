@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { chartProblem, expectedChart, isTokenSum, sameNumber, tableProblem, toolCalls, toolNames } from './dashboards-agent.support'
 
@@ -134,4 +135,24 @@ test('an empty source value draws as missing, and only that', () => {
   expect(tableProblem([['a', null, '2026-11-17'], ['b', '2', '2026-11-17']], gaps)).toMatch(/row 1, column 3 draws "2026-11-17", the data has no value/)
   // A value that is there, drawn as missing.
   expect(tableProblem([['a', null, null], ['b', null, '2026-11-17']], gaps)).toMatch(/row 2, column 2 is drawn as missing/)
+})
+
+test('reads the tool calls of a real Researcher run, captured from the runtime', () => {
+  // e2e/fixtures/dashboards/dataflow-researcher-run.json: the data records of one run of 2026-11-19.
+  const run = JSON.parse(readFileSync('e2e/fixtures/dashboards/dataflow-researcher-run.json', 'utf8'))
+  const calls = toolCalls(run)
+  expect(calls.map(c => c.name)).toEqual([
+    'DashboardCatalogue',
+    'DashboardCatalogue',
+    'PreviewDataPoint',
+    'PreviewDataPoint',
+    'PreviewDataPoint',
+    'PreviewDataPoint',
+    'BuildDashboard',
+  ])
+  expect(toolNames(run)).toEqual(calls.map(c => c.name))
+  expect(calls[0].args).toEqual({ kind: 'points,tiles,mappers', query: 'tokens' })
+  const build = calls[6].args as { title: string, tiles: Array<{ type: string, point?: string }> }
+  expect(build.title).toMatch(/^Researcher Tokens /)
+  expect(build.tiles.map(t => t.type)).toEqual(['kpi', 'kpi', 'chart', 'chart', 'chart', 'table'])
 })

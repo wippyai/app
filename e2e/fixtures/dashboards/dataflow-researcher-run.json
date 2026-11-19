@@ -1,0 +1,345 @@
+{
+  "_about": "Captured from the Researcher test run of 2026-11-19: the dataflow_data rows that GET /api/v1/dataflows/{id} returns as `data` (wippy/dataflow get_dataflow.lua), read from the app database, with metadata decoded as the API does and the long tool observations cut. The agent.action records are verbatim.",
+  "success": true,
+  "dataflow": {
+    "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+    "type": "workflow",
+    "status": "completed",
+    "created_at": "2026-11-19T20:26:01.9023158+01:00"
+  },
+  "nodes": [],
+  "data": [
+    {
+      "data_id": "01a1f545-e8b3-7703-a60f-b6c2fd39172c",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.input",
+      "discriminator": null,
+      "key": "conversation_input",
+      "content": "<input key=\"query\">\nMake a dashboard of token use by model. Title the page \"Researcher Tokens mwnxxlkg3\".\n</input>",
+      "content_type": "text/plain",
+      "metadata": {},
+      "created_at": "2026-11-19T20:26:03.2811607+01:00"
+    },
+    {
+      "data_id": "01a1f545-ee0f-791b-953f-273bd4722614",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.action",
+      "discriminator": null,
+      "key": "1_action",
+      "content": "{\"result\":\"I'll start by checking the dashboard catalogue for token-related data points and tiles.\\n\\n\",\"tool_calls\":[{\"arguments\":{\"kind\":\"points,tiles,mappers\",\"query\":\"tokens\"},\"context\":{\"agent_id\":\"app.research:researcher\",\"dataflow_id\":\"01a1f545-e8ae-74d2-8f3e-4939b9f998ad\",\"node_id\":\"01a1f545-e8ad-7b6e-8ac5-7ca176099eb9\"},\"id\":\"call-a60259f5-07f2-49d4-b8b0-be6cfdd6a36a\",\"name\":\"DashboardCatalogue\",\"registry_id\":\"wippy.dashboards.agent:catalogue\"}]}",
+      "content_type": "application/json",
+      "metadata": {
+        "agent_id": "app.research:researcher",
+        "finish_reason": "tool_call",
+        "iteration": 1,
+        "llm_meta": {
+          "prefix_fingerprint": "4570eb537481926149729e5542a9e5f44d2e526b4154cc7a71a3dbc36c3d90ad",
+          "route": {
+            "model": "deepseek-v4.1-flash",
+            "provider_id": "wippy.llm.openai_compat:provider",
+            "provider_model": "deepseek/deepseek-v4.1-flash"
+          }
+        },
+        "model": "class:fast",
+        "tokens": {
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 5376,
+          "cache_read_tokens": 5376,
+          "cache_write_tokens": 0,
+          "completion_tokens": 76,
+          "context_tokens": 5564,
+          "prompt_tokens": 188,
+          "thinking_tokens": 0,
+          "total_tokens": 5640
+        }
+      },
+      "created_at": "2026-11-19T20:26:03.2839439+01:00"
+    },
+    {
+      "data_id": "01a1f545-ee20-75aa-888b-123ecc475f6a",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.observation",
+      "discriminator": null,
+      "key": "1_DashboardCatalogue",
+      "content": "{\"generated_at\":\"2026-11-19T19:26:03Z\",\"mappers\":[],\"points\":[{\"args_schema\":{\"additionalProperties\":false,\"properties\":{\"model\":{\"type\":[\"string\",\"null\"]}},\"type\":\"object\"},\"description\":\"LLM tokens split into prompt, completion, thinking and cache tokens, optionally for one model; suits a pie or doughnut\",\"example\":{\"args\":{},\"data\":{\"fields\":[{\"name\":\"kind\",\"nullable\":false,\"role\":\"dimension\",\"",
+      "content_type": "application/json",
+      "metadata": {
+        "is_error": false,
+        "iteration": 1,
+        "tool_call_id": "call-a60259f5-07f2-49d4-b8b0-be6cfdd6a36a",
+        "tool_name": "DashboardCatalogue"
+      },
+      "created_at": "2026-11-19T20:26:03.3010705+01:00",
+      "content_note": "cut from 5714 characters"
+    },
+    {
+      "data_id": "01a1f545-f471-7574-a493-da4ede835615",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.action",
+      "discriminator": null,
+      "key": "2_action",
+      "content": "{\"result\":\"Let me look at the available tiles and mappers.\\n\\n\",\"tool_calls\":[{\"arguments\":{\"kind\":\"tiles,mappers,request_schema\"},\"context\":{\"agent_id\":\"app.research:researcher\",\"dataflow_id\":\"01a1f545-e8ae-74d2-8f3e-4939b9f998ad\",\"node_id\":\"01a1f545-e8ad-7b6e-8ac5-7ca176099eb9\"},\"id\":\"call-d5407568-329a-4ce9-bb6f-d027ecfe2ecc\",\"name\":\"DashboardCatalogue\",\"registry_id\":\"wippy.dashboards.agent:catalogue\"}]}",
+      "content_type": "application/json",
+      "metadata": {
+        "agent_id": "app.research:researcher",
+        "finish_reason": "tool_call",
+        "iteration": 2,
+        "llm_meta": {
+          "prefix_fingerprint": "4570eb537481926149729e5542a9e5f44d2e526b4154cc7a71a3dbc36c3d90ad",
+          "route": {
+            "model": "deepseek-v4.1-flash",
+            "provider_id": "wippy.llm.openai_compat:provider",
+            "provider_model": "deepseek/deepseek-v4.1-flash"
+          }
+        },
+        "model": "class:fast",
+        "tokens": {
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 5504,
+          "cache_read_tokens": 5504,
+          "cache_write_tokens": 0,
+          "completion_tokens": 103,
+          "context_tokens": 7298,
+          "prompt_tokens": 1794,
+          "thinking_tokens": 46,
+          "total_tokens": 7401
+        }
+      },
+      "created_at": "2026-11-19T20:26:04.9148849+01:00"
+    },
+    {
+      "data_id": "01a1f545-f47c-73e6-8117-9e1be39ac6e3",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.observation",
+      "discriminator": null,
+      "key": "2_DashboardCatalogue",
+      "content": "{\"generated_at\":\"2026-11-19T19:26:04Z\",\"mappers\":[{\"description\":\"Groups rows into day, week or month buckets of a time column and sums a value or counts rows, optionally per group. Gives a series frame sorted by bucket, then by group. A bucket is named by its first day as a date, a week starts on Monday, and the bucket is read in the page's time zone.\",\"examples\":[{\"context\":{\"time_zone\":\"UTC\"},\"",
+      "content_type": "application/json",
+      "metadata": {
+        "is_error": false,
+        "iteration": 2,
+        "tool_call_id": "call-d5407568-329a-4ce9-bb6f-d027ecfe2ecc",
+        "tool_name": "DashboardCatalogue"
+      },
+      "created_at": "2026-11-19T20:26:04.9437256+01:00",
+      "content_note": "cut from 37721 characters"
+    },
+    {
+      "data_id": "01a1f545-ff6c-75f9-8b38-d18afcc01880",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.action",
+      "discriminator": null,
+      "key": "3_action",
+      "content": "{\"result\":\"Now let me preview the relevant data points.\\n\\n\",\"tool_calls\":[{\"arguments\":{\"point\":\"demo.actor:usage_by_model\"},\"context\":{\"agent_id\":\"app.research:researcher\",\"dataflow_id\":\"01a1f545-e8ae-74d2-8f3e-4939b9f998ad\",\"node_id\":\"01a1f545-e8ad-7b6e-8ac5-7ca176099eb9\"},\"id\":\"call-72ff1c3a-6f72-462f-ba11-37b5d96cfa0e\",\"name\":\"PreviewDataPoint\",\"registry_id\":\"wippy.dashboards.agent:preview_point\"},{\"arguments\":{\"point\":\"demo.actor:usage_tokens\"},\"context\":{\"agent_id\":\"app.research:researcher\",\"dataflow_id\":\"01a1f545-e8ae-74d2-8f3e-4939b9f998ad\",\"node_id\":\"01a1f545-e8ad-7b6e-8ac5-7ca176099eb9\"},\"id\":\"call-94c13e31-f694-4a22-b25d-7630060050c0\",\"name\":\"PreviewDataPoint\",\"registry_id\":\"wippy.dashboards.agent:preview_point\"},{\"arguments\":{\"point\":\"demo.actor:usage_by_day\"},\"context\":{\"agent_id\":\"app.research:researcher\",\"dataflow_id\":\"01a1f545-e8ae-74d2-8f3e-4939b9f998ad\",\"node_id\":\"01a1f545-e8ad-7b6e-8ac5-7ca176099eb9\"},\"id\":\"call-5c0b8d9d-f6f0-4916-80ca-e97b42449b8d\",\"name\":\"PreviewDataPoint\",\"registry_id\":\"wippy.dashboards.agent:preview_point\"},{\"arguments\":{\"point\":\"demo.actor:tokens_by_kind\"},\"context\":{\"agent_id\":\"app.research:researcher\",\"dataflow_id\":\"01a1f545-e8ae-74d2-8f3e-4939b9f998ad\",\"node_id\":\"01a1f545-e8ad-7b6e-8ac5-7ca176099eb9\"},\"id\":\"call-b100b79d-cd76-4314-972e-3e8a9336fa72\",\"name\":\"PreviewDataPoint\",\"registry_id\":\"wippy.dashboards.agent:preview_point\"}]}",
+      "content_type": "application/json",
+      "metadata": {
+        "agent_id": "app.research:researcher",
+        "finish_reason": "tool_call",
+        "iteration": 3,
+        "llm_meta": {
+          "prefix_fingerprint": "4570eb537481926149729e5542a9e5f44d2e526b4154cc7a71a3dbc36c3d90ad",
+          "route": {
+            "model": "deepseek-v4.1-flash",
+            "provider_id": "wippy.llm.openai_compat:provider",
+            "provider_model": "deepseek/deepseek-v4.1-flash"
+          }
+        },
+        "model": "class:fast",
+        "tokens": {
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 7296,
+          "cache_read_tokens": 7296,
+          "cache_write_tokens": 0,
+          "completion_tokens": 211,
+          "context_tokens": 17611,
+          "prompt_tokens": 10315,
+          "thinking_tokens": 51,
+          "total_tokens": 17822
+        }
+      },
+      "created_at": "2026-11-19T20:26:07.7259233+01:00"
+    },
+    {
+      "data_id": "01a1f545-ff6e-7e72-8ead-3b598033a1d1",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.observation",
+      "discriminator": null,
+      "key": "3_PreviewDataPoint",
+      "content": "{\"args\":{},\"completeness\":\"complete\",\"computed_at\":\"2026-11-19T19:26:07Z\",\"data\":{\"fields\":[{\"additive\":true,\"name\":\"tokens\",\"nullable\":false,\"role\":\"measure\",\"type\":\"number\",\"unit\":\"tokens\"},{\"additive\":true,\"name\":\"calls\",\"nullable\":false,\"role\":\"measure\",\"type\":\"number\"}],\"rows\":[[1242832,246]],\"schema\":\"wippy.dashboard_frame/v1\"},\"point\":\"demo.actor:usage_tokens\",\"source_title\":\"Token use\",\"st",
+      "content_type": "text/plain",
+      "metadata": {
+        "is_error": false,
+        "iteration": 3,
+        "tool_call_id": "call-94c13e31-f694-4a22-b25d-7630060050c0",
+        "tool_name": "PreviewDataPoint"
+      },
+      "created_at": "2026-11-19T20:26:07.7285179+01:00",
+      "content_note": "cut from 427 characters"
+    },
+    {
+      "data_id": "01a1f545-ff6f-777c-b97f-d71958d6d40c",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.observation",
+      "discriminator": null,
+      "key": "3_PreviewDataPoint",
+      "content": "{\"args\":{},\"completeness\":\"complete\",\"computed_at\":\"2026-11-19T19:26:07Z\",\"data\":{\"fields\":[{\"name\":\"day\",\"nullable\":false,\"role\":\"dimension\",\"type\":\"date\"},{\"name\":\"model\",\"nullable\":false,\"role\":\"dimension\",\"type\":\"string\"},{\"additive\":true,\"name\":\"tokens\",\"nullable\":false,\"role\":\"measure\",\"type\":\"number\",\"unit\":\"tokens\"}],\"rows\":[[\"2026-06-10\",\"claude-haiku-4-5\",2253],[\"2026-06-10\",\"claude-sonn",
+      "content_type": "text/plain",
+      "metadata": {
+        "is_error": false,
+        "iteration": 3,
+        "tool_call_id": "call-5c0b8d9d-f6f0-4916-80ca-e97b42449b8d",
+        "tool_name": "PreviewDataPoint"
+      },
+      "created_at": "2026-11-19T20:26:07.7295417+01:00",
+      "content_note": "cut from 966 characters"
+    },
+    {
+      "data_id": "01a1f545-ff71-7076-b453-4d6aa3bebab1",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.observation",
+      "discriminator": null,
+      "key": "3_PreviewDataPoint",
+      "content": "{\"args\":{},\"completeness\":\"complete\",\"computed_at\":\"2026-11-19T19:26:07Z\",\"data\":{\"fields\":[{\"name\":\"kind\",\"nullable\":false,\"role\":\"dimension\",\"type\":\"string\"},{\"additive\":true,\"name\":\"tokens\",\"nullable\":false,\"role\":\"measure\",\"type\":\"number\",\"unit\":\"tokens\"}],\"rows\":[[\"Prompt\",999912],[\"Completion\",242920],[\"Thinking\",100961],[\"Cache read\",2415360],[\"Cache write\",544382]],\"schema\":\"wippy.dashboar",
+      "content_type": "text/plain",
+      "metadata": {
+        "is_error": false,
+        "iteration": 3,
+        "tool_call_id": "call-b100b79d-cd76-4314-972e-3e8a9336fa72",
+        "tool_name": "PreviewDataPoint"
+      },
+      "created_at": "2026-11-19T20:26:07.7300591+01:00",
+      "content_note": "cut from 511 characters"
+    },
+    {
+      "data_id": "01a1f545-ff71-7844-8543-162d4b1c3e84",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.observation",
+      "discriminator": null,
+      "key": "3_PreviewDataPoint",
+      "content": "{\"args\":{},\"completeness\":\"complete\",\"computed_at\":\"2026-11-19T19:26:07Z\",\"data\":{\"fields\":[{\"name\":\"model_id\",\"nullable\":false,\"role\":\"dimension\",\"type\":\"string\"},{\"additive\":true,\"name\":\"calls\",\"nullable\":false,\"role\":\"measure\",\"type\":\"number\"},{\"additive\":true,\"name\":\"tokens\",\"nullable\":false,\"role\":\"measure\",\"type\":\"number\",\"unit\":\"tokens\"}],\"rows\":[[\"deepseek-v4.1-flash\",208,692697],[\"claude-",
+      "content_type": "text/plain",
+      "metadata": {
+        "is_error": false,
+        "iteration": 3,
+        "tool_call_id": "call-72ff1c3a-6f72-462f-ba11-37b5d96cfa0e",
+        "tool_name": "PreviewDataPoint"
+      },
+      "created_at": "2026-11-19T20:26:07.7312167+01:00",
+      "content_note": "cut from 593 characters"
+    },
+    {
+      "data_id": "01a1f546-13f2-7207-af3c-f03fb19ba60b",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.action",
+      "discriminator": null,
+      "key": "4_action",
+      "content": "{\"result\":\"Now I'll build the dashboard.\\n\\n\",\"tool_calls\":[{\"arguments\":{\"rows\":[[\"total_tokens\",\"total_calls\"],[{\"emphasis\":\"high\",\"tile\":\"by_model_chart\"},\"by_kind_chart\"],[\"by_day_chart\"],[\"model_table\"]],\"tiles\":[{\"fields\":{\"value\":\"tokens\"},\"id\":\"total_tokens\",\"label\":\"Total tokens\",\"options\":{\"label\":\"Total tokens\"},\"point\":\"demo.actor:usage_tokens\",\"type\":\"kpi\"},{\"fields\":{\"value\":\"calls\"},\"id\":\"total_calls\",\"label\":\"Total calls\",\"options\":{\"label\":\"LLM calls\"},\"point\":\"demo.actor:usage_tokens\",\"type\":\"kpi\"},{\"fields\":{\"x\":\"model_id\",\"y\":[\"tokens\"]},\"id\":\"by_model_chart\",\"kind\":\"bar\",\"label\":\"Tokens by model\",\"point\":\"demo.actor:usage_by_model\",\"type\":\"chart\"},{\"fields\":{\"x\":\"kind\",\"y\":[\"tokens\"]},\"id\":\"by_kind_chart\",\"kind\":\"doughnut\",\"label\":\"Tokens by kind\",\"point\":\"demo.actor:tokens_by_kind\",\"type\":\"chart\"},{\"fields\":{\"series\":\"model\",\"x\":\"day\",\"y\":[\"tokens\"]},\"id\":\"by_day_chart\",\"kind\":\"line\",\"label\":\"Token use by day and model\",\"point\":\"demo.actor:usage_by_day\",\"type\":\"chart\"},{\"id\":\"model_table\",\"label\":\"Tokens and calls per model\",\"point\":\"demo.actor:usage_by_model\",\"type\":\"table\"}],\"title\":\"Researcher Tokens mwnxxlkg3\"},\"context\":{\"agent_id\":\"app.research:researcher\",\"dataflow_id\":\"01a1f545-e8ae-74d2-8f3e-4939b9f998ad\",\"node_id\":\"01a1f545-e8ad-7b6e-8ac5-7ca176099eb9\"},\"id\":\"call-717f8084-7cc5-4f7f-8ddf-536c7a6da874\",\"name\":\"BuildDashboard\",\"registry_id\":\"wippy.dashboards.agent:build_dashboard\"}]}",
+      "content_type": "application/json",
+      "metadata": {
+        "agent_id": "app.research:researcher",
+        "finish_reason": "tool_call",
+        "iteration": 4,
+        "llm_meta": {
+          "prefix_fingerprint": "4570eb537481926149729e5542a9e5f44d2e526b4154cc7a71a3dbc36c3d90ad",
+          "route": {
+            "model": "deepseek-v4.1-flash",
+            "provider_id": "wippy.llm.openai_compat:provider",
+            "provider_model": "deepseek/deepseek-v4.1-flash"
+          }
+        },
+        "model": "class:fast",
+        "tokens": {
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 17536,
+          "cache_read_tokens": 17536,
+          "cache_write_tokens": 0,
+          "completion_tokens": 687,
+          "context_tokens": 18666,
+          "prompt_tokens": 1130,
+          "thinking_tokens": 220,
+          "total_tokens": 19353
+        }
+      },
+      "created_at": "2026-11-19T20:26:12.9796727+01:00"
+    },
+    {
+      "data_id": "01a1f546-1425-73c2-803f-9a5c9e4c3d62",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.observation",
+      "discriminator": null,
+      "key": "4_BuildDashboard",
+      "content": "{\"link\":\"[Researcher Tokens mwnxxlkg3](/home/dash/researcher-tokens-mwnxxlkg3)\",\"links\":[\"[Researcher Tokens mwnxxlkg3](/home/dash/researcher-tokens-mwnxxlkg3)\"],\"ok\":true,\"page_id\":\"gen_researcher_tokens_mwnxxlkg3\",\"pages\":[{\"link\":\"[Researcher Tokens mwnxxlkg3](/home/dash/researcher-tokens-mwnxxlkg3)\",\"page_id\":\"gen_researcher_tokens_mwnxxlkg3\",\"revision\":1,\"route\":\"/dash/researcher-tokens-mwnxx",
+      "content_type": "application/json",
+      "metadata": {
+        "is_error": false,
+        "iteration": 4,
+        "tool_call_id": "call-717f8084-7cc5-4f7f-8ddf-536c7a6da874",
+        "tool_name": "BuildDashboard"
+      },
+      "created_at": "2026-11-19T20:26:13.0314629+01:00",
+      "content_note": "cut from 884 characters"
+    },
+    {
+      "data_id": "01a1f546-2203-71b9-8eec-badcc361274b",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6e-8ac5-7ca176099eb9",
+      "type": "agent.action",
+      "discriminator": null,
+      "key": "5_action",
+      "content": "{\"result\":\"The dashboard is built.\\n\\n**Findings**\\n\\nBuilt the page \\\"Researcher Tokens mwnxxlkg3\\\" from the app's own usage data (no web research needed — this is app data). Data source points: `demo.actor:usage_tokens`, `demo.actor:usage_by_model`, `demo.actor:usage_by_day`, `demo.actor:tokens_by_kind`.\\n\\nPage contents (6 tiles):\\n- KPI: Total tokens = 1,242,832\\n- KPI: LLM calls = 246\\n- Bar chart: tokens by model\\n- Doughnut chart: tokens by kind\\n- Line chart: token use by day, split by model\\n- Table: tokens and calls per model\\n\\nPreviewed values: deepseek-v4.1-flash 692,697 tokens / 208 calls; claude-sonnet-4-6 534,297 / 17; claude-haiku-4-5 15,838 / 21. Tokens by kind: Cache read 2,415,360; Prompt 999,912; Cache write 544,382; Completion 242,920; Thinking 100,961.\\n\\nLimit: the figures cover only what this app recorded, so sparse days (e.g. June/July/August vs November) reflect recorded activity, not total usage.\\n\\nPage link:\\n[Researcher Tokens mwnxxlkg3](/home/dash/researcher-tokens-mwnxxlkg3)\",\"tool_calls\":[]}",
+      "content_type": "application/json",
+      "metadata": {
+        "agent_id": "app.research:researcher",
+        "finish_reason": "stop",
+        "iteration": 5,
+        "llm_meta": {
+          "prefix_fingerprint": "4570eb537481926149729e5542a9e5f44d2e526b4154cc7a71a3dbc36c3d90ad",
+          "route": {
+            "model": "deepseek-v4.1-flash",
+            "provider_id": "wippy.llm.openai_compat:provider",
+            "provider_model": "deepseek/deepseek-v4.1-flash"
+          }
+        },
+        "model": "class:fast",
+        "tokens": {
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 18560,
+          "cache_read_tokens": 18560,
+          "cache_write_tokens": 0,
+          "completion_tokens": 314,
+          "context_tokens": 19432,
+          "prompt_tokens": 872,
+          "thinking_tokens": 0,
+          "total_tokens": 19746
+        }
+      },
+      "created_at": "2026-11-19T20:26:16.5806463+01:00"
+    },
+    {
+      "data_id": "01a1f546-2cd5-755f-b39d-6a567830fee6",
+      "dataflow_id": "01a1f545-e8ae-74d2-8f3e-4939b9f998ad",
+      "node_id": "01a1f545-e8ad-7b6f-9cc5-5f6d8bc54a59",
+      "type": "dataflow.output",
+      "discriminator": "result",
+      "key": null,
+      "content": "{\"answer\":\"I built the **Researcher Tokens mwnxxlkg3** page from the app's own usage data, with six tiles: total tokens (1,242,832), LLM calls (246), tokens by model, tokens by kind, token use by day split by model, and a per-model table of tokens and calls. The top models are deepseek-v4.1-flash (692,697 tokens / 208 calls) and claude-sonnet-4-6 (534,297 / 17), with claude-haiku-4-5 trailing at 15,838 / 21.\\n\\nOne caveat: these figures only reflect what this app recorded, so sparse days (June/July/August versus November) indicate recorded activity rather than total usage. View it here: [Researcher Tokens mwnxxlkg3](/home/dash/researcher-tokens-mwnxxlkg3).\"}",
+      "content_type": "application/json",
+      "metadata": {
+        "source_node_id": "01a1f545-e8ad-7b6f-9cc5-5f6d8bc54a59"
+      },
+      "created_at": "2026-11-19T20:26:19.3549096+01:00"
+    }
+  ]
+}

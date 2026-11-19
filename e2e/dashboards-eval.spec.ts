@@ -62,8 +62,11 @@ import {
  * each shown column the cell that the value gives (a date only has to be filled, since it is drawn in the
  * viewer's format).
  *
- * Known limits (accepted): the fixture of toolCalls in dashboards-agent.support.spec.ts is synthetic
- * until the first real run captures a response of GET /api/v1/dataflows/{id}. The spend cap is a check
+ * Drawn values are compared with the responses that the board itself got for its tiles (the data is live,
+ * and the evaluation's own LLM calls change it), and the direct read only checks the point, the fields and
+ * the arguments that the agent chose. Request 3 chooses a model in the browser, because the page shows every
+ * model until one is chosen. A turn that the model provider refuses ("Turn failed", for example a key limit)
+ * stops the suite: it is no verdict on the agent. Known limit (accepted): the spend cap is a check
  * before each chat turn (and on every poll while it goes on) with one worker, not an atomic
  * reservation: two spec files that run at the same time can pass it together.
  */
@@ -269,18 +272,51 @@ interface TileRead {
   inputs: Record<string, Envelope>
 }
 
-/** Reads every input of every tile of a page, as the tile does. */
-async function readTiles(page: Page, pageId: string, props: PageProps, model: string | null): Promise<TileRead[]> {
-  const out: TileRead[] = []
-  for (const [id, tile] of Object.entries(props.tiles)) {
+/**
+ * The point reads that the board itself made, as the browser saw them. What a tile draws is what it
+ * read, so the drawn values are compared with these responses and not with a later read: the data is
+ * live (the evaluation's own LLM calls add rows to it), and a later read differs by a turn or a message.
+ */
+class BoardReads {
+  private latest = new Map<string, Envelope>()
+  /** Every read in order, with the arguments it carried: for counting the re-reads of a filter. */
+  readonly log: Array<{ pageId: string, point: string, args: Record<string, unknown> | undefined }> = []
+
+  attach(page: Page) {
+    page.on('response', async (r) => {
+      const m = /\/api\/v1\/dashboards\/pages\/([^/]+)\/points\/([^/?]+)/.exec(r.url())
+      if (!m || r.request().method() !== 'GET' || r.status() !== 200)
+        return
+      try {
+        const env = await r.json() as Envelope
+        this.latest.set(`${m[1]}/${m[2]}`, env)
+        this.log.push({ pageId: m[1], point: m[2], args: env.args })
+      }
+      catch {}
+    })
+  }
+
+  get(pageId: string, point: string): Envelope | undefined {
+    return this.latest.get(`${pageId}/${point}`)
+  }
+}
+
+/** The tiles of a page with the reads of their inputs that the board made. Inputs it did not read are left out. */
+function tileReads(boardReads: BoardReads, pageId: string, props: PageProps): TileRead[] {
+  return Object.entries(props.tiles).map(([id, tile]) => {
     const inputs: Record<string, Envelope> = {}
     for (const [input, source] of Object.entries(tile.data)) {
-      const args = fixedArgs(source.args, model ? { model } : {})
-      inputs[input] = await readPoint(page, pageId, source.point, args)
+      const env = boardReads.get(pageId, source.point)
+      if (env)
+        inputs[input] = env
     }
-    out.push({ id, tile, inputs })
-  }
-  return out
+    return { id, tile, inputs }
+  })
+}
+
+/** Waits until the board has read every input of every tile of the page. */
+async function untilRead(page: Page, boardReads: BoardReads, pageId: string, props: PageProps): Promise<void> {
+  await expect.poll(() => tileReads(boardReads, pageId, props).every(r => Object.keys(r.inputs).length === Object.keys(r.tile.data).length), { timeout: 30_000 }).toBe(true)
 }
 
 /** The tiles of a page that show a needed point. */
@@ -307,55 +343,51 @@ function boundParams(tile: PageProps['tiles'][string]): string[] {
   return out
 }
 
-/** Checks request 3's filter in the browser: choosing a model re-reads exactly the bound inputs, once each. */
-async function checkFilterRereads(page: Page, pageId: string, props: PageProps, reasons: string[]) {
+/**
+ * Request 3: the page shows every model until one is chosen, so the check chooses one in the browser, as a
+ * viewer does. Returns the model that the bound inputs were then read with, or a reason. Choosing must
+ * re-read exactly the inputs that use the filter, once each, and no other input.
+ */
+async function chooseModel(page: Page, boardReads: BoardReads, pageId: string, props: PageProps, reasons: string[]): Promise<string | null> {
   const picker = Object.entries(props.tiles).find(([, t]) => t.tile === 'control.select')
   if (!picker || !picker[1].param) {
     reasons.push('request 3: the page has no select tile with a filter')
-    return
+    return null
   }
   const param = picker[1].param as string
-  const expected = new Set<string>()
+  const bound = new Set<string>()
   for (const tile of Object.values(props.tiles)) {
     for (const source of Object.values(tile.data)) {
-      if (Object.values(source.args).some(v => (v as { $param?: string } | null)?.$param === param))
-        expected.add(source.point)
+      if (Object.values(source.args).some(x => (x as { $param?: string } | null)?.$param === param))
+        bound.add(source.point)
     }
   }
-  if (expected.size === 0) {
+  if (bound.size === 0) {
     reasons.push('request 3: no tile reads a point with the filter')
-    return
+    return null
   }
-  const reads: string[] = []
-  page.on('request', (r) => {
-    const m = /\/points\/([^/?]+)/.exec(r.url())
-    if (m && r.method() === 'GET')
-      reads.push(m[1])
-  })
-  // The page's own route, so that the board is a frame of the Host whatever the app's outlet does.
-  await openInShell(page, `/dash/${pageId.replace(/^gen_/, '').replace(/_/g, '-')}`)
-  const frame = page.frameLocator(`iframe[name="wippy:page:wippy.dashboards.pages:${pageId}"]`)
-  const combo = frame.locator(`[data-tile-id="${picker[0]}"] [role="combobox"]`)
+  const board = await boardFrame(page, pageId)
+  const combo = board.locator(`[data-tile-id="${picker[0]}"] [role="combobox"]`)
   await expect(combo).toBeVisible({ timeout: 30_000 })
-  await page.waitForTimeout(3000)
-  reads.length = 0
+  const mark = boardReads.log.length
   await combo.focus()
   await page.keyboard.press('Enter')
-  const options = frame.locator('[role="option"]')
+  const options = board.locator('[role="option"]')
   await expect(options.first()).toBeVisible({ timeout: 5000 })
-  // The first real model: the last option, so that it is not the "All" entry that clears the filter.
+  // The last option is a model, not the entry that clears the filter.
   await options.last().click()
-  await page.waitForTimeout(4000)
+  await expect.poll(() => [...bound].every(point => typeof boardReads.get(pageId, point)?.args?.model === 'string'), { timeout: 20_000 }).toBe(true)
+  await page.waitForTimeout(3000)
   const counts = new Map<string, number>()
-  for (const name of reads)
-    counts.set(name, (counts.get(name) ?? 0) + 1)
-  const got = [...counts.keys()].sort()
-  if (JSON.stringify(got) !== JSON.stringify([...expected].sort()))
-    reasons.push(`request 3: the filter re-read ${JSON.stringify([...counts])}, expected exactly ${JSON.stringify([...expected])}`)
+  for (const read of boardReads.log.slice(mark).filter(x => x.pageId === pageId))
+    counts.set(read.point, (counts.get(read.point) ?? 0) + 1)
+  if (JSON.stringify([...counts.keys()].sort()) !== JSON.stringify([...bound].sort()))
+    reasons.push(`request 3: choosing a model re-read ${JSON.stringify([...counts])}, expected exactly ${JSON.stringify([...bound])}`)
   for (const [name, n] of counts) {
     if (n !== 1)
       reasons.push(`request 3: ${name} was read ${n} times after the filter changed`)
   }
+  return boardReads.get(pageId, [...bound][0])?.args?.model as string
 }
 
 /** The language of the browser, which is the locale that the tiles format numbers in. */
@@ -409,10 +441,46 @@ async function renderedProblem(page: Page, pageId: string, read: TileRead, direc
 interface RunResult { request: number, run: number, pass: boolean, skipped: boolean, reasons: string[] }
 const results: RunResult[] = []
 
+/** The id that a page with this title gets (the plan's rule), so that a run cleans up its pages whatever the reply said. */
+function pageIdOfTitle(title: string): string {
+  return `gen_${title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}`.slice(0, 41).replace(/_+$/, '')
+}
+
+/** The model provider refused a turn ("Turn failed: Key limit exceeded"): nothing after it can run. */
+class LlmUnavailable extends Error {}
+let llmDown: string | null = null
+
+/** Does the chat show a failed turn? Returns its text. */
+async function failedTurn(page: Page): Promise<string | null> {
+  const failed = page.getByText(/Turn failed/i)
+  return (await failed.count()) > 0 ? ((await failed.last().textContent()) ?? 'Turn failed').trim().slice(0, 300) : null
+}
+
+/**
+ * What the data of a tile should look like in the direct read of its point: the same fields (so the
+ * agent chose the right point and mapping), the same title, and for a bound input the argument that the
+ * filter set. The values are not compared: the tile's own read is the data, and the direct read comes later.
+ */
+function structureProblem(direct: Envelope, mine: Envelope): string | null {
+  if (direct.source_title !== mine.source_title)
+    return `the tile reads "${mine.source_title}", the point is "${direct.source_title}"`
+  const a = direct.data as { fields?: unknown, schema?: unknown } | undefined
+  const b = mine.data as { fields?: unknown, schema?: unknown } | undefined
+  if (a?.fields !== undefined || b?.fields !== undefined) {
+    return JSON.stringify(a?.fields) === JSON.stringify(b?.fields) ? null : `the tile's fields ${JSON.stringify(b?.fields)} differ from the point's ${JSON.stringify(a?.fields)}`
+  }
+  return JSON.stringify(Object.keys(a ?? {}).sort()) === JSON.stringify(Object.keys(b ?? {}).sort()) ? null : 'the tile reads data of another format than the point'
+}
+
 async function evaluateRun(page: Page, req: Request, run: number, stamp: string, reasons: string[]) {
   const doc = await catalogue(page)
   const titles = req.pages.map(p => `${p.label} ${stamp}`)
+  // Cleaned up after the suite whatever the reply says: the pages exist even when the reply never came.
+  for (const t of titles)
+    builtIds.push(pageIdOfTitle(t))
   const idsBefore = await listedIds(page)
+  const boardReads = new BoardReads()
+  boardReads.attach(page)
 
   await openChat(page)
   const before = await page.locator(PAGE_LINK).count()
@@ -424,11 +492,14 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
   await assertBudget(page)
   await send(page, req.text + naming + (req.consent ? CONSENT : ''))
 
-  // Every page it asked for: one link for each, in the reply.
+  // Every page it asked for: one link for each, in the reply. A turn that the provider refuses ends the wait.
   const links = page.locator(PAGE_LINK)
   const deadline = Date.now() + 180_000
   while ((await links.count()) < before + titles.length && Date.now() < deadline) {
     await assertBudget(page, 0)
+    const failed = await failedTurn(page)
+    if (failed)
+      throw new LlmUnavailable(failed)
     await page.waitForTimeout(3000)
   }
   if ((await links.count()) < before + titles.length) {
@@ -440,10 +511,6 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
   for (let i = before; i < total; i++)
     found.push({ href: (await links.nth(i).getAttribute('href')) ?? '', text: ((await links.nth(i).textContent()) ?? '').trim() })
 
-  const model = req.n === 3
-    ? ((await directRead(page, 'usage_models', null)).data?.rows?.[0]?.[0] as string | undefined) ?? null
-    : null
-
   for (let pi = 0; pi < req.pages.length; pi++) {
     const spec = req.pages[pi]
     const link = found.find(f => f.text.toLowerCase() === titles[pi].toLowerCase())
@@ -452,7 +519,6 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
       continue
     }
     const pageId = pageIdOf(link.href)
-    builtIds.push(pageId)
     if (idsBefore.includes(`wippy.dashboards.pages:${pageId}`))
       reasons.push(`page "${titles[pi]}": the page existed before the run`)
     const props = await pageProps(page, pageId)
@@ -467,13 +533,23 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
     try {
       await expect.poll(async () => Object.keys(await frameStatuses(page, pageId)).length, { timeout: 30_000 }).toBe(tileIds.length)
       await expect.poll(async () => Object.values(await frameStatuses(page, pageId)).every(s => s === 'ready'), { timeout: 30_000 }).toBe(true)
+      await untilRead(page, boardReads, pageId, props)
     }
     catch {
       reasons.push(`page "${titles[pi]}": the link did not open a board with every tile ready: ${JSON.stringify(await frameStatuses(page, pageId))}`)
+      continue
     }
 
-    // Every tile shows real data.
-    const reads = await readTiles(page, pageId, props, model)
+    // Request 3: the page shows every model until one is chosen, so choose one as a viewer does.
+    let model: string | null = null
+    if (req.n === 3) {
+      model = await chooseModel(page, boardReads, pageId, props, reasons)
+      if (model !== null)
+        await expect.poll(async () => Object.values(await frameStatuses(page, pageId)).every(s => s === 'ready'), { timeout: 20_000 }).toBe(true)
+    }
+
+    // Every tile shows real data: what the board read for each input is ready.
+    const reads = tileReads(boardReads, pageId, props)
     for (const r of reads) {
       for (const [input, env] of Object.entries(r.inputs)) {
         if (env.state !== 'ready')
@@ -481,7 +557,7 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
       }
     }
 
-    // Every required point, with its measure and grouping, and its values.
+    // Every required point, with its measure and grouping.
     for (const need of spec.needs) {
       const tiles = tilesFor(need, reads, doc)
       const label = `page "${titles[pi]}": ${need.point}`
@@ -500,33 +576,27 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
       if (need.bound && !shown.some(t => boundParams(t.tile).length > 0))
         reasons.push(`${label}: the tile does not follow the model filter`)
 
-      // The values a tile reads equal a direct read of the point with the same arguments.
+      // The direct read checks that the agent chose the right point, mapping and arguments.
       const tile = shown[0]
-      let direct = await directRead(page, need.point, need.bound ? model : null)
-      let mine = tile.inputs.main
-      if (JSON.stringify(direct.data) !== JSON.stringify(mine.data)) {
-        // The data is live (the chat adds rows): read both again once before it counts as a difference.
-        await page.waitForTimeout(1500)
-        direct = await directRead(page, need.point, need.bound ? model : null)
-        mine = (await readTiles(page, pageId, { ...props, tiles: { [tile.id]: tile.tile } }, model))[0].inputs.main
-      }
-      if (JSON.stringify(direct.data) !== JSON.stringify(mine.data))
-        reasons.push(`${label}: the tile's data differs from a direct read of the point`)
+      const direct = await directRead(page, need.point, need.bound ? model : null)
+      const mine = tile.inputs.main
+      const structure = structureProblem(direct, mine)
+      if (structure)
+        reasons.push(`${label}: ${structure}`)
+      if (need.bound && model !== null && mine.args?.model !== model)
+        reasons.push(`${label}: the tile read model ${JSON.stringify(mine.args?.model)}, the filter chose ${model}`)
 
-      // What the board draws equals the direct read: the numbers of a chart, the cells of a table, the
-      // value of a number, the text of a note. The data is live, so a difference is checked once more.
-      let drawn = await renderedProblem(page, pageId, tile, direct)
+      // What the board draws equals what the tile read: the numbers of a chart, the cells of a table, the
+      // value of a number, the text of a note. A tile that reads again while this runs is looked at once more.
+      let drawn = await renderedProblem(page, pageId, tile, mine)
       if (drawn) {
-        await page.waitForTimeout(2000)
-        direct = await directRead(page, need.point, need.bound ? model : null)
-        drawn = await renderedProblem(page, pageId, tile, direct)
+        await page.waitForTimeout(2500)
+        const again = tileReads(boardReads, pageId, props).find(r => r.id === tile.id)
+        drawn = again?.inputs.main ? await renderedProblem(page, pageId, again, again.inputs.main) : drawn
       }
       if (drawn)
         reasons.push(`${label}: ${drawn}`)
     }
-
-    if (req.n === 3)
-      await checkFilterRereads(page, pageId, props, reasons)
   }
 }
 
@@ -538,11 +608,23 @@ for (const req of REQUESTS) {
       await loginAsAdmin(page)
       spendStart()
       const reasons: string[] = []
+      if (llmDown) {
+        results.push({ request: req.n, run, pass: false, skipped: true, reasons: [`the model provider refused an earlier turn: ${llmDown}`] })
+        console.log(`request ${req.n} run ${run} not run: the model provider refused an earlier turn: ${llmDown}`)
+        return
+      }
       const stamp = `${Date.now().toString(36).slice(-5)}${req.n}${run}`
       try {
         await evaluateRun(page, req, run, stamp, reasons)
       }
       catch (e) {
+        if (e instanceof LlmUnavailable) {
+          // Not a verdict on the agent: the provider refused the turn (a key limit, for example), and every later run would too.
+          llmDown = e.message
+          console.log(`request ${req.n} run ${run} stopped: the model provider refused the turn: ${e.message}`)
+          results.push({ request: req.n, run, pass: false, skipped: true, reasons: [e.message] })
+          return
+        }
         if (e instanceof SpendCapReached) {
           // The cap stops the run, and the runs after it: a run that did not complete does not pass.
           console.log(`request ${req.n} run ${run} stopped: ${e.message} (cap $${SPEND_CAP_USD})`)

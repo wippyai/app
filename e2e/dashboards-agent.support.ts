@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import type { FrameLocator, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
-import { api } from './helpers/page-watch'
+import { api, openInShell } from './helpers/page-watch'
 
 /**
  * Helpers of the two LLM specs of the dashboards agent (dashboards-eval.spec.ts and
@@ -216,6 +216,24 @@ export async function frameStatuses(page: Page, pageId: string): Promise<Record<
     catch {}
   }
   return {}
+}
+
+/**
+ * Opens a generated page in the running Host and waits until its board has drawn every tile. This app
+ * shows a generated page inside the home page, through the page outlet, at /home/dash/<slug> (the link
+ * that the agent gives); the page's own route /dash/<slug> is the fallback for an app without an outlet.
+ */
+export async function openBoard(page: Page, slug: string, pageId: string, tileCount: number): Promise<void> {
+  for (const path of [`/home/dash/${slug}`, `/dash/${slug}`]) {
+    await openInShell(page, path)
+    const end = Date.now() + 20_000
+    while (Date.now() < end) {
+      if (Object.keys(await frameStatuses(page, pageId)).length >= tileCount)
+        return
+      await page.waitForTimeout(1000)
+    }
+  }
+  throw new Error(`the board of ${pageId} did not draw ${tileCount} tiles at /home/dash/${slug} or /dash/${slug}`)
 }
 
 // ── what the board draws ─────────────────────────────────────────────────

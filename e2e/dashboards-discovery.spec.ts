@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
-import { api, openInShell } from './helpers/page-watch'
+import { api } from './helpers/page-watch'
 import {
   SPEND_CAP_USD,
   SpendCapReached,
@@ -11,6 +11,7 @@ import {
   finishedRun,
   frameStatuses,
   isTokenSum,
+  openBoard,
   pageProps,
   rawUsage,
   removePage,
@@ -47,9 +48,8 @@ import {
  * (support.toolCalls describes the shape, which comes from the wippy/dataflow source). A run that has no
  * such record makes the run fail with the keys that it has.
  *
- * Known limits (accepted): the fixture of toolCalls in dashboards-agent.support.spec.ts is synthetic, in
- * the shape that the runtime source documents, until the first real run captures a response of
- * GET /api/v1/dataflows/{id} to replace it with. The spend cap is a check before each model request
+ * The fixture of toolCalls in dashboards-agent.support.spec.ts is a real run (e2e/fixtures/dashboards/
+ * dataflow-researcher-run.json), captured from the first Researcher run. Known limit (accepted): the spend cap is a check before each model request
  * (each chat turn or Researcher run, and on every poll while one goes on) with one worker, not an atomic
  * reservation: two spec files that run at the same time can pass it together.
  */
@@ -139,7 +139,7 @@ for (let run = 1; run <= RUNS; run++) {
       const tileIds = Object.keys(props!.tiles)
 
       // 4 first, because 3 reads the board: the page opens on its own route, and every tile is ready.
-      await openInShell(page, `/dash/${slug}`)
+      await openBoard(page, slug, pageId, tileIds.length)
       await expect.poll(async () => Object.keys(await frameStatuses(page, pageId)).length, { timeout: 30_000 }).toBe(tileIds.length)
       await expect.poll(async () => Object.values(await frameStatuses(page, pageId)).every(s => s === 'ready'), { timeout: 30_000 }).toBe(true)
 
