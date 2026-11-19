@@ -3,6 +3,15 @@ import type { FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, pathOf, takeUnexpected } from './helpers/page-watch'
+import { formatDuration } from '../frontend/web-components/run-timeline/src/lib/timeline'
+
+/** A node of the latest run, as the run point returns it (src/demo_run_timeline). */
+interface RunNode {
+  type: string
+  status: string
+  duration_ms: number
+  children: RunNode[]
+}
 
 /**
  * Dashboards POC checks. Generated pages are lost when the app restarts, so the suite publishes
@@ -381,9 +390,24 @@ test.describe('stage E: plugins and live data', () => {
   test('plugin 1 shows the latest run as a tree', async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 900 })
     await loginAsAdmin(page)
+    // The latest run changes whenever an agent runs (the LLM specs make new ones), so the expected
+    // tree comes from the point's own data: the tile must draw exactly the run and nodes it reads.
+    const read = JSON.parse((await api(page, 'GET', '/api/v1/dashboards/pages/app_activity/points/run')).body) as {
+      state: string
+      data: { run: { type: string, status: string, duration_ms: number }, nodes: RunNode[] }
+    }
+    expect(read.state).toBe('ready')
+    const expectedRows: string[][] = []
+    const flatten = (nodes: RunNode[], depth: number) => {
+      for (const n of nodes) {
+        expectedRows.push([n.type, String(depth)])
+        flatten(n.children, depth + 1)
+      }
+    }
+    flatten(read.data.nodes, 0)
     await openInShell(page, '/ops/app-activity')
     const run = pageFrame(page, 'app_activity').locator('[data-tile-id="run"]')
-    await expect(run).toContainText('9.14 s', { timeout: 20_000 })
+    await expect(run).toContainText(formatDuration(read.data.run.duration_ms), { timeout: 20_000 })
     // innerText stops at shadow roots, so collect the text through them.
     const text = (await run.evaluate((root) => {
       const parts: string[] = []
@@ -401,16 +425,16 @@ test.describe('stage E: plugins and live data', () => {
       return parts.join(' ')
     })).replace(/\s+/g, ' ')
     console.log('run tile', text.slice(0, 300))
-    expect(text).toMatch(/workflow/)
-    expect(text).toMatch(/completed/)
-    expect(text).toMatch(/7\.17 s/)
-    expect(text).toMatch(/1 ms/)
-    // The rendered tree: two top-level nodes, agent and func, and one child of agent, tool.call.
+    expect(text).toContain(read.data.run.type)
+    expect(text).toContain(read.data.run.status)
+    for (const n of read.data.nodes)
+      expect(text).toContain(formatDuration(n.duration_ms))
+    // The rendered tree has one row per node, in depth-first order, at its depth.
     const rows = await run.locator('.run-timeline__node').evaluateAll(nodes => nodes.map(n => [
       n.querySelector('.run-timeline__name')?.textContent?.trim() ?? '',
       getComputedStyle(n).getPropertyValue('--depth').trim(),
     ]))
-    expect(rows).toEqual([['agent', '0'], ['tool.call', '1'], ['func', '0']])
+    expect(rows).toEqual(expectedRows)
   })
 
   // The engine checks every read against the point's declared schema, so a plugin function whose
@@ -420,10 +444,13 @@ test.describe('stage E: plugins and live data', () => {
     await loginAsAdmin(page)
     const run = JSON.parse((await api(page, 'GET', '/api/v1/dashboards/pages/app_activity/points/run')).body)
     expect(run.state).toBe('ready')
-    expect(run.data.run.duration_ms).toBe(9139)
-    expect(run.data.nodes).toHaveLength(2)
-    expect(run.data.nodes[0].children).toHaveLength(1)
-    expect(run.data.nodes[1].children).toEqual([])
+    // The latest run changes as agents run, so the check is the declared shape, not one run's values.
+    expect(Number.isInteger(run.data.run.duration_ms)).toBe(true)
+    expect(run.data.nodes.length).toBeGreaterThan(0)
+    const shapeOk = (nodes: RunNode[]): boolean => nodes.every(n =>
+      typeof n.type === 'string' && typeof n.status === 'string' && Number.isInteger(n.duration_ms)
+      && Array.isArray(n.children) && shapeOk(n.children))
+    expect(shapeOk(run.data.nodes)).toBe(true)
     const users = JSON.parse((await api(page, 'GET', '/api/v1/dashboards/pages/app_activity/points/users')).body)
     expect(users.state).toBe('ready')
     expect(users.data.users).toHaveLength(3)
