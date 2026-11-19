@@ -1,4 +1,4 @@
-.PHONY: build clean-build dev run run-dev run-e2e prepare-e2e lint verify test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-session-forms-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist tile-helper test-pkg-app-nav build-wc-run-timeline build-wc-user-status
+.PHONY: build clean-build dev run run-dev run-e2e prepare-e2e lint verify test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-session-forms-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist tile-helper test-pkg-app-nav build-wc-run-timeline build-wc-user-status build-wc-fixture-tiles
 
 # Use NPM_INSTALL=true after installing local release packages for a smoke build.
 NPM_INSTALL ?= npm install
@@ -36,7 +36,7 @@ test-attention-helpers:
 WIPPY ?= wippy
 DASHBOARDS_DIR ?=
 DASHBOARDS_WAPP ?=
-TILE_HELPER_CONSUMERS := run-timeline user-status
+TILE_HELPER_CONSUMERS := run-timeline user-status fixture-tiles
 
 tile-helper:
 	@set -e; wapp="$(DASHBOARDS_WAPP)"; dir="$(DASHBOARDS_DIR)"; \
@@ -60,7 +60,7 @@ tile-helper:
 test-pkg-app-nav:
 	cd frontend/packages/app-nav && $(NPM_INSTALL) && npm run typecheck && npm test
 
-build: build-app-main build-app-iframe-demo build-app-session-forms-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-run-timeline build-wc-user-status
+build: build-app-main build-app-iframe-demo build-app-session-forms-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist build-wc-run-timeline build-wc-user-status build-wc-fixture-tiles
 
 build-app-main:
 	cd frontend/applications/main && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/app/main --emptyOutDir
@@ -98,6 +98,10 @@ build-wc-run-timeline: tile-helper
 build-wc-user-status: tile-helper
 	cd frontend/web-components/user-status && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/wc/user-status --emptyOutDir
 
+# Fixture tiles of the RC1 browser specs (dashboards-layout, -states, -artifact).
+build-wc-fixture-tiles: tile-helper
+	cd frontend/web-components/fixture-tiles && $(NPM_INSTALL) && npm run build -- --outDir ../../../static/wc/fixture-tiles --emptyOutDir
+
 # Lint in eslintrc mode: a flat config in a parent directory (such as the Web
 # Host checkout) would otherwise reject --ext.
 lint: export ESLINT_USE_FLAT_CONFIG := false
@@ -114,6 +118,7 @@ lint: tile-helper
 	cd frontend/web-components/counter-persist && npm run lint
 	cd frontend/web-components/run-timeline && npm run lint
 	cd frontend/web-components/user-status && npm run lint
+	cd frontend/web-components/fixture-tiles && npm run lint
 
 # Frontend build and lint for every app and web component, then the Lua lint for
 # this app's own namespaces (`app`, `app.*`). The CI lint stage covers the whole

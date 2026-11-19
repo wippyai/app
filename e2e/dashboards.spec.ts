@@ -427,7 +427,9 @@ test.describe('stage E: plugins and live data', () => {
     const users = JSON.parse((await api(page, 'GET', '/api/v1/dashboards/pages/app_activity/points/users')).body)
     expect(users.state).toBe('ready')
     expect(users.data.users).toHaveLength(3)
-    expect(users.live_topic).toBe('dash.users.changed')
+    // Real-time contract section 8: the envelope carries `live`, and a signal to
+    // everyone has its filled-in topic there.
+    expect(users.live?.signal?.topic).toBe('dash:users:changed')
   })
 
   test('plugin 2 updates in another browser through the live signal', async ({ browser }) => {

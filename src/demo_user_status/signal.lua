@@ -1,34 +1,27 @@
--- The live signal of the users point (contracts section 9).
+-- The live signal of the users point (real-time contract, sections 3 and 4).
 --
--- Topic dash.users.changed. The message carries no data: the payload is an
--- empty table. A tile that subscribes with on() reads the point again through
--- the engine, which checks the viewer's access on every read.
+-- The point declares `live.signal` with `audience: all` and the fixed topic
+-- dash:users:changed. The engine's live library sends it to every connected
+-- user through wippy.central. The message carries no data: a tile reads the
+-- point again through the engine, which checks the viewer's access on every
+-- read, so a user who may not view the page gets a denied read and nothing leaks.
 --
--- wippy.central forwards any message that is not a relay control topic to the
--- hub of every connected user, and each user hub fans it out to that user's
--- clients. It cannot pick recipients. A user who may not view the page gets a
--- content-free signal and a denied read, so nothing leaks.
---
--- publish() is called by the admin test endpoint (signal_handler below) and,
--- in stage E3, by the set_status action after it changed a user.
+-- publish() is called by the admin test endpoint (signal_handler below) and by
+-- the set_status action after it changed a user.
 local http = require("http")
 local security = require("security")
 local logger = require("logger"):named("demo.user_status")
+local live = require("live")
 
-local TOPIC = "dash.users.changed"
-local CENTRAL_HUB = "wippy.central"
+local POINT = "demo.user_status:users"
 
--- Sends the signal once. Returns { sent = true }, or nil plus a reason.
+-- Sends the signal once. Returns { sent = true, topic }, or nil plus a reason.
 local function publish()
-    local central = process.registry.lookup(CENTRAL_HUB)
-    if not central then
-        return nil, "the relay hub " .. CENTRAL_HUB .. " is not running"
-    end
-    local ok, err = process.send(central, TOPIC, {})
+    local ok, err = live.signal(POINT, {})
     if not ok then
-        return nil, "cannot send " .. TOPIC .. ": " .. tostring(err)
+        return nil, "cannot send the users signal: " .. tostring(err)
     end
-    return { sent = true, topic = TOPIC }
+    return { sent = true, topic = live.topic(POINT, {}) }
 end
 
 -- POST /api/v1/demo/signal/users. Admin only (policy deny_signal_users).

@@ -41,6 +41,7 @@ $wcs = @(
     @{ name = 'counter-persist'; dir = 'frontend/web-components/counter-persist'; out = 'static/wc/counter-persist' }
     @{ name = 'run-timeline'; dir = 'frontend/web-components/run-timeline'; out = 'static/wc/run-timeline'; tileHelper = $true }
     @{ name = 'user-status'; dir = 'frontend/web-components/user-status'; out = 'static/wc/user-status'; tileHelper = $true }
+    @{ name = 'fixture-tiles'; dir = 'frontend/web-components/fixture-tiles'; out = 'static/wc/fixture-tiles'; tileHelper = $true }
 )
 
 # Headless TypeScript packages with a test-pkg-<name> target (install,
@@ -63,6 +64,7 @@ $lintDirs = @(
     'frontend/web-components/counter-persist'
     'frontend/web-components/run-timeline'
     'frontend/web-components/user-status'
+    'frontend/web-components/fixture-tiles'
 )
 
 # Mirrors the Makefile's tile-helper: materializes @wippy/dashboards-tile-helper

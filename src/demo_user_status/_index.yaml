@@ -6,7 +6,7 @@ namespace: demo.user_status
 #   point       demo.user_status:users        wippy.dashboards.point, served by list_users
 #   component   demo.user_status:user-status  view.component, frontend/web-components/user-status;
 #                                             its meta.implements is the tile claim of the tile demo.user_status
-#   signal      topic dash.users.changed      sent by publish_signal; POST /api/v1/demo/signal/users
+#   signal      topic dash:users:changed      sent by publish_signal through live.signal; POST /api/v1/demo/signal/users
 #   action      demo.user_status:set_status   wippy.dashboards.action, served by set_user_status (stage E3)
 #
 # The JSON schema of the users object appears twice below: as the point's output
@@ -55,7 +55,12 @@ entries:
                   name: { type: string }
                   status: { type: string, enum: [active, inactive, suspended, pending] }
                   groups: { type: array, items: { type: string } }
-      live_topic: dash.users.changed
+      # Real-time contract section 3: a signal to everyone on a fixed topic with
+      # no arguments in it, sent through the engine's live library.
+      live:
+        signal:
+          audience: all
+          topic: "dash:users:changed"
 
   # ── web component, with its tile claim (tile contract section 2) ──────
   # The claim replaces the wippy.dashboards.tile entry of version 0.0.1. A page places the tile with
@@ -128,13 +133,15 @@ entries:
   - name: publish_signal
     kind: function.lua
     meta:
-      comment: Sends the signal dash.users.changed (no data) through wippy.central
+      comment: Sends the users point's live signal (dash:users:changed, no data) through the engine's live library
     source: file://signal.lua
     method: publish
     modules:
       - http
       - security
       - logger
+    imports:
+      live: wippy.dashboards:live
     pool:
       size: 1
 
@@ -148,6 +155,8 @@ entries:
       - http
       - security
       - logger
+    imports:
+      live: wippy.dashboards:live
     pool:
       size: 1
 
