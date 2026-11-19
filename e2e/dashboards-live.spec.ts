@@ -334,7 +334,9 @@ test.describe('streams and signals', () => {
     const vw = watch(viewer, PAGE)
     await loginAsAdmin(admin)
     await loginAs(viewer, 'viewer@wippy.local')
-    expectFailures(viewer, { status: 403, path: '/dashboards/pages/' })
+    // A refused renewal ends every subscription of the viewer on the page (live contract, RC1-08), so the
+    // other tile's next renewal finds its subscription gone: 404.
+    expectFailures(viewer, { status: 403, path: '/dashboards/pages/' }, { status: 404, path: '/subscriptions/' })
     const vf = await openLive(viewer)
     const q = vf.locator('[data-tile-id="q"] .dash-kpi__value')
     await expect(q).toBeVisible({ timeout: 20_000 })
@@ -350,11 +352,12 @@ test.describe('streams and signals', () => {
       // The tile renews every 30 seconds: the renewal is refused, the data goes, the denied state shows.
       await expect(q).toHaveCount(0, { timeout: 60_000 })
       await expect(vf.locator('[data-tile-id="q"]')).toContainText(/access denied/i)
-      // The page has two live tiles that renew on their own clocks; the refusal that ends the queue tile's
-      // subscription is the renewal of its own point, not the first refusal of either tile.
-      const denied = vw.renewals.find(r => r.status === 403 && r.point === 'queue')
-      expect(denied, 'the queue renewal was answered with 403').toBeDefined()
-      // No message of the ended subscription reaches the viewer after the refusal.
+      // The first refused renewal of either tile ends all of the viewer's subscriptions on the page.
+      const denied = vw.renewals.find(r => r.status === 403)
+      expect(denied, 'a renewal was answered with 403').toBeDefined()
+      // The queue tile's own renewal is then refused, or finds its subscription already ended.
+      expect(vw.renewals.filter(r => r.point === 'queue' && r.at >= denied!.at).every(r => r.status === 403 || r.status === 404)).toBe(true)
+      // No message of any subscription that existed before the refusal reaches the viewer after it.
       await viewer.waitForTimeout(3000)
       const topicBefore = new Set(vw.frames.filter(fr => fr.at <= denied!.at).map(fr => fr.topic))
       const late = vw.frames.filter(fr => fr.at > denied!.at + 500 && topicBefore.has(fr.topic))
