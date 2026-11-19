@@ -1,0 +1,233 @@
+version: "1.0"
+namespace: app.dashboards_fixture_tiles
+
+# Fixture components of the wippy/dashboards browser tests (RC1-05, RC1-07, RC1-14, RC1-21). They are
+# built from frontend/web-components/fixture-tiles into static/wc/fixture-tiles and use the tile helper
+# of the module like any plugin tile. Every component here is a test fixture and sets catalog: false.
+#
+#   fx-states     tile fixture.states   draws_states: true. Draws its own states from the status API of the helper,
+#                                       and records every render-state and every read outcome in the page
+#                                       (window.__fx). Input main (record) and an optional input extra (record).
+#   fx-size       tile fixture.size     size_classes medium 480, expanded 800. A `@container tile` rule sets the CSS
+#                                       custom property --fx-class per class. Option tall: true makes it taller than its place.
+#   fx-onload     tile fixture.onload   changes data when it loads: POST /api/v1/dashboards-fixtures/touch.
+#   fx-api        tile fixture.api      calls an API that a regular viewer may not use, and shows the answer.
+#
+# The artifact tile (RC1-21) shows fx-onload and fx-api by tag with fixed props.
+
+entries:
+  # ── backend of the fixture components ────────────────────────────────
+  - name: touch_handler
+    kind: function.lua
+    source: file://touch.lua
+    method: touch_handler
+    modules:
+      - http
+      - security
+    pool:
+      size: 1
+
+  - name: restricted_handler
+    kind: function.lua
+    source: file://touch.lua
+    method: restricted_handler
+    modules:
+      - http
+      - security
+    pool:
+      size: 1
+
+  - name: touch.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: touch_handler
+    path: /dashboards-fixtures/touch
+
+  - name: restricted.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: GET
+    func: restricted_handler
+    path: /dashboards-fixtures/restricted
+
+  - name: deny_fixture_touch
+    kind: security.policy
+    meta:
+      comment: app.security:user may not use the fixture APIs that change data
+    groups:
+      - app.security:user
+    policy:
+      resources: app.dashboards_fixture_tiles:touch
+      actions: dashboards_fixtures.touch
+      effect: deny
+
+  # ── components with their tile_v1 claims (tile contract section 2) ───
+  - name: fx-states
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: fx-states
+      tag_name: fx-states
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/fixture-tiles
+      entry_point: fx-states.js
+      catalog: false
+      implements:
+        - interface: wippy.dashboards:tile_v1
+          version: 1.0.0
+          descriptor:
+            tile: fixture.states
+            tile_version: 1.0.0
+            title: Fixture states
+            description: Test tile that draws its own states and records its requests. Not for dashboards.
+            draws_states: true
+            inputs:
+              main:
+                shape: record
+              extra:
+                shape: record
+                required: false
+            fields:
+              text: { input: main, role: dimension, types: [string] }
+            options_schema:
+              type: object
+              properties:
+                label: { type: string }
+            events: {}
+            size:
+              fit: any
+            examples:
+              main:
+                text: Example text
+              extra:
+                text: Example text
+
+  # The same tile as fx-states with a claim that sets state_display: computing is replace. A page that sets
+  # only refreshing keeps this claim's computing (replace) and the default of error (keep).
+  - name: fx-states-replace
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: fx-states-replace
+      tag_name: fx-states-replace
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/fixture-tiles
+      entry_point: fx-states-replace.js
+      catalog: false
+      implements:
+        - interface: wippy.dashboards:tile_v1
+          version: 1.0.0
+          descriptor:
+            tile: fixture.states_replace
+            tile_version: 1.0.0
+            title: Fixture states with a claim preference
+            description: Test tile that draws its own states and whose claim says computing is replaced by a panel. Not for dashboards.
+            draws_states: true
+            state_display: { computing: replace }
+            inputs:
+              main:
+                shape: record
+            fields:
+              text: { input: main, role: dimension, types: [string] }
+            options_schema: { type: object }
+            events: {}
+            size:
+              fit: any
+            examples:
+              main:
+                text: Example text
+
+  - name: fx-size
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: fx-size
+      tag_name: fx-size
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/fixture-tiles
+      entry_point: fx-size.js
+      catalog: false
+      implements:
+        - interface: wippy.dashboards:tile_v1
+          version: 1.0.0
+          descriptor:
+            tile: fixture.size
+            tile_version: 1.0.0
+            title: Fixture size
+            description: Test tile that shows its size class and the value of a container rule. Not for dashboards.
+            inputs:
+              main:
+                shape: none
+            options_schema:
+              type: object
+              properties:
+                tall: { type: boolean }
+            events: {}
+            size:
+              fit: any
+              size_classes: { medium: 480, expanded: 800 }
+
+  - name: fx-onload
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: fx-onload
+      tag_name: fx-onload
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/fixture-tiles
+      entry_point: fx-onload.js
+      catalog: false
+      implements:
+        - interface: wippy.dashboards:tile_v1
+          version: 1.0.0
+          descriptor:
+            tile: fixture.onload
+            tile_version: 1.0.0
+            title: Fixture changes data on load
+            description: Test component that changes data as soon as it loads. Not for dashboards.
+            inputs:
+              main:
+                shape: none
+            options_schema: { type: object }
+            events: {}
+            size:
+              fit: small
+
+  - name: fx-api
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: fx-api
+      tag_name: fx-api
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/fixture-tiles
+      entry_point: fx-api.js
+      catalog: false
+      implements:
+        - interface: wippy.dashboards:tile_v1
+          version: 1.0.0
+          descriptor:
+            tile: fixture.api
+            tile_version: 1.0.0
+            title: Fixture API call
+            description: Test component that calls an API that a regular viewer may not use. Not for dashboards.
+            inputs:
+              main:
+                shape: none
+            options_schema: { type: object }
+            events: {}
+            size:
+              fit: small

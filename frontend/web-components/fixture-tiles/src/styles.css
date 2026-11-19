@@ -1,0 +1,59 @@
+@import "@wippy-fe/theme/theme-config.css";
+
+/* Sizing block: unknown elements default to display:inline and collapse. */
+:host {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* fx-size: one container rule per size class (thresholds 480 and 800 px of the tile's own width). The
+   property --fx-class says which one applied, so a test can compare it with the size-class attribute. */
+.fx-size {
+  --fx-class: compact;
+  padding: 0.5rem;
+  color: var(--p-text-color);
+}
+
+@container tile (min-width: 480px) {
+  .fx-size {
+    --fx-class: medium;
+  }
+}
+
+@container tile (min-width: 800px) {
+  .fx-size {
+    --fx-class: expanded;
+  }
+}
+
+.fx-size__tall {
+  height: 2000px;
+}
+
+/* The other fixtures: plain text with theme tokens. */
+.fx-states,
+.fx-onload,
+.fx-api {
+  padding: 0.5rem;
+  color: var(--p-text-color);
+}
+
+.fx-states__mark {
+  margin: 0 0 0.25rem;
+  color: var(--p-text-muted-color);
+  font-size: 0.75rem;
+}
+
+.fx-states__panel {
+  margin: 0;
+  font-weight: 600;
+}
+
+.fx-states__text,
+.fx-states__extra,
+.fx-states__missing {
+  margin: 0;
+}
