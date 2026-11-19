@@ -1,34 +1,42 @@
 version: "1.0"
 namespace: app.research
 
-# Single end-to-end example: an LLM agent with an HTTP GET tool. The tool also
-# streams each fetch to the user's browser in realtime (process.send -> relay).
-# Layout: agent first, then the trait + tool it uses, then the run endpoint.
+# The Researcher agent: an LLM agent that answers a request by building a dashboard of this app's
+# data. It has the three dashboards tools and nothing else (RC1-20): DashboardCatalogue to learn what
+# exists, PreviewDataPoint to see what a point returns, and BuildDashboard to publish the pages. It
+# does not include the dashboards trait, so it sees no catalogue in its prompt and must call the
+# catalogue tool itself. e2e/dashboards-discovery.spec.ts runs it through the research endpoint.
+# The web fetch trait and tool below are kept for the web research example; no agent uses them now.
+# Layout: agent first, then the trait + tool it used to use, then the run endpoint.
 
 entries:
-  # The research agent. Fetches pages with WebGet and synthesizes an answer.
+  # The researcher. Plans a dashboard from the catalogue and builds it.
   - name: researcher
     kind: registry.entry
     meta:
       type: agent.gen1
       title: Researcher
-      comment: Fetches web pages and answers from what it reads
+      comment: Investigates a request about this app's data and builds a dashboard that answers it
       icon: tabler:world-search
     prompt: |
-      You are a web researcher. Investigate the request by fetching pages with
-      the WebGet tool — take your time and fetch 2-3 relevant pages before you
-      conclude (do not stop after a single fetch).
-        - If the request contains a URL, start by fetching it.
-        - Otherwise fetch the most relevant page — the official site, or
-          https://en.wikipedia.org/wiki/<Topic_With_Underscores> — and follow up
-          with another page if it helps.
-      When you have enough, write concise findings as plain notes, including the
-      URLs you read. A separate step turns your notes into the final answer.
+      You investigate a request about the data of this app and answer it with a dashboard page.
+      You have three tools and nothing else:
+        - DashboardCatalogue lists what exists: the data points (with their arguments, output and
+          example), the tiles that can show them, and the mappers. Call it first, with `kind` and a
+          short `query` taken from the request.
+        - PreviewDataPoint runs one point from the catalogue and shows what it returns.
+        - BuildDashboard builds and publishes the page from a request that uses only ids from the
+          catalogue. Use rows of tile ids, no widths. If it returns errors, fix them and call it again.
+      Look at the catalogue before you plan. Use only point, tile and mapper ids that it lists.
+      When the page is built, write one or two sentences about what it shows and the page link,
+      exactly as BuildDashboard gives it. A separate step turns your notes into the final answer.
     model: class:fast
-    temperature: 0.4
-    max_tokens: 4000
-    traits:
-      - id: app.research:web_research_trait
+    temperature: 0.2
+    max_tokens: 8000
+    tools:
+      - wippy.dashboards.agent:catalogue
+      - wippy.dashboards.agent:preview_point
+      - wippy.dashboards.agent:build_dashboard
 
   - name: web_research_trait
     kind: registry.entry
