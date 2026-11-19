@@ -1,15 +1,16 @@
 version: "1.0"
 namespace: app.dashboards_fixtures
 
-# Test fixtures of the wippy/dashboards module, used by this app's browser
-# tests (e2e/dashboards.spec.ts): points that return fixed numbers, series and
-# options, fail, time out or return a wrong shape, placeholder tiles (the
-# dash-placeholder element ships in the module's dashboard-layout bundle), and
-# a denial check page. Every point and tile here sets catalog: false, so the
-# dashboards agent never offers them.
+# Fixtures of the wippy/dashboards browser tests (e2e/dashboards-reads.spec.ts, e2e/dashboards.spec.ts):
+# points for each row of the state table of the data point contract (ready, empty, failed,
+# wrong data, slow, timeout, mapper failure), for the value rules (decimals, big integers, time
+# offsets, empty cells in each type, malformed values), a slow action, the placeholder tiles (the
+# dash-placeholder element ships in the module's dashboard-layout bundle), and policies for the
+# access checks. Every point and tile here sets catalog: false, so the dashboards agent never
+# offers them. The point no_schema is invalid on purpose: publication must refuse it.
 
 entries:
-  # Test page for denial checks: a regular user may not view deny_check.
+  # A regular user may not view the page deny_check.
   - name: deny_view_check
     kind: security.policy
     meta:
@@ -21,6 +22,53 @@ entries:
       actions: view
       effect: deny
 
+  # A regular user may not view the page reads_denied (RC1-06).
+  - name: deny_view_reads
+    kind: security.policy
+    meta:
+      comment: app.security:user may not view the page reads_denied
+    groups:
+      - app.security:user
+    policy:
+      resources: page:wippy.dashboards.pages:reads_denied
+      actions: view
+      effect: deny
+
+  # Access that a test withdraws at run time (RC1-08): the endpoint below changes the effect of this
+  # policy between allow and deny, and the next read of a regular user sees it.
+  - name: reads_toggle
+    kind: security.policy
+    meta:
+      comment: Lets app.security:user view the page reads_toggle; a test changes the effect to deny at run time
+    groups:
+      - app.security:user
+    policy:
+      resources: page:wippy.dashboards.pages:reads_toggle
+      actions: view
+      effect: allow
+
+  - name: access_toggle
+    kind: function.lua
+    meta:
+      comment: Sets the effect of the policy reads_toggle (admin only), for the access tests
+    source: file://access_toggle.lua
+    method: handler
+    modules:
+      - http
+      - json
+      - security
+      - registry
+    pool:
+      size: 1
+
+  - name: access_toggle.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: app.dashboards_fixtures:access_toggle
+    path: /dashboards-fixtures/access
+
   # ── functions ────────────────────────────────────────────────────────
   - name: numbers_fn
     kind: function.lua
@@ -29,6 +77,9 @@ entries:
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
@@ -39,6 +90,9 @@ entries:
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
@@ -49,6 +103,9 @@ entries:
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
@@ -59,6 +116,9 @@ entries:
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
@@ -69,6 +129,9 @@ entries:
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
@@ -79,6 +142,9 @@ entries:
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
@@ -89,16 +155,9 @@ entries:
     modules:
       - logger
       - security
-    pool:
-      size: 1
-
-  - name: echo_fn
-    kind: function.lua
-    source: file://fixtures.lua
-    method: echo
-    modules:
-      - logger
-      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
@@ -109,85 +168,172 @@ entries:
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
-  - name: empty_record_fn
+  - name: echo_fn
     kind: function.lua
     source: file://fixtures.lua
-    method: empty_record
+    method: echo
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
-  - name: null_cells_fn
+  - name: sleepy_fn
     kind: function.lua
     source: file://fixtures.lua
-    method: null_cells
+    method: sleepy
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
-      size: 1
+      size: 4
 
-  - name: tree_fn
+  - name: slow_fn
     kind: function.lua
     source: file://fixtures.lua
-    method: tree
+    method: slow
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
-      size: 1
+      size: 4
 
-  - name: tree_empty_fn
+  - name: slow_action_fn
     kind: function.lua
     source: file://fixtures.lua
-    method: tree_empty
+    method: slow_action
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
-  - name: tree_bad_fn
+  - name: values_fn
     kind: function.lua
     source: file://fixtures.lua
-    method: tree_bad
+    method: values
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
-  - name: empty_scalar_wrong_fn
+  - name: null_strict_fn
     kind: function.lua
     source: file://fixtures.lua
-    method: empty_scalar_wrong
+    method: null_strict
     modules:
       - logger
       - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
     pool:
       size: 1
 
-  # ── point declarations (contracts section 5.1) ───────────────────────
+  - name: record_nulls_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: record_nulls
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 1
+
+  - name: schema_nulls_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: schema_nulls
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 1
+
+  - name: source_rows_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: source_rows
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 1
+
+  - name: refuse_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: refuse
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 1
+
+  - name: mapper_modes_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: mapper_modes
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 1
+
+  # ── point declarations (data point contract section 2) ───────────────
   - name: numbers
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
       catalog: false
       title: Fixture numbers
+      description: "One number, 42. Reads fine."
       func: app.dashboards_fixtures:numbers_fn
-      args_schema:
-        type: object
-        additionalProperties: false
-        properties: {}
+      args_schema: { type: object, additionalProperties: false, properties: {} }
       output:
         shape: scalar
-      refresh_ms: 60000
-      live_topic: dash.fixtures.changed
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[42]] }
 
   - name: series
     kind: registry.entry
@@ -195,15 +341,21 @@ entries:
       type: wippy.dashboards.point
       catalog: false
       title: Fixture series
+      description: "Two days of tokens. Optionally for one model."
       func: app.dashboards_fixtures:series_fn
       args_schema:
         type: object
         additionalProperties: false
         properties:
-          model:
-            type: [string, "null"]
+          model: { type: [string, "null"] }
       output:
         shape: series
+        fields:
+          - { name: day, type: date, role: dimension, nullable: false }
+          - { name: tokens, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: day, type: date, role: dimension, nullable: false }, { name: tokens, type: number, role: measure, nullable: false }], rows: [["2026-06-10", 10]] }
 
   - name: options
     kind: registry.entry
@@ -211,34 +363,69 @@ entries:
       type: wippy.dashboards.point
       catalog: false
       title: Fixture options
+      description: "Two options for a select."
       func: app.dashboards_fixtures:options_fn
-      args_schema:
-        type: object
-        additionalProperties: false
-        properties: {}
+      args_schema: { type: object, additionalProperties: false, properties: {} }
       output:
         shape: options
+        fields:
+          - { name: value, type: string, role: dimension, nullable: false }
+          - { name: label, type: string, role: dimension, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: string, role: dimension, nullable: false }, { name: label, type: string, role: dimension, nullable: false }], rows: [["a", "Option A"]] }
 
-# ── stage C2 declarations ───────────────────────────────────────────
+  - name: empty_series
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture empty frame
+      description: "A series with no rows: the read answers empty."
+      func: app.dashboards_fixtures:empty_series_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: series
+        fields:
+          - { name: day, type: date, role: dimension, nullable: false }
+          - { name: tokens, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: day, type: date, role: dimension, nullable: false }, { name: tokens, type: number, role: measure, nullable: false }], rows: [] }
+
   - name: fails
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
       catalog: false
       title: Fixture failure
+      description: "Its function fails: the read answers source_error and never shows the error text."
       func: app.dashboards_fixtures:fails_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
-      output: { shape: scalar }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
 
   - name: wrong_shape
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
       catalog: false
-      title: Fixture wrong shape
+      title: Fixture wrong data
+      description: "Declared as a scalar but returns two rows: the read answers format_mismatch."
       func: app.dashboards_fixtures:wrong_shape_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
-      output: { shape: scalar }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
 
   - name: bad_cell
     kind: registry.entry
@@ -246,17 +433,25 @@ entries:
       type: wippy.dashboards.point
       catalog: false
       title: Fixture bad cell
+      description: "Declared as a series but a number cell holds text: the read answers format_mismatch."
       func: app.dashboards_fixtures:bad_cell_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
-      output: { shape: series }
+      output:
+        shape: series
+        fields:
+          - { name: day, type: date, role: dimension, nullable: false }
+          - { name: tokens, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: day, type: date, role: dimension, nullable: false }, { name: tokens, type: number, role: measure, nullable: false }], rows: [["2026-06-10", 10]] }
 
-  # args_schema with a required, server-bound limit and a $param-bound model.
   - name: echo
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
       catalog: false
       title: Fixture echo
+      description: "Echoes its arguments and the caller. The limit is bound by the page."
       func: app.dashboards_fixtures:echo_fn
       args_schema:
         type: object
@@ -266,125 +461,207 @@ entries:
           model: { type: string, enum: [alpha, beta] }
           limit: { type: integer, minimum: 1, maximum: 100 }
       output: { shape: record }
-      recipe: echo_recipe
+      example:
+        args: { model: alpha, limit: 5 }
+        data: { model: alpha, limit: 5, actor: someone }
 
-  - name: empty_series
+  - name: sleepy
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
       catalog: false
-      title: Fixture empty frame
-      func: app.dashboards_fixtures:empty_series_fn
+      title: Fixture timeout
+      description: "Takes 3 seconds but may take 1 second: the read answers timeout."
+      func: app.dashboards_fixtures:sleepy_fn
+      deadline_ms: 1000
       args_schema: { type: object, additionalProperties: false, properties: {} }
-      output: { shape: series }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[42]] }
 
-  - name: empty_record
+  - name: slow
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
       catalog: false
-      title: Fixture empty record
-      func: app.dashboards_fixtures:empty_record_fn
+      title: Fixture slow result
+      description: "Work that takes 5 seconds: the read answers computing with an operation token, then the result 7."
+      func: app.dashboards_fixtures:slow_fn
       args_schema: { type: object, additionalProperties: false, properties: {} }
-      output: { shape: record }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[7]] }
 
-  # Nullable cells: shows what the runtime encoder does with a nil cell.
-  - name: null_cells
+  - name: values
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
       catalog: false
-      title: Fixture null cells
-      func: app.dashboards_fixtures:null_cells_fn
-      args_schema: { type: object, additionalProperties: false, properties: {} }
-      output: { shape: series }
-
-  # Follow-up fixtures. G3: empty arrays under a schema shape (plugin 1 returns
-  # nodes with children: []) and in args; the args_schema has required: [].
-  - name: tree
-    kind: registry.entry
-    meta:
-      type: wippy.dashboards.point
-      catalog: false
-      title: Fixture tree
-      func: app.dashboards_fixtures:tree_fn
+      title: Fixture value cases
+      description: "A table of every field type, in the case the page asks for: valid, empty_cells, no_rows or a malformed one."
+      func: app.dashboards_fixtures:values_fn
       args_schema:
         type: object
         additionalProperties: false
-        required: []
         properties:
-          tags: { type: array, items: { type: string } }
+          case: { type: string, maxLength: 40 }
+      output:
+        shape: table
+        fields:
+          - { name: d, type: date, role: dimension, nullable: true }
+          - { name: t, type: time, role: dimension, nullable: true }
+          - { name: n, type: number, role: measure, nullable: true }
+          - { name: dec, type: decimal, role: measure, nullable: true }
+          - { name: s, type: string, role: dimension, nullable: true }
+          - { name: b, type: boolean, role: dimension, nullable: true }
+      example:
+        args: { case: valid }
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: d, type: date, role: dimension, nullable: true }, { name: t, type: time, role: dimension, nullable: true }, { name: n, type: number, role: measure, nullable: true }, { name: dec, type: decimal, role: measure, nullable: true }, { name: s, type: string, role: dimension, nullable: true }, { name: b, type: boolean, role: dimension, nullable: true }], rows: [["2026-11-19", "2026-11-19T12:00:00+01:00", 1.5, "12345678901234567890", "text", true]] }
+
+  - name: null_strict
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture empty cell in a required field
+      description: "An empty cell in a field that is not nullable: the read answers format_mismatch."
+      func: app.dashboards_fixtures:null_strict_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
+
+  - name: record_nulls
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture record with an empty cell
+      description: "A record whose note is empty."
+      func: app.dashboards_fixtures:record_nulls_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: record }
+      example:
+        args: {}
+        data: { name: a, nested: { count: 2 } }
+
+  - name: schema_nulls
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture schema data with empty cells
+      description: "Items whose label or extra value can be empty."
+      func: app.dashboards_fixtures:schema_nulls_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
       output:
         shape: schema
         schema:
           type: object
-          required: [name, tags, meta, children]
+          required: [items]
           properties:
-            name: { type: string }
-            tags: { type: array, items: { type: string } }
-            meta: { type: object }
-            children:
+            items:
               type: array
               items:
                 type: object
-                required: [name, children]
                 properties:
-                  name: { type: string }
-                  children: { type: array }
+                  label: { type: [string, "null"] }
+                  extra: { type: [string, number, "null"] }
+      example:
+        args: {}
+        data: { items: [{ label: a }] }
 
-  - name: tree_empty
+  - name: bad_mapper
     kind: registry.entry
     meta:
       type: wippy.dashboards.point
       catalog: false
-      title: Fixture tree (no children)
-      func: app.dashboards_fixtures:tree_empty_fn
-      args_schema:
+      title: Fixture mapper that fails
+      description: "A point whose mapper fails: the read answers mapping_failed."
+      source: app.dashboards_fixtures:source_rows_fn
+      mapper: app.dashboards_fixtures:mapper_fixture
+      mapper_params: { mode: fail }
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
+
+  - name: blocked_mapper
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture mapper that blocks
+      description: "A point whose mapper takes 3 seconds but may take 1 second: the read answers timeout."
+      source: app.dashboards_fixtures:source_rows_fn
+      mapper: app.dashboards_fixtures:mapper_fixture
+      mapper_params: { mode: block }
+      deadline_ms: 1000
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
+
+  - name: refuse
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture refusal
+      description: "Its function refuses the viewer: the read answers denied with 403 and shows no text."
+      func: app.dashboards_fixtures:refuse_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: scalar
+        fields:
+          - { name: value, type: number, role: measure, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
+
+  - name: mapper_fixture
+    kind: registry.entry
+    meta:
+      type: wippy.data.mapper
+      implements: wippy.data:mapper_v1
+      catalog: false
+      title: Fixture mapper
+      description: "Turns any rows into the number 1. The parameter mode makes it fail or block, for the read tests."
+      func: app.dashboards_fixtures:mapper_modes_fn
+      input_schema: { type: array, items: { type: object } }
+      params_schema:
         type: object
         additionalProperties: false
-        required: []
         properties:
-          tags: { type: array, items: { type: string } }
-      output:
-        shape: schema
-        schema:
-          type: object
-          required: [name, tags, meta, children]
-          properties:
-            name: { type: string }
-            tags: { type: array, items: { type: string } }
-            meta: { type: object }
-            children: { type: array }
+          mode: { type: string, enum: [ok, fail, block] }
+      output: { format: wippy.dashboard_frame/v1 }
+      examples:
+        - params: { mode: ok }
+          context: { time_zone: UTC }
+          input: [{ a: 1 }]
+          output: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[1]] }
 
-  # Declares an array, returns a string.
-  - name: tree_bad
-    kind: registry.entry
-    meta:
-      type: wippy.dashboards.point
-      catalog: false
-      title: Fixture tree (bad children)
-      func: app.dashboards_fixtures:tree_bad_fn
-      args_schema: { type: object, additionalProperties: false, properties: {} }
-      output:
-        shape: schema
-        schema:
-          type: object
-          required: [children]
-          properties:
-            children: { type: array }
-
-  # G4: no rows, and no number field for a scalar.
-  - name: empty_scalar_wrong
-    kind: registry.entry
-    meta:
-      type: wippy.dashboards.point
-      catalog: false
-      title: Fixture empty scalar (wrong fields)
-      func: app.dashboards_fixtures:empty_scalar_wrong_fn
-      args_schema: { type: object, additionalProperties: false, properties: {} }
-      output: { shape: scalar }
-
-  # G2: a point declaration with no args_schema. Publication must refuse it.
+  # G2: a point declaration with no args_schema. Publication must refuse it (invalid on purpose).
   - name: no_schema
     kind: registry.entry
     meta:
@@ -394,12 +671,13 @@ entries:
       func: app.dashboards_fixtures:numbers_fn
       output: { shape: scalar }
 
-  # ── action declaration (contracts section 5.2) ───────────────────────
+  # ── action declarations (data point contract section 6) ──────────────
   - name: noop
     kind: registry.entry
     meta:
       type: wippy.dashboards.action
       title: Fixture action
+      description: "Does nothing and answers ok. A fixture for the action tests."
       func: app.dashboards_fixtures:noop_fn
       args_schema:
         type: object
@@ -412,6 +690,31 @@ entries:
         action: dash.fixtures.noop
         resource: app.dashboards_fixtures:noop
       confirm: true
+      sensitive_fields: []
+      refreshes:
+        - numbers
+
+  - name: slow_action
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.action
+      catalog: false
+      title: Fixture slow action
+      description: "Work that takes 5 seconds: the call answers computing with an operation token, then done."
+      func: app.dashboards_fixtures:slow_action_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties: {}
+      tile_args: []
+      result_schema:
+        type: object
+        properties:
+          done: { type: boolean }
+      permission:
+        action: dash.fixtures.slow
+        resource: app.dashboards_fixtures:slow_action
+      confirm: false
       sensitive_fields: []
       refreshes:
         - numbers
