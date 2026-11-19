@@ -10,6 +10,8 @@ import {
   assertBudget,
   boardFrame,
   catalogue,
+  chartProblem,
+  expectedChart,
   fixedArgs,
   frameStatuses,
   listedIds,
@@ -24,6 +26,7 @@ import {
   renderedText,
   send,
   spendStart,
+  tableProblem,
   spentUsd,
 } from './dashboards-agent.support'
 
@@ -51,6 +54,17 @@ import {
  * when a run does not pass: the reasons go to the console, and the last test counts. Request 4 shows
  * the users tile, which lets admins change a status, so the prompt adds the user's consent sentence
  * that the agent needs before it may set confirmed: true (RC1-11).
+ *
+ * What the board drew is compared with the direct read, not only the API read: a number tile must draw
+ * the number; a chart must plot the labels in order and every dataset's value label by label (the
+ * algorithm of the chart tile, written again in the support file); a table must draw each row, and in
+ * each shown column the cell that the value gives (a date only has to be filled, since it is drawn in the
+ * viewer's format).
+ *
+ * Known limits (accepted): the fixture of toolCalls in dashboards-agent.support.spec.ts is synthetic
+ * until the first real run captures a response of GET /api/v1/dataflows/{id}. The spend cap is a check
+ * before each chat turn (and on every poll while it goes on) with one worker, not an atomic
+ * reservation: two spec files that run at the same time can pass it together.
  */
 test.skip(process.env.RUN_LLM_DEMO !== '1', 'calls a real LLM; set RUN_LLM_DEMO=1 to run')
 test.describe.configure({ mode: 'serial' })
@@ -375,21 +389,11 @@ async function renderedProblem(page: Page, pageId: string, read: TileRead, direc
     const chart = await renderedChart(board, read.id)
     if (!chart)
       return 'the chart tile drew no data'
-    const numbers = (list: unknown[]) => list.filter(v => v !== null && v !== undefined).map(Number).sort((a, b) => a - b)
-    const wanted = numbers(slot('y').flatMap(name => data.rows.map((r: unknown[]) => r[fieldIndex(data, name)])))
-    const drawn = numbers(chart.datasets.flatMap(d => d.data))
-    if (JSON.stringify(wanted) !== JSON.stringify(drawn))
-      return `the chart plots ${JSON.stringify(drawn).slice(0, 120)}, the data has ${JSON.stringify(wanted).slice(0, 120)}`
-    const x = fieldIndex(data, slot('x')[0])
-    const labels = [...new Set(data.rows.map((r: unknown[]) => String(r[x])))].sort()
-    if (x >= 0 && JSON.stringify([...new Set(chart.labels)].sort()) !== JSON.stringify(labels))
-      return 'the chart labels differ from the values of its x field'
-    return null
+    // The labels in order, and every dataset's value for every label, as the tile builds them.
+    return chartProblem(chart, expectedChart(data, { x: slot('x')[0], y: slot('y'), series: slot('series')[0] ?? null }))
   }
-  if (type === 'table') {
-    const rows = await renderedTable(board, read.id)
-    return rows.length === data.rows.length ? null : `the table draws ${rows.length} rows, the data has ${data.rows.length}`
-  }
+  if (type === 'table')
+    return tableProblem(await renderedTable(board, read.id), data, slot('columns'))
   return null
 }
 

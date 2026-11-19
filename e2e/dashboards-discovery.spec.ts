@@ -10,6 +10,7 @@ import {
   cellNumber,
   finishedRun,
   frameStatuses,
+  isTokenSum,
   pageProps,
   rawUsage,
   removePage,
@@ -45,6 +46,12 @@ import {
  * The tool calls are read from GET /api/v1/dataflows/{id}: the "agent.action" records of the run
  * (support.toolCalls describes the shape, which comes from the wippy/dataflow source). A run that has no
  * such record makes the run fail with the keys that it has.
+ *
+ * Known limits (accepted): the fixture of toolCalls in dashboards-agent.support.spec.ts is synthetic, in
+ * the shape that the runtime source documents, until the first real run captures a response of
+ * GET /api/v1/dataflows/{id} to replace it with. The spend cap is a check before each model request
+ * (each chat turn or Researcher run, and on every poll while one goes on) with one worker, not an atomic
+ * reservation: two spec files that run at the same time can pass it together.
  */
 test.skip(process.env.RUN_LLM_DEMO !== '1', 'calls a real LLM; set RUN_LLM_DEMO=1 to run')
 test.describe.configure({ mode: 'serial' })
@@ -67,16 +74,6 @@ function expectedSums(rows: Awaited<ReturnType<typeof rawUsage>>) {
     out.set(r.model_id, m)
   }
   return out
-}
-
-/** The kinds of token sum that a tile may show. Calls are not among them. */
-const TOKEN_KEYS = ['prompt_tokens', 'completion_tokens', 'total', 'total_tokens']
-
-/** Does one column of drawn numbers, one for each model, equal one kind of token sum? */
-function isTokenSum(models: string[], values: Array<number | null>, sums: Map<string, Record<string, number>>): boolean {
-  if (models.length !== sums.size || models.length !== values.length)
-    return false
-  return TOKEN_KEYS.some(key => models.every((m, i) => sums.get(m)?.[key] === values[i]))
 }
 
 for (let run = 1; run <= RUNS; run++) {

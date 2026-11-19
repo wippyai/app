@@ -270,6 +270,112 @@ export function cellNumber(text: string): number {
   return Number(text.replace(/[,\s\u00a0\u202f]/g, ''))
 }
 
+/** The kinds of token sum that a tile may show. Calls are not among them. */
+export const TOKEN_KEYS = ['prompt_tokens', 'completion_tokens', 'total', 'total_tokens']
+
+/**
+ * Does one column of drawn numbers, one for each model, equal one kind of token sum? The labels must
+ * be distinct and cover exactly the set of models of the source rows: [A, A] for the models [A, B] fails,
+ * and so does a missing or an extra model.
+ */
+export function isTokenSum(labels: string[], values: Array<number | null>, sums: Map<string, Record<string, number>>): boolean {
+  if (labels.length !== sums.size || labels.length !== values.length || new Set(labels).size !== labels.length)
+    return false
+  if (!labels.every(label => sums.has(label)))
+    return false
+  return TOKEN_KEYS.some(key => labels.every((label, i) => sums.get(label)?.[key] === values[i]))
+}
+
+/**
+ * What a chart tile should hand to Chart.js for a frame and a field mapping: the labels (the values of
+ * x, each once, in row order) and one dataset for each y field, or for each series value and y field,
+ * named as the tile names them. It is the algorithm of dash-tiles lib/chart.ts buildChartData, written
+ * again here so that the test does not trust the code it checks.
+ */
+export function expectedChart(frame: Frame, fields: { x: string, y: string[], series?: string | null }): RenderedChart {
+  const col = (name: string) => frame.fields.findIndex(f => f.name === name)
+  const text = (v: unknown) => (v === null || v === undefined ? 'No value' : String(v))
+  const x = col(fields.x)
+  const ys = fields.y.map(name => ({ name, index: col(name) }))
+  const series = fields.series ? col(fields.series) : -1
+  const labels: string[] = []
+  const groups: string[] = []
+  for (const row of frame.rows) {
+    const label = text(row[x])
+    if (!labels.includes(label))
+      labels.push(label)
+    if (series >= 0 && !groups.includes(text(row[series])))
+      groups.push(text(row[series]))
+  }
+  const datasets: RenderedChart['datasets'] = []
+  for (const group of series >= 0 ? groups : [null]) {
+    for (const y of ys) {
+      const data: Array<number | null> = labels.map(() => null)
+      for (const row of frame.rows) {
+        if (group !== null && text(row[series]) !== group)
+          continue
+        const cell = row[y.index]
+        data[labels.indexOf(text(row[x]))] = cell === null || cell === undefined ? null : Number(cell)
+      }
+      datasets.push({ label: group === null ? y.name : ys.length === 1 ? group : `${group} (${y.name})`, data })
+    }
+  }
+  return { labels, datasets }
+}
+
+/** Compares what a chart plotted with what it should: the labels, and each dataset's values label by label. */
+export function chartProblem(drawn: RenderedChart, wanted: RenderedChart): string | null {
+  if (JSON.stringify(drawn.labels) !== JSON.stringify(wanted.labels))
+    return `the chart labels are ${JSON.stringify(drawn.labels).slice(0, 120)}, the data gives ${JSON.stringify(wanted.labels).slice(0, 120)}`
+  if (JSON.stringify(drawn.datasets.map(d => d.label)) !== JSON.stringify(wanted.datasets.map(d => d.label)))
+    return `the chart datasets are ${JSON.stringify(drawn.datasets.map(d => d.label))}, the data gives ${JSON.stringify(wanted.datasets.map(d => d.label))}`
+  for (const want of wanted.datasets) {
+    const got = drawn.datasets.find(d => d.label === want.label)
+    for (let i = 0; i < want.data.length; i++) {
+      if ((got?.data[i] ?? null) !== want.data[i])
+        return `the chart plots ${got?.data[i] ?? null} for "${wanted.labels[i]}" in "${want.label}", the data has ${want.data[i]}`
+    }
+  }
+  return null
+}
+
+/**
+ * Compares the cells that a table drew with the frame: one row for each row, in order, and in each
+ * shown column the cell that the value gives. A number must be the number the cell holds (separators
+ * aside), a text must be the text. A date or a time is drawn in the viewer's format, so its cell only
+ * has to be filled. An empty value draws as missing and is not compared.
+ */
+export function tableProblem(drawn: string[][], frame: Frame, columns?: string[]): string | null {
+  if (drawn.length !== frame.rows.length)
+    return `the table draws ${drawn.length} rows, the data has ${frame.rows.length}`
+  const shown = (columns && columns.length > 0 ? columns : frame.fields.map(f => f.name))
+    .map(name => frame.fields.findIndex(f => f.name === name))
+    .filter(index => index >= 0)
+  for (let r = 0; r < frame.rows.length; r++) {
+    for (let c = 0; c < shown.length; c++) {
+      const value = frame.rows[r][shown[c]]
+      const cell = drawn[r][c]
+      const type = frame.fields[shown[c]].type
+      if (value === null || value === undefined)
+        continue
+      if (cell === undefined)
+        return `row ${r + 1} has no cell for column ${c + 1}`
+      if (type === 'date' || type === 'time') {
+        if (cell === '')
+          return `row ${r + 1}, column ${c + 1} is empty, the data has ${value}`
+      }
+      else if (type === 'number' || type === 'decimal') {
+        if (!(cellNumber(cell) === Number(value) || numberPattern(value).test(cell)))
+          return `row ${r + 1}, column ${c + 1} draws "${cell}", the data has ${value}`
+      }
+      else if (type === 'string' && cell !== String(value)) {
+        return `row ${r + 1}, column ${c + 1} draws "${cell}", the data has "${value}"`
+      }
+    }
+  }
+  return null
+}
+
 // ── the tool calls of an agent run ──────────────────────────────────────
 
 export interface ToolCall { name: string, args: any }
