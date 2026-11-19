@@ -1,7 +1,7 @@
 import type { Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
-import { api, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
+import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
 import {
   WIDE,
   answerReads,
@@ -9,9 +9,12 @@ import {
   fixtureLog,
   frame,
   pageFrame,
+  expectHostRefusesPage,
   publish,
+  refreshShell,
   ready,
   remove,
+  routeOf,
 } from './dashboards-wp5.support'
 
 /**
@@ -37,7 +40,7 @@ function statesPage(id: string, stateDisplay?: Record<string, string>) {
   return {
     id,
     title: `Fixture states ${id}`,
-    route: `/fx/${id}`,
+    route: routeOf(id),
     params: { q: { type: 'string', label: 'Q', from_path: 0, default: 'alpha' } },
     data: {
       s: POINT('series', { model: param('q') }),
@@ -118,13 +121,13 @@ test.describe('RC1-05: states and the display preference', () => {
     for (const [id, keep] of [['fx_keep', true], ['fx_replace', false]] as const) {
       const hold = gate()
       await answerStates(page, id, { held: { beta: hold.opened } })
-      await openInShell(page, `/fx/${id}/alpha`)
+      await openInShell(page, `${routeOf(id)}/alpha`)
       const f = pageFrame(page, id)
       await expect(f.locator('[data-tile-id="tb"]')).toHaveAttribute('data-frame-status', 'ready', { timeout: 20_000 })
       await expect.poll(() => tileText(f)).toBe('alpha-data')
 
       // A new argument value: the old data is on screen while the new read runs.
-      await openInShell(page, `/fx/${id}/beta`)
+      await openInShell(page, `${routeOf(id)}/beta`)
       if (keep) {
         await expect(f.locator('[data-tile-id="tb"] [data-frame-mark="refreshing"]')).toBeVisible()
         await expect(f.locator('[data-tile-id="tb"] [data-frame-panel]')).toHaveCount(0)
@@ -162,11 +165,11 @@ test.describe('RC1-05: states and the display preference', () => {
           delta: point => envelope(point, 'denied', { error: { code: 'denied', message: 'No.' } }),
         },
       })
-      await openInShell(page, `/fx/${id}/alpha`)
+      await openInShell(page, `${routeOf(id)}/alpha`)
       const f = pageFrame(page, id)
       await expect.poll(() => tileText(f), { timeout: 20_000 }).toBe('alpha-data')
 
-      await openInShell(page, `/fx/${id}/beta`)
+      await openInShell(page, `${routeOf(id)}/beta`)
       if (keep) {
         await expect(f.locator('[data-tile-id="tb"] [data-frame-mark="computing"]')).toBeVisible()
         expect(await tileText(f)).toBe('alpha-data')
@@ -178,7 +181,7 @@ test.describe('RC1-05: states and the display preference', () => {
       await expect.poll(() => tileText(f), { timeout: 15_000 }).toBe('beta-data')
 
       // A failed read with old data on screen.
-      await openInShell(page, `/fx/${id}/gamma`)
+      await openInShell(page, `${routeOf(id)}/gamma`)
       if (keep) {
         await expect(f.locator('[data-tile-id="tb"] [data-frame-mark="error"]')).toBeVisible()
         await expect.poll(() => tileAttr(f, 'data-fx-mark')).toBe('error')
@@ -190,7 +193,7 @@ test.describe('RC1-05: states and the display preference', () => {
       }
 
       // denied always removes the data, with keep too.
-      await openInShell(page, `/fx/${id}/delta`)
+      await openInShell(page, `${routeOf(id)}/delta`)
       await expect(f.locator('[data-tile-id="tb"] [data-frame-panel="denied"]')).toBeVisible()
       await expect.poll(() => tileAttr(f, 'data-fx-panel')).toBe('denied')
       expect(await tileText(f)).toBeNull()
@@ -205,7 +208,7 @@ test.describe('RC1-05: states and the display preference', () => {
           alpha: point => envelope(point, 'computing', { operation: 'tok', retry_after_ms: 60_000 }),
         },
       })
-      await openInShell(page, '/fx/fx_keep/alpha')
+      await openInShell(page, '/fx/fx-keep/alpha')
       const f = pageFrame(page, 'fx_keep')
       await expect(f.locator('[data-tile-id="tb"] [data-frame-panel="computing"]')).toBeVisible({ timeout: 20_000 })
       await expect.poll(() => tileAttr(f, 'data-fx-panel')).toBe('computing')
@@ -214,10 +217,10 @@ test.describe('RC1-05: states and the display preference', () => {
       // fx_one sets only computing: refreshing stays keep.
       const hold = gate()
       await answerStates(page, 'fx_one', { held: { beta: hold.opened } })
-      await openInShell(page, '/fx/fx_one/alpha')
+      await openInShell(page, '/fx/fx-one/alpha')
       const g = pageFrame(page, 'fx_one')
       await expect.poll(() => tileText(g), { timeout: 20_000 }).toBe('alpha-data')
-      await openInShell(page, '/fx/fx_one/beta')
+      await openInShell(page, '/fx/fx-one/beta')
       await expect(g.locator('[data-tile-id="tb"] [data-frame-mark="refreshing"]')).toBeVisible()
       hold.open()
     }
@@ -230,8 +233,8 @@ test.describe('RC1-05: states and the display preference', () => {
     await publish(page, {
       id: 'fx_optional',
       title: 'Fixture optional input',
-      route: '/fx/fx_optional',
-      data: { r: POINT('echo', { limit: 5 }), f: POINT('fails') },
+      route: '/fx/fx-optional',
+      data: { r: POINT('echo', { limit: 5 }), f: POINT('echo', { limit: 5 }) },
       actions: {},
       tiles: { ds: { type: 'fixture.states', data: { main: 'r', extra: 'f' }, fields: { text: 'text' } } },
       rows: [['ds']],
@@ -241,7 +244,7 @@ test.describe('RC1-05: states and the display preference', () => {
         r: ready('r', { text: 'main value' }),
         f: envelope('f', 'failed', { error: { code: 'source_error', message: 'The data could not be read.' } }),
       })
-      await openInShell(page, '/fx/fx_optional')
+      await openInShell(page, '/fx/fx-optional')
       const f = pageFrame(page, 'fx_optional')
       await expect.poll(() => tileText(f), { timeout: 20_000 }).toBe('main value')
       await expect(f.locator('[data-tile-id="ds"]')).toHaveAttribute('data-frame-status', 'ready')
@@ -259,15 +262,17 @@ test.describe('RC1-05: states and the display preference', () => {
   })
 
   test('an expired token starts exactly one fresh read; a timeout error shows as an error', async ({ page }) => {
+    // The first read without a token answers computing; the fresh read that follows the expired token answers ready.
+    let plainReads = 0
     const calls = await answerReads(page, 'fx_keep', {
       s: (_route, url) => (url.searchParams.get('operation')
         ? envelope('s', 'failed', { error: { code: 'expired', message: 'Gone.' } })
-        : modelOf(url) === 'alpha'
+        : ++plainReads === 1
           ? envelope('s', 'computing', { operation: 'tok', retry_after_ms: 1000 })
           : ready('s', seriesFor('fresh'))),
       r: ready('r', { text: 'x' }),
     })
-    await openInShell(page, '/fx/fx_keep/alpha')
+    await openInShell(page, '/fx/fx-keep/alpha')
     await expect.poll(() => calls.filter(c => c.point === 's').length, { timeout: 20_000 }).toBeGreaterThanOrEqual(2)
     await page.waitForTimeout(3000)
     const reads = calls.filter(c => c.point === 's')
@@ -288,7 +293,7 @@ test.describe('RC1-05: more states', () => {
     await publish(page, {
       id: 'fx_claim',
       title: 'Fixture claim preference',
-      route: '/fx/fx_claim',
+      route: '/fx/fx-claim',
       params: { q: { type: 'string', label: 'Q', from_path: 0, default: 'alpha' } },
       data: { r: POINT('echo', { model: param('q'), limit: 5 }) },
       actions: {},
@@ -309,21 +314,21 @@ test.describe('RC1-05: more states', () => {
           return ready('r', { text: `${model}-data` })
         },
       })
-      await openInShell(page, '/fx/fx_claim/alpha')
+      await openInShell(page, '/fx/fx-claim/alpha')
       const f = pageFrame(page, 'fx_claim')
       await expect.poll(() => tileText(f), { timeout: 20_000 }).toBe('alpha-data')
       // refreshing: set by the page to keep -> a mark and the data.
-      await openInShell(page, '/fx/fx_claim/beta')
+      await openInShell(page, '/fx/fx-claim/beta')
       await expect.poll(() => tileAttr(f, 'data-fx-mark')).toBe('refreshing')
       expect(await tileText(f)).toBe('alpha-data')
       hold.open()
       await expect.poll(() => tileText(f)).toBe('beta-data')
       // error: set by neither -> the default keep -> a mark and the data.
-      await openInShell(page, '/fx/fx_claim/delta')
+      await openInShell(page, '/fx/fx-claim/delta')
       await expect.poll(() => tileAttr(f, 'data-fx-mark')).toBe('error')
       expect(await tileText(f)).toBe('beta-data')
       // computing: not set by the page -> the claim's replace -> a panel in place of the data.
-      await openInShell(page, '/fx/fx_claim/gamma')
+      await openInShell(page, '/fx/fx-claim/gamma')
       await expect.poll(() => tileAttr(f, 'data-fx-panel')).toBe('computing')
       expect(await tileText(f)).toBeNull()
     }
@@ -336,29 +341,35 @@ test.describe('RC1-05: more states', () => {
     await publish(page, {
       id: 'fx_optional2',
       title: 'Fixture optional input 2',
-      route: '/fx/fx_optional2',
-      data: { r: POINT('echo', { limit: 5 }), f: POINT('series') },
+      route: '/fx/fx-optional2',
+      data: { r: POINT('echo', { limit: 5 }), f: POINT('echo', { limit: 5 }) },
       actions: {},
       tiles: { ds: { type: 'fixture.states', data: { main: 'r', extra: 'f' }, fields: { text: 'text' } } },
       rows: [['ds']],
     })
     try {
+      let first = true
       for (const extra of [
         envelope('f', 'computing', { operation: 'tok', retry_after_ms: 60_000 }),
         envelope('f', 'empty'),
       ]) {
         await page.unroute('**/api/v1/dashboards/pages/fx_optional2/points/**')
         await answerReads(page, 'fx_optional2', { r: ready('r', { text: 'main value' }), f: extra })
-        await openInShell(page, '/fx/fx_optional2')
-        await page.reload()
+        // The first pass opens the page; the second reloads it, which clears the state log of the tile.
+        if (first)
+          await openInShell(page, '/fx/fx-optional2')
+        else
+          await refreshShell(page)
+        first = false
         const f = pageFrame(page, 'fx_optional2')
         await expect.poll(() => tileText(f), { timeout: 20_000 }).toBe('main value')
         await expect(f.locator('[data-tile-id="ds"]')).toHaveAttribute('data-frame-status', 'ready')
         await page.waitForTimeout(500)
         const last = (await fixtureLog(f, 'ds')).states.at(-1)
         expect(last).toMatchObject({ status: 'ready' })
-        expect(last?.completeness).toBeUndefined()
-        expect(last?.missing_inputs).toBeUndefined()
+        // Nothing is missing, so the tile is complete: never partial.
+        expect(last?.completeness).not.toBe('partial')
+        expect(last?.missing_inputs ?? []).toEqual([])
       }
     }
     finally {
@@ -374,7 +385,7 @@ test.describe('RC1-02: the exact reads of a dropdown and of a direct link', () =
     await publish(page, {
       id: 'fx_reads',
       title: 'Fixture reads',
-      route: '/fx/fx_reads',
+      route: '/fx/fx-reads',
       params: { m: { type: 'select', label: 'Model', from_path: 0, options: { data: 'o' } } },
       data: {
         o: POINT('options'),
@@ -414,7 +425,7 @@ test.describe('RC1-02: the exact reads of a dropdown and of a direct link', () =
 
   test('a filter change re-reads exactly the input bound to it, once', async ({ page }) => {
     const calls = await answerReads(page, 'fx_reads', answers)
-    await openInShell(page, '/fx/fx_reads')
+    await openInShell(page, '/fx/fx-reads')
     const f = pageFrame(page, 'fx_reads')
     for (const id of ['tb', 'kp', 'sel', 't2'])
       await expect(f.locator(`[data-tile-id="${id}"]`)).toHaveAttribute('data-frame-status', 'ready', { timeout: 20_000 })
@@ -431,7 +442,7 @@ test.describe('RC1-02: the exact reads of a dropdown and of a direct link', () =
 
   test('a direct link with an argument applies it on the first load, and each input reads once', async ({ page }) => {
     const calls = await answerReads(page, 'fx_reads', answers)
-    await openInShell(page, '/fx/fx_reads/two')
+    await openInShell(page, '/fx/fx-reads/two')
     const f = pageFrame(page, 'fx_reads')
     await expect(f.locator('[data-tile-id="tb"]')).toHaveAttribute('data-frame-status', 'ready', { timeout: 20_000 })
     await page.waitForTimeout(1500)
@@ -455,7 +466,7 @@ test.describe('RC1-13: empty cells, decimals and timestamps', () => {
         kp: { type: 'kpi', data: { main: 'n' }, fields: { value: 'value' } },
         tb: { type: 'table', data: { main: 's' } },
         tx: { type: 'text', data: { main: 'r' }, fields: { text: 'text' } },
-        ch: { type: 'chart', data: { main: 'c' }, fields: { x: 'x', y: ['y'] } },
+        ch: { type: 'chart', data: { main: 'c' }, fields: { x: 'day', y: ['tokens'] } },
         sl: { type: 'control.select', param: 'm' },
         tv: { type: 'table', data: { main: 't' } },
       },
@@ -481,7 +492,7 @@ test.describe('RC1-13: empty cells, decimals and timestamps', () => {
       ])),
       r: ready('r', {}),
       // A chart: an empty x and an empty y. A select: an empty label and an empty value.
-      c: ready('c', frame([{ name: 'x', type: 'string' }, { name: 'y', type: 'number', role: 'measure' }], [['a', 1], [null, 2], ['c', null]])),
+      c: ready('c', frame([{ name: 'day', type: 'string' }, { name: 'tokens', type: 'number', role: 'measure' }], [['a', 1], [null, 2], ['c', null]])),
       o: ready('o', frame([{ name: 'value', type: 'string' }, { name: 'label', type: 'string' }], [['a', null], [null, 'Nothing'], ['c', 'C']])),
       // Every nullable type: string, number, decimal, date, time and boolean. Row 1 has all of them empty.
       t: ready('t', frame([
@@ -542,6 +553,8 @@ test.describe('RC1-13: empty cells, decimals and timestamps', () => {
 
 test.describe('RC1-06: the page says why it cannot show', () => {
   test('access denied for a 403 and not available for a 404', async ({ page }) => {
+    // The page answers 403 and then 404 on purpose.
+    expectFailures(page, { status: 403, path: '/dashboards/pages/fx_page_state/props' }, { status: 404, path: '/dashboards/pages/fx_page_state/props' })
     await page.setViewportSize(WIDE)
     await loginAsAdmin(page)
     await publish(page, { id: 'fx_page_state', title: 'Fixture page state', route: '/fx/page-state', data: {}, actions: {}, tiles: { sz: { type: 'fixture.size' } }, rows: [['sz']] })
@@ -557,7 +570,7 @@ test.describe('RC1-06: the page says why it cannot show', () => {
       await expect(f.locator('[data-page-state="denied"]')).toContainText('Access denied', { timeout: 20_000 })
       await expect(f.locator('[data-page-state="denied"]')).not.toContainText('not available')
       status = 404
-      await page.reload()
+      await refreshShell(page)
       await expect(f.locator('[data-page-state="unavailable"]')).toContainText('not available', { timeout: 20_000 })
     }
     finally {
@@ -566,18 +579,23 @@ test.describe('RC1-06: the page says why it cannot show', () => {
     }
   })
 
-  test('a viewer who may not view a page gets access denied from the real endpoint', async ({ browser }) => {
+  test('a viewer who may not view a page gets 403 from the real endpoint, and the Host mounts no frame for it', async ({ browser }) => {
+    test.setTimeout(90_000)
     const admin = await newPage(browser, 'admin')
     const viewer = await newPage(browser, 'viewer')
     await loginAsAdmin(admin)
     await loginAs(viewer, 'viewer@wippy.local')
+    expectFailures(viewer, { status: 403, path: '/dashboards/pages/deny_check/props' }, { status: 401, path: '/api/public/pages/content/wippy.dashboards.pages:deny_check' })
     // The fixture policy of app.dashboards_fixtures denies the page deny_check to regular users.
     await publish(admin, { id: 'deny_check', title: 'Deny check', route: '/fx/deny-check', data: {}, actions: {}, tiles: { sz: { type: 'fixture.size' } }, rows: [['sz']] })
     try {
       const props = await api(viewer, 'GET', '/api/v1/dashboards/pages/deny_check/props')
       expect(props.status).toBe(403)
+      await refreshShell(viewer)
       await openInShell(viewer, '/fx/deny-check')
-      await expect(pageFrame(viewer, 'deny_check').locator('[data-page-state="denied"]')).toContainText('Access denied', { timeout: 20_000 })
+      // The page's own "Access denied" text needs a frame; the Host refuses before it builds one (see expectHostRefusesPage).
+      await viewer.waitForTimeout(3000)
+      await expectHostRefusesPage(viewer, 'deny_check')
     }
     finally {
       await remove(admin, 'deny_check')
@@ -627,14 +645,14 @@ test.describe('RC1-14: the request lifecycle', () => {
     const holdBeta = gate()
     const holdGamma = gate()
     await answerStates(page, 'fx_life', { held: { beta: holdBeta.opened, gamma: holdGamma.opened } })
-    await openInShell(page, '/fx/fx_life/alpha')
+    await openInShell(page, '/fx/fx-life/alpha')
     const f = pageFrame(page, 'fx_life')
     await expect.poll(() => tileText(f), { timeout: 20_000 }).toBe('alpha-data')
 
     // Two new argument values one after the other: beta is superseded by gamma while its read is in flight.
-    await openInShell(page, '/fx/fx_life/beta')
+    await openInShell(page, '/fx/fx-life/beta')
     await expect(f.locator('[data-tile-id="tb"] [data-frame-mark="refreshing"]')).toBeVisible()
-    await openInShell(page, '/fx/fx_life/gamma')
+    await openInShell(page, '/fx/fx-life/gamma')
     // gamma answers first, beta (the superseded request) answers after it.
     holdGamma.open()
     await expect.poll(() => tileText(f)).toBe('gamma-data')
@@ -661,10 +679,10 @@ test.describe('RC1-14: the request lifecycle', () => {
   test('a disconnection ends the request in flight: the read is cancelled and its late result never shows', async ({ page }) => {
     const hold = gate()
     await answerStates(page, 'fx_life', { held: { beta: hold.opened } })
-    await openInShell(page, '/fx/fx_life/alpha')
+    await openInShell(page, '/fx/fx-life/alpha')
     const f = pageFrame(page, 'fx_life')
     await expect.poll(() => tileText(f), { timeout: 20_000 }).toBe('alpha-data')
-    await openInShell(page, '/fx/fx_life/beta')
+    await openInShell(page, '/fx/fx-life/beta')
     await expect(f.locator('[data-tile-id="tb"] [data-frame-mark="refreshing"]')).toBeVisible()
     // The tile element leaves the page while its read is in flight.
     await f.locator('[data-tile-id="ds"] .frame__tile > *').evaluate(el => el.remove())
@@ -681,7 +699,7 @@ test.describe('RC1-14: the request lifecycle', () => {
     test.setTimeout(60_000)
     const never = gate()
     await answerStates(page, 'fx_life', { held: { alpha: never.opened } })
-    await openInShell(page, '/fx/fx_life/alpha')
+    await openInShell(page, '/fx/fx-life/alpha')
     const f = pageFrame(page, 'fx_life')
     await expect(f.locator('[data-tile-id="tb"]')).toHaveAttribute('data-frame-status', 'timeout', { timeout: 30_000 })
     await expect(f.locator('[data-tile-id="tb"] [data-frame-panel="timeout"]')).toContainText('No response')

@@ -17,6 +17,9 @@ export const SPEC = 'wippy.dashboard_page/v1'
 /** The window of the layout tests: wide enough that the Host's own chrome never narrows the board. */
 export const WIDE = { width: 1920, height: 900 }
 
+/** The route of a fixture page: a page id uses underscores, a route segment only lower case letters, digits and hyphens. */
+export const routeOf = (id: string) => `/fx/${id.replace(/_/g, '-')}`
+
 export interface TestPage {
   id: string
   route: string
@@ -31,10 +34,43 @@ export function pageIframe(page: Page, id: string) {
   return page.locator(`iframe[name="wippy:page:wippy.dashboards.pages:${id}"]`)
 }
 
-/** Publishes a page spec as the signed-in user, and expects it to be accepted. */
+/**
+ * Reloads the shell of a signed-in page and waits for its route list. The server lists the route of a new page
+ * at once (`/api/public/pages/routes`), but a shell that is already running keeps the list it loaded at its
+ * start, so it shows nothing for a page that was published after that. A page that another user publishes needs
+ * the same reload.
+ */
+export async function refreshShell(page: Page): Promise<void> {
+  // Let the loads of the running shell end first: a reload would cancel them, and the watch counts a cancelled load.
+  await page.waitForLoadState('networkidle')
+  const routes = page.waitForResponse(r => r.url().includes('/api/public/pages/routes'))
+  await page.reload()
+  await routes
+  await page.waitForLoadState('networkidle')
+}
+
+/**
+ * Publishes a page spec as the signed-in user, expects it to be accepted, and reloads the shell so that it knows
+ * the page's route.
+ */
 export async function publish(page: Page, spec: Record<string, unknown>): Promise<void> {
   const res = await api(page, 'POST', '/api/v1/dashboards/pages', { spec: SPEC, publish: true, ...spec })
   expect(res.status, res.body).toBe(200)
+  await refreshShell(page)
+}
+
+/**
+ * A viewer who may not view a page (the policy denies `view` on `page:<registry id>`) never reaches the page app:
+ * the Host checks the same right before it builds the frame. It answers the content request with 401
+ * ("You do not have permission to view this page"), leaves the page out of its route list, and mounts no frame,
+ * so the page's own "Access denied" text cannot show. The calling test declares the 401 with `expectFailures`.
+ * (The page app shows that text when its props read answers 403 inside an open page.)
+ */
+export async function expectHostRefusesPage(page: Page, id: string): Promise<void> {
+  const content = await api(page, 'GET', `/api/public/pages/content/wippy.dashboards.pages:${id}`)
+  expect(content.status, content.body).toBe(401)
+  expect(content.body).toContain('permission to view this page')
+  await expect(pageIframe(page, id)).toHaveCount(0)
 }
 
 export async function remove(page: Page, id: string): Promise<void> {

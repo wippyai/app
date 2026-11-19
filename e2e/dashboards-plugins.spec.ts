@@ -2,6 +2,7 @@ import type { FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, monitor, openInShell, takeUnexpected } from './helpers/page-watch'
+import { refreshShell } from './dashboards-wp5.support'
 
 /**
  * RC1-03: a plugin adds a tile with no engine change. The two demo plugins ship a tile claim on their
@@ -79,7 +80,8 @@ test.describe('RC1-03: a plugin tile with no engine change', () => {
     expect(tiles.users.data.main.point).toBe('users')
     expect(tiles.users.actions.set_status.action).toBe('set_status')
 
-    // Both tiles read their data and draw it.
+    // Both tiles read their data and draw it. The running shell learns the route of a new page when it reloads.
+    await refreshShell(page)
     await openInShell(page, ROUTE)
     const frame = pageFrame(page, PAGE)
     const users = JSON.parse((await api(page, 'GET', `/api/v1/dashboards/pages/${PAGE}/points/users`)).body)

@@ -16,8 +16,11 @@ export interface Problem {
 
 /** A failure that a test causes on purpose: this status on a path that contains `path`. */
 export interface ExpectedFailure {
-  status: number
-  path: string
+  /** Set both `status` and `path` for an HTTP failure, or only `text` for a console message that has no status. */
+  status?: number
+  path?: string
+  /** A console or page message that contains this text. */
+  text?: string
 }
 
 interface Watch {
@@ -106,8 +109,9 @@ export async function takeUnexpected(): Promise<string[]> {
     if (watch.aborted.length > 0)
       console.log(`${watch.name} aborted`, JSON.stringify(watch.aborted))
     for (const p of watch.problems) {
-      const allowed = p.status !== undefined && p.path !== undefined
-        && watch.expected.some(e => e.status === p.status && p.path!.includes(e.path))
+      const allowed = watch.expected.some(e => e.text !== undefined && p.text.includes(e.text))
+        || (p.status !== undefined && p.path !== undefined
+        && watch.expected.some(e => e.status !== undefined && e.path !== undefined && e.status === p.status && p.path!.includes(e.path)))
       if (!allowed)
         unexpected.push(`${watch.name}: ${p.text}`)
     }

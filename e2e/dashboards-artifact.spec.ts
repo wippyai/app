@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
-import { api, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
-import { WIDE, pageFrame, publish, remove } from './dashboards-wp5.support'
+import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
+import { WIDE, pageFrame, publish, refreshShell, remove, routeOf } from './dashboards-wp5.support'
 
 /**
  * RC1-21 browser tests: the built-in `artifact` tile shows a fixture artifact by id and a fixture web
@@ -40,6 +40,8 @@ test.afterEach(async () => {
 
 test.describe('RC1-21: the artifact tile', () => {
   test('shows an artifact by id and a component by tag, and an error for a missing artifact', async ({ page }) => {
+    // The missing artifact is looked up and refused on purpose; the Host logs the failure.
+    expectFailures(page, { status: 404, path: '/api/v1/artifact/no-such-artifact-id' }, { text: 'Artifact "no-such-artifact-id" failed to load' })
     await page.setViewportSize(WIDE)
     await loginAsAdmin(page)
     await publish(page, ARTIFACT_PAGE)
@@ -81,6 +83,8 @@ test.describe('RC1-21: the artifact tile', () => {
     const viewer = await newPage(browser, 'viewer')
     await loginAsAdmin(admin)
     await loginAs(viewer, 'viewer@wippy.local')
+    // The viewer is refused by the fixture API on purpose.
+    expectFailures(viewer, { status: 403, path: '/dashboards-fixtures/restricted' })
     await publish(admin, { ...ARTIFACT_PAGE, id: 'fx_artifact_rights', route: '/fx/artifact-rights', tiles: { api: { type: 'artifact', options: { tag: 'fx-api' } } }, rows: [['api']] })
     try {
       const status = (page: typeof admin) => pageFrame(page, 'fx_artifact_rights')
@@ -89,6 +93,7 @@ test.describe('RC1-21: the artifact tile', () => {
       await openInShell(admin, '/fx/artifact-rights')
       await expect.poll(() => status(admin), { timeout: 20_000 }).toBe('200')
       // The viewer calls the same API through the same component and gets a refusal.
+      await refreshShell(viewer)
       await openInShell(viewer, '/fx/artifact-rights')
       await expect.poll(() => status(viewer), { timeout: 20_000 }).toBe('403')
     }
@@ -108,7 +113,7 @@ test.describe('RC1-21: publish checks', () => {
     publish: true,
     id,
     title: id,
-    route: `/fx/${id}`,
+    route: routeOf(id),
     data: {},
     actions: {},
     tiles: { a: { type: 'artifact', options } },
@@ -121,6 +126,8 @@ test.describe('RC1-21: publish checks', () => {
       ['fx_art_both', { artifact_id: 'abc', artifact_type: 'page', tag: 'fx-api' }],
       ['fx_art_big', { tag: 'fx-api', props: { blob: 'x'.repeat(16 * 1024 + 1) } }],
     ]
+    // The three refusals and the three missing pages afterwards are what this test proves.
+    expectFailures(page, { status: 400, path: '/api/v1/dashboards/pages' }, { status: 404, path: '/props' })
     for (const [id, options] of cases) {
       const res = await api(page, 'POST', '/api/v1/dashboards/pages', spec(id, options))
       expect(res.status, `${id}: ${res.body}`).toBe(400)

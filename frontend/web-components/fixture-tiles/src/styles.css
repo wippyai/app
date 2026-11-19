@@ -9,6 +9,11 @@
   box-sizing: border-box;
 }
 
+:host > div {
+  width: 100%;
+  height: 100%;
+}
+
 /* fx-size: one container rule per size class (thresholds 480 and 800 px of the tile's own width). The
    property --fx-class says which one applied, so a test can compare it with the size-class attribute. */
 .fx-size {

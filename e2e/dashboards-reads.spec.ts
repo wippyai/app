@@ -2,6 +2,7 @@ import type { FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
+import { expectHostRefusesPage } from './dashboards-wp5.support'
 
 /**
  * Engine reads, access and actions of wippy/dashboards (RC1-05, RC1-06, RC1-08 and RC1-13, browser
@@ -299,25 +300,37 @@ test.describe('values keep their meaning from point to tile (RC1-13)', () => {
 
     const valid = frame.locator('[data-tile-id="t_valid"]')
     await expect(valid.locator('tbody tr')).toHaveCount(3, { timeout: 20_000 })
-    await expect(valid).toContainText('12345678901234567890')
+    // The table groups digits (12,345,678,901,234,567,890). One cell must still hold exactly these digits: no rounding, no float.
+    const cellDigits = async () => (await valid.locator('tbody td').allInnerTexts()).map(t => t.replace(/[,    ]/g, ''))
+    await expect.poll(cellDigits).toContain('12345678901234567890')
     await expect(valid).toContainText('-0.10')
 
     const nulls = frame.locator('[data-tile-id="t_nulls"]')
     await expect(nulls.locator('tbody tr')).toHaveCount(4, { timeout: 20_000 })
+    // An empty cell is shown as missing (RC1-13): a cell marked data-missing that says "No value", never 0, null or blank.
+    const missing = (row: number, column?: number) => {
+      const cells = nulls.locator('tbody tr').nth(row).locator('td')
+      return column === undefined ? cells : cells.nth(column)
+    }
     // the last row is empty in every column; the first column of the first row too
-    const last = nulls.locator('tbody tr').nth(3).locator('td')
-    const cells = await last.allInnerTexts()
-    expect(cells.length).toBeGreaterThan(0)
-    for (const text of cells)
-      expect(text.trim()).toBe('')
-    expect((await nulls.locator('tbody tr').nth(0).locator('td').first().innerText()).trim()).toBe('')
+    const last = missing(3)
+    const lastCount = await last.count()
+    expect(lastCount).toBeGreaterThan(0)
+    for (let i = 0; i < lastCount; i++) {
+      await expect(last.nth(i)).toHaveAttribute('data-missing', /.*/)
+      await expect(last.nth(i)).toHaveText('No value')
+    }
+    await expect(missing(0, 0)).toHaveAttribute('data-missing', /.*/)
+    await expect(missing(0, 0)).toHaveText('No value')
     const all = await nulls.locator('tbody td').allInnerTexts()
     for (const text of all) {
       expect(text.trim()).not.toBe('null')
       expect(text.trim()).not.toBe('undefined')
+      expect(text.trim()).not.toBe('0')
     }
-    // the cell that holds 0 is not there: the one empty cell of the number column shows nothing
-    expect((await nulls.locator('tbody tr').nth(1).locator('td').nth(2).innerText()).trim()).toBe('')
+    // the one empty cell of the number column is missing: it does not show 0
+    await expect(missing(1, 2)).toHaveAttribute('data-missing', /.*/)
+    await expect(missing(1, 2)).toHaveText('No value')
   })
 })
 
@@ -507,11 +520,12 @@ test.describe('a user without access is refused by the page and by the API (RC1-
     expect(missing.body.error.code).not.toBe(props.body.error.code)
   })
 
-  test('the page says "access denied" to the viewer', async ({ browser }) => {
+  test('the Host refuses the page to the viewer before the page app runs', async ({ browser }) => {
     const viewer = await signedIn(browser, 'viewer', 'viewer')
-    expectFailures(viewer, { status: 403, path: '/api/v1/dashboards/pages/reads_denied' })
+    expectFailures(viewer, { status: 401, path: '/api/public/pages/content/wippy.dashboards.pages:reads_denied' })
     await openInShell(viewer, '/reads/denied')
-    await expect(pageFrame(viewer, 'reads_denied').locator('body')).toContainText(/access denied/i, { timeout: 20_000 })
+    await viewer.waitForTimeout(3000)
+    await expectHostRefusesPage(viewer, 'reads_denied')
   })
 })
 
@@ -592,15 +606,18 @@ test.describe('withdrawn access is refused on every read path (RC1-08)', () => {
   test('an open page is refused on reload after the withdrawal', async ({ browser }) => {
     const admin = await signedIn(browser, 'admin', 'admin')
     const viewer = await signedIn(browser, 'viewer', 'viewer')
-    expectFailures(viewer, { status: 403, path: '/api/v1/dashboards/pages/reads_toggle' })
+    expectFailures(viewer, { status: 403, path: '/api/v1/dashboards/pages/reads_toggle' }, { status: 401, path: '/api/public/pages/content/wippy.dashboards.pages:reads_toggle' })
     await viewer.setViewportSize({ width: 1920, height: 1000 })
     await openInShell(viewer, '/reads/toggle')
     await expect(pageFrame(viewer, 'reads_toggle').locator('[data-tile-id="ok_kpi"]')).toContainText('42', { timeout: 20_000 })
     await setAccess(admin, false)
     try {
+      await viewer.waitForLoadState('networkidle')
       await viewer.reload()
       await openInShell(viewer, '/reads/toggle')
-      await expect(pageFrame(viewer, 'reads_toggle').locator('body')).toContainText(/access denied/i, { timeout: 20_000 })
+      // The Host now refuses the page before its app runs (see expectHostRefusesPage).
+      await viewer.waitForTimeout(3000)
+      await expectHostRefusesPage(viewer, 'reads_toggle')
     }
     finally {
       await setAccess(admin, true)

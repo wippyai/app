@@ -164,6 +164,11 @@ async function kpiValue(f: FrameLocator, tile: string): Promise<string | null> {
   return (await el.first().textContent())?.trim() ?? null
 }
 
+/** The digits of a shown number without its grouping separators (the tiles show 4,242): the value must still be exact, with no rounding. */
+function digitsOf(text: string | null): string {
+  return (text ?? '').replace(/[,    ]/g, '')
+}
+
 async function openLive(page: Page, id = PAGE, route = '/live-demo') {
   await openInShell(page, route)
   return pageFrame(page, id)
@@ -269,21 +274,22 @@ test.describe('streams and signals', () => {
     await expect(vf.locator('[data-tile-id="m"] .dash-kpi__value')).toBeVisible({ timeout: 20_000 })
 
     // A push without a user is refused by the live library, so the endpoint pushes to the caller only.
+    expectFailures(admin, { status: 400, path: '/demo/live/push-me' })
     const bad = await api(admin, 'POST', '/api/v1/demo/live/push-me', { value: 'x' })
     expect(bad.status).toBe(400)
 
     const first = await api(admin, 'POST', '/api/v1/demo/live/push-me', { value: 4242 })
     expect(first.status, first.body).toBe(200)
-    await expect(af.locator('[data-tile-id="m"] .dash-kpi__value')).toContainText('4242', { timeout: 10_000 })
+    await expect.poll(async () => digitsOf(await kpiValue(af, 'm')), { timeout: 10_000 }).toBe('4242')
     await viewer.waitForTimeout(2500)
-    expect(await kpiValue(vf, 'm')).not.toContain('4242')
+    expect(digitsOf(await kpiValue(vf, 'm'))).not.toBe('4242')
     expect(vw.frames.filter(fr => rowValue(fr) === 4242)).toHaveLength(0)
 
     const second = await api(viewer, 'POST', '/api/v1/demo/live/push-me', { value: 5151 })
     expect(second.status, second.body).toBe(200)
-    await expect(vf.locator('[data-tile-id="m"] .dash-kpi__value')).toContainText('5151', { timeout: 10_000 })
+    await expect.poll(async () => digitsOf(await kpiValue(vf, 'm')), { timeout: 10_000 }).toBe('5151')
     await admin.waitForTimeout(2500)
-    expect(await kpiValue(af, 'm')).toContain('4242')
+    expect(digitsOf(await kpiValue(af, 'm'))).toBe('4242')
     expect(aw.frames.filter(fr => rowValue(fr) === 5151)).toHaveLength(0)
   })
 
@@ -372,6 +378,8 @@ test.describe('streams and signals', () => {
     const q = f.locator('[data-tile-id="q"] .dash-kpi__value')
     await expect(q).toBeVisible({ timeout: 20_000 })
     await expect.poll(() => w.frames.length, { timeout: 15_000 }).toBeGreaterThan(2)
+    // The renewal after the restart finds no subscription: 404 is the answer that makes the tile subscribe again.
+    expectFailures(page, { status: 404, path: '/subscriptions/' })
     const subscribes = w.posts.filter(p => p === 'queue').length
     expect(subscribes).toBe(1)
 

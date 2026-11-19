@@ -43,7 +43,7 @@ const LAYOUT_PAGE = {
     k2: { type: 'kpi', data: { main: 'n' }, fields: { value: 'value' } },
     k3: { type: 'kpi', data: { main: 'n' }, fields: { value: 'value' } },
     k4: { type: 'kpi', data: { main: 'n' }, fields: { value: 'value' } },
-    c1: { type: 'chart', data: { main: 's' }, fields: { x: 'x', y: ['y'] }, options: { label: 'Chart' } },
+    c1: { type: 'chart', data: { main: 's' }, fields: { x: 'day', y: ['tokens'] }, options: { label: 'Chart' } },
     tb: { type: 'table', data: { main: 's' } },
     sel: { type: 'control.select', param: 'm' },
     txt: { type: 'text', data: { main: 'r' }, fields: { text: 'text' } },
@@ -70,7 +70,7 @@ const SIZE_PAGE = {
     kp: { type: 'kpi', data: { main: 'n' }, fields: { value: 'value' } },
     sz: { type: 'fixture.size' },
     tl: { type: 'fixture.size', options: { tall: true } },
-    ch: { type: 'chart', data: { main: 's' }, fields: { x: 'x', y: ['y'] } },
+    ch: { type: 'chart', data: { main: 's' }, fields: { x: 'day', y: ['tokens'] } },
     tbl: { type: 'table', data: { main: 's' } },
   },
   rows: [['kp'], ['sz'], ['tl'], ['ch'], ['tbl']],
@@ -89,7 +89,7 @@ const TALL_PAGE = {
 async function answerLayoutReads(page: Page) {
   return answerReads(page, LAYOUT_PAGE.id, {
     n: ready('n', frame([{ name: 'value', type: 'number', role: 'measure' }], [[42]])),
-    s: ready('s', frame([{ name: 'x', type: 'string' }, { name: 'y', type: 'number', role: 'measure' }], [['a', 1], ['b', 2], ['c', null]])),
+    s: ready('s', frame([{ name: 'day', type: 'string' }, { name: 'tokens', type: 'number', role: 'measure' }], [['a', 1], ['b', 2], ['c', null]])),
     o: ready('o', frame([{ name: 'value', type: 'string' }, { name: 'label', type: 'string' }], [['one', 'One'], ['two', 'Two']])),
     r: ready('r', { text: 'Hello from the record' }),
   })
@@ -165,7 +165,7 @@ test.describe('RC1-07: layouts follow the container', () => {
     await expect(f.locator('[data-tile-id="k1"]')).toBeVisible({ timeout: 20_000 })
     const props = JSON.parse((await api(page, 'GET', `/api/v1/dashboards/pages/${LAYOUT_PAGE.id}/props`)).body)
     expect(props.frame).toEqual({ x: 14, y: 38 })
-    expect(props.widths).toEqual({ md: 640, lg: 1024, xl: 1440 })
+    expect(props.widths).toEqual({ default: 0, md: 640, lg: 1024, xl: 1440 })
 
     // 1 px below, at and 1 px above each board width. The window stays at 1920 px.
     const cases: Array<[number, string]> = [
@@ -206,7 +206,7 @@ test.describe('RC1-07: layouts follow the container', () => {
   test('size-class and the @container tile rule agree at each threshold, for the fixture, the same fixture with tall content, a chart and a table; a resize sends no read and keeps the tile', async ({ page }) => {
     const reads = await answerReads(page, SIZE_PAGE.id, {
       n: ready('n', frame([{ name: 'value', type: 'number', role: 'measure' }], [[7]])),
-      s: ready('s', frame([{ name: 'x', type: 'string' }, { name: 'y', type: 'number', role: 'measure' }], [['a', 1], ['b', 2]])),
+      s: ready('s', frame([{ name: 'day', type: 'string' }, { name: 'tokens', type: 'number', role: 'measure' }], [['a', 1], ['b', 2]])),
     })
     await openInShell(page, SIZE_PAGE.route)
     const f = pageFrame(page, SIZE_PAGE.id)
