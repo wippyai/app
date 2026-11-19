@@ -111,7 +111,7 @@ function watch(page: Page, pageId: string) {
     puts: [] as Array<{ url: string, at: number }>,
     deletes: [] as string[],
     /** Responses to renewals, with their status and the time they came. */
-    renewals: [] as Array<{ status: number, at: number }>,
+    renewals: [] as Array<{ status: number, at: number, point: string }>,
     frames: [] as Frame[],
   }
   const pattern = new RegExp(`/dashboards/pages/${pageId}/points/([a-z_]+)(/subscriptions(?:/([0-9a-f]+))?)?`)
@@ -135,7 +135,7 @@ function watch(page: Page, pageId: string) {
   page.on('response', (res) => {
     const m = new URL(res.url()).pathname.match(pattern)
     if (m && m[2] && res.request().method() === 'PUT')
-      w.renewals.push({ status: res.status(), at: Date.now() })
+      w.renewals.push({ status: res.status(), at: Date.now(), point: m[1] })
   })
   page.on('websocket', (ws) => {
     ws.on('framereceived', (frame) => {
@@ -350,8 +350,10 @@ test.describe('streams and signals', () => {
       // The tile renews every 30 seconds: the renewal is refused, the data goes, the denied state shows.
       await expect(q).toHaveCount(0, { timeout: 60_000 })
       await expect(vf.locator('[data-tile-id="q"]')).toContainText(/access denied/i)
-      const denied = vw.renewals.find(r => r.status === 403)
-      expect(denied, 'a renewal was answered with 403').toBeDefined()
+      // The page has two live tiles that renew on their own clocks; the refusal that ends the queue tile's
+      // subscription is the renewal of its own point, not the first refusal of either tile.
+      const denied = vw.renewals.find(r => r.status === 403 && r.point === 'queue')
+      expect(denied, 'the queue renewal was answered with 403').toBeDefined()
       // No message of the ended subscription reaches the viewer after the refusal.
       await viewer.waitForTimeout(3000)
       const topicBefore = new Set(vw.frames.filter(fr => fr.at <= denied!.at).map(fr => fr.topic))

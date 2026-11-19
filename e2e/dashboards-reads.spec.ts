@@ -523,6 +523,8 @@ test.describe('a user without access is refused by the page and by the API (RC1-
   test('the Host refuses the page to the viewer before the page app runs', async ({ browser }) => {
     const viewer = await signedIn(browser, 'viewer', 'viewer')
     expectFailures(viewer, { status: 401, path: '/api/public/pages/content/wippy.dashboards.pages:reads_denied' })
+    // Let the shell finish loading first: navigating while its own scripts load aborts them.
+    await viewer.waitForLoadState('networkidle')
     await openInShell(viewer, '/reads/denied')
     await viewer.waitForTimeout(3000)
     await expectHostRefusesPage(viewer, 'reads_denied')

@@ -179,12 +179,12 @@ test.describe('RC1-07: layouts follow the container', () => {
       const rects = slotRects(props.layout.layouts[expected], width)
       const canvas = await box(f, '[data-board-canvas]')
       for (const [id, slot] of Object.entries(rects)) {
-        // The frame has a margin of 6 px on each side of its slot.
+        // The Card frame has a margin of 7 px on each side of its slot and no border (tile contract 5.6).
         const b = await box(f, `[data-tile-id="${id}"]`)
         expect(b, `${id} at ${width}`).not.toBeNull()
-        expect(Math.abs((b?.x ?? 0) - (canvas?.x ?? 0) - (slot.x + 6)), `${id}.x at ${width}`).toBeLessThanOrEqual(2)
-        expect(Math.abs((b?.w ?? 0) - (slot.w - 12)), `${id}.w at ${width}`).toBeLessThanOrEqual(2)
-        expect(Math.abs((b?.h ?? 0) - (slot.h - 12)), `${id}.h at ${width}`).toBeLessThanOrEqual(2)
+        expect(Math.abs((b?.x ?? 0) - (canvas?.x ?? 0) - (slot.x + 7)), `${id}.x at ${width}`).toBeLessThanOrEqual(2)
+        expect(Math.abs((b?.w ?? 0) - (slot.w - 14)), `${id}.w at ${width}`).toBeLessThanOrEqual(2)
+        expect(Math.abs((b?.h ?? 0) - (slot.h - 14)), `${id}.h at ${width}`).toBeLessThanOrEqual(2)
       }
     }
   })
