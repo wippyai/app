@@ -165,7 +165,7 @@ entries:
   - name: wc-chartjs
     kind: ns.dependency
     component: wippy-swiss/chartjs
-    version: '>=v0.1.0'
+    version: '>=v0.2.0'
     parameters:
       - name: server
         value: app:gateway

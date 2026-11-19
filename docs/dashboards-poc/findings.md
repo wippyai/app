@@ -109,7 +109,7 @@ These changes come from the build. Each one names the section of spec v6.8 it ch
 | gen-2-chat | `feat/layout-tree-size`, worktree `.local/worktrees/dashboards-layout-size` | 2523942: size on `@wippy-fe/layout` tree nodes |
 | web-components | `feat/chartjs-click-event`, worktree `.local/worktrees/chartjs-click` | 7d47955, f3286ee: `chart-click` event; 1f5c564: the chart fills its host |
 
-The tracked `wippy.lock` pins hub versions only, including `wippy/dashboards` 0.0.1. The chart click needs the local chart branch until `wippy-swiss/chartjs` 0.2.0 is released: put it in a gitignored `.wippy.workspace.yaml` (a `workspace` profile with `workspace.replacements`, Wippy 0.3.26a or later). Without it the charts draw, but a bar click does nothing. The template vendors the patched `@wippy-fe/layout` build until that patch is released.
+The tracked `wippy.lock` pins hub versions only, including `wippy/dashboards` 0.0.1 and `wippy-swiss/chartjs` 0.2.0, which carries the chart click (released; pinned on 2026-11-19). Local module checkouts go in a gitignored `.wippy.workspace.yaml` (a `workspace` profile with `workspace.replacements`, Wippy 0.3.26a or later). The template vendors the patched `@wippy-fe/layout` build until that patch is released.
 
 ## How to run the POC
 

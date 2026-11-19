@@ -15,8 +15,8 @@ modules:
       version: 0.1.9
       hash: b0cc8d47a557efda2c140752e0cba80a07260b2d74f0281ca3310183a52f9756
     - name: wippy-swiss/chartjs
-      version: 0.1.1
-      hash: 4082c02dbfe92206333a4e70c805bd468fea675aab7c6553b08e946db110610f
+      version: 0.2.0
+      hash: 8104a03a0148f69ea030a439c5113f58ce6c32fddb3e028704e93c0759d5d7cb
     - name: wippy-swiss/markdown
       version: 0.1.1
       hash: 23faaf51513169a0e4b90a8d05572e666cf3c45eb27ba5ada688cf311a4852aa
