@@ -31,7 +31,7 @@ Time zone names need the runtime's time zone database. The local Windows `wippy.
 
 ## Self-test
 
-`GET /api/v1/demo/mappers/selftest` returns `{ ok, mappers, points }`. Only an administrator may call it (the group `app.security:user` is denied the action `mock.mappers.selftest`). `e2e/dashboards-mappers.spec.ts` calls it. For every mapper declared in the registry it runs:
+`GET /api/v1/demo/mappers/selftest` returns `{ ok, mappers, points }`. Only an administrator may call it (the group `app.security:user` is denied the action `mock.mappers.selftest`). `e2e/dashboards-mappers.spec.ts` calls it. Every mapper declared in the registry, from any module, gets the generic conformance check below (`check_mappers.validate_mapper`). The mappers of this module (`mock.mappers`) also get the demo's own rules, and `mappers[].mock` says which they are. For each of them it runs:
 
 - every `examples` entry: the function's output must equal the stated output exactly (at least three each, with an empty input and a tie);
 - every `expected_failures` entry (not part of the contract's example format): a decimal value, a value of the wrong type, a column missing from every row, a missing cell in a field that is not nullable, `n` outside 1 to 100, a bucket that does not exist and so on. A case either gives an error that contains a text, or sets `params_invalid` and must be refused by `params_schema`. `valid_params` lists parameters that `params_schema` must accept (the edges of a range);

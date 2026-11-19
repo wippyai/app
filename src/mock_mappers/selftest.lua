@@ -16,6 +16,7 @@ local check_mappers = require("check_mappers")
 local shape = require("shape")
 
 local DEMO_POINT_PREFIX = "demo.actor:"
+local MOCK_PREFIX = "mock.mappers:"
 
 local function same(a, b)
     if type(a) ~= type(b) then
@@ -37,18 +38,18 @@ local function same(a, b)
     return true
 end
 
-local function call(meta, params, input, context)
+local function call(meta, params, input, context, args)
     context = type(context) == "table" and context or {}
     return funcs.new():call(meta.func, {
         rows = input or {},
         params = params or {},
-        args = {},
+        args = type(args) == "table" and args or {},
         context = { time_zone = context.time_zone or "UTC", output = context.output },
     })
 end
 
 local function run_example(meta, example)
-    local data, err = call(meta, example.params, example.input, example.context)
+    local data, err = call(meta, example.params, example.input, example.context, example.args)
     if err ~= nil then
         return false, "the mapper returned an error: " .. tostring(err)
     end
@@ -67,7 +68,7 @@ local function run_failure(meta, case)
         end
         return true
     end
-    local data, err = call(meta, case.params, case.input, case.context)
+    local data, err = call(meta, case.params, case.input, case.context, case.args)
     if err == nil then
         return false, "the mapper gave " .. (data == nil and "nothing" or "a result") .. " and no error"
     end
@@ -77,7 +78,20 @@ local function run_failure(meta, case)
     return true
 end
 
+-- Any installed mapper gets the generic conformance check of wippy/dashboards: required fields,
+-- and every example exact. Only the mappers of this module (mock.mappers) must also meet the
+-- demo's own rules: at least three examples, the expected failures and the valid edges.
 local function check_mapper(entry)
+    local mock = tostring(entry.id):sub(1, #MOCK_PREFIX) == MOCK_PREFIX
+    if not mock then
+        local conforms, cerr = check_mappers.validate_mapper(entry)
+        local result = { id = entry.id, mock = false, conformance = { ok = conforms == true }, ok = conforms == true }
+        if not conforms then
+            result.conformance.error = cerr and cerr.message or "refused"
+        end
+        return result
+    end
+
     local meta = entry.meta
     local examples = type(meta.examples) == "table" and meta.examples or {}
     local failures = {}
@@ -105,6 +119,7 @@ local function check_mapper(entry)
     local conforms, cerr = check_mappers.validate_mapper(entry)
     local result = {
         id = entry.id,
+        mock = true,
         examples = #examples,
         passed = #examples - #failures,
         failures = failures,

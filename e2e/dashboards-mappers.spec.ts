@@ -140,19 +140,27 @@ test.describe('the example mappers', () => {
       ok: boolean
       mappers: Array<{
         id: string
+        mock: boolean
         ok: boolean
-        examples: number
-        passed: number
-        failures: unknown[]
-        expected_failures: number
-        expected_failures_passed: number
-        negative_failures: unknown[]
+        examples?: number
+        passed?: number
+        failures?: unknown[]
+        expected_failures?: number
+        expected_failures_passed?: number
+        negative_failures?: unknown[]
         conformance: { ok: boolean, error?: string }
       }>
       points: Array<{ id: string, ok: boolean, error?: string }>
     }
-    expect(result.mappers.map(m => m.id)).toEqual(MAPPERS)
+    // Any installed mapper must pass the generic conformance check; the five of this module must
+    // also meet the demo's own rules (three examples, expected failures).
     for (const m of result.mappers) {
+      expect(m.conformance, `${m.id} conformance`).toEqual({ ok: true })
+      expect(m.ok, m.id).toBe(true)
+    }
+    const mocks = result.mappers.filter(m => m.mock)
+    expect(mocks.map(m => m.id)).toEqual(MAPPERS)
+    for (const m of mocks) {
       expect(m.examples, `${m.id} examples`).toBeGreaterThanOrEqual(3)
       expect(m.passed, `${m.id} passed`).toBe(m.examples)
       expect(m.failures, `${m.id} failures`).toEqual([])
