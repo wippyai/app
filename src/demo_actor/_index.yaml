@@ -668,3 +668,37 @@ entries:
           - { timestamp: "2026-08-31T10:15:00Z", day: "2026-08-31", model_id: claude-sonnet-4-6, prompt_tokens: 5200, completion_tokens: 800, total_tokens: 6000 }
           - { timestamp: "2026-08-31T11:40:00Z", day: "2026-08-31", model_id: claude-haiku-4-5, prompt_tokens: 900, completion_tokens: 300, total_tokens: 1200 }
           - { timestamp: "2026-09-01T09:05:00Z", day: "2026-09-01", model_id: claude-sonnet-4-6, prompt_tokens: 4100, completion_tokens: 650, total_tokens: 4750 }
+
+  # ── raw rows for the browser tests (administrators only) ─────────────
+  - name: deny_raw_usage
+    kind: security.policy
+    meta:
+      comment: app.security:user may not read the raw usage rows
+    groups:
+      - app.security:user
+    policy:
+      resources: demo.actor:raw_usage
+      actions: demo.actor.raw_usage
+      effect: deny
+
+  - name: raw_usage_rows
+    kind: function.lua
+    meta:
+      comment: Returns the raw rows of the source of usage_rows, every column included (administrators only)
+    source: file://raw.lua
+    method: handler
+    modules:
+      - http
+      - security
+      - funcs
+      - sql
+    pool:
+      size: 1
+
+  - name: raw_usage_rows.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: GET
+    func: raw_usage_rows
+    path: /demo/raw/usage-rows

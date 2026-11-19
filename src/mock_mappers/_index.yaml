@@ -88,7 +88,7 @@ entries:
   - name: selftest
     kind: function.lua
     meta:
-      comment: Runs every example of every mock mapper and returns the results (administrators only)
+      comment: Runs every example, expected failure and conformance check of every mapper, and the point check of every demo point with a source (administrators only)
     source: file://selftest.lua
     method: handler
     modules:
@@ -96,6 +96,9 @@ entries:
       - registry
       - funcs
       - security
+    imports:
+      check_mappers: wippy.dashboards:check_mappers
+      shape: wippy.dashboards:shape
     pool:
       size: 1
 
@@ -142,6 +145,39 @@ entries:
       output:
         format: wippy.dashboard_frame/v1
       max_input_rows: 10000
+      # Cases that must fail (section 6 of the mapper contract). The self-test runs them; they are
+      # not part of the contract's example format, which holds only successful examples.
+      expected_failures:
+        - name: a decimal value in a number field
+          params: { fields: [{ from: price, type: number }] }
+          input: [{ price: "12.50" }]
+          error: "column 'price'"
+        - name: a value of the wrong type
+          params: { fields: [{ from: name, type: string }] }
+          input: [{ name: 5 }]
+          error: "column 'name'"
+        - name: a number where a decimal is expected
+          params: { fields: [{ from: price, type: decimal }] }
+          input: [{ price: 12.5 }]
+          error: "column 'price'"
+        - name: a column missing from every row
+          params: { fields: [{ from: name, type: string }, { from: gone, type: string }] }
+          input: [{ name: a }]
+          error: "column 'gone' is missing from every row"
+        - name: a missing cell in a field that is not nullable
+          params: { fields: [{ from: name, type: string }] }
+          input: [{ name: a }, {}]
+          error: "not nullable"
+        - name: two fields with one name
+          params: { fields: [{ from: a, type: string }, { from: b, name: a, type: string }] }
+          input: [{ a: x, b: y }]
+          error: "two fields have the name 'a'"
+        - name: a type that does not exist
+          params: { fields: [{ from: x, type: integer }] }
+          params_invalid: true
+        - name: no fields
+          params: { fields: [] }
+          params_invalid: true
       examples:
         - params:
             fields:
@@ -221,6 +257,43 @@ entries:
       output:
         format: wippy.dashboard_frame/v1
       max_input_rows: 10000
+      expected_failures:
+        - name: a decimal value to sum
+          params: { time: created_at, bucket: day, value: tokens }
+          input: [{ created_at: "2026-11-18T10:00:00Z", tokens: "12.50" }]
+          error: "column 'tokens'"
+        - name: a value of the wrong type to sum
+          params: { time: created_at, bucket: day, value: tokens }
+          input: [{ created_at: "2026-11-18T10:00:00Z", tokens: true }]
+          error: "column 'tokens'"
+        - name: a column missing from every row
+          params: { time: created_at, bucket: day, value: "*" }
+          input: [{ other: 1 }]
+          error: "column 'created_at' is missing from every row"
+        - name: a value that is not a date or timestamp
+          params: { time: created_at, bucket: day, value: "*" }
+          input: [{ created_at: yesterday }]
+          error: "not a date"
+        - name: a row with no time
+          params: { time: created_at, bucket: day, value: "*" }
+          input: [{ created_at: "2026-11-18" }, { created_at: { "$null": true } }]
+          error: "has no date or timestamp"
+        - name: a group that is not text
+          params: { time: created_at, bucket: day, value: "*", group: model }
+          input: [{ created_at: "2026-11-18", model: 5 }]
+          error: "column 'model' must hold text"
+        - name: output fields that would share a name
+          params: { time: created_at, bucket: day, value: day }
+          input: []
+          error: "share a name"
+        - name: a time zone that does not exist
+          params: { time: created_at, bucket: day, value: "*" }
+          context: { time_zone: Nowhere/None }
+          input: [{ created_at: "2026-11-18" }]
+          error: "unknown time zone"
+        - name: a bucket that does not exist
+          params: { time: created_at, bucket: year, value: "*" }
+          params_invalid: true
       examples:
         - params: { time: created_at, bucket: day, value: "*" }
           context: { time_zone: UTC }
@@ -310,6 +383,30 @@ entries:
       output:
         format: wippy.dashboard_frame/v1
       max_input_rows: 10000
+      expected_failures:
+        - name: a decimal value to sum
+          params: { by: k, values: [v] }
+          input: [{ k: a, v: "12.50" }]
+          error: "column 'v'"
+        - name: a value of the wrong type to sum
+          params: { by: k, values: [v] }
+          input: [{ k: a, v: true }]
+          error: "column 'v'"
+        - name: a group that is not text
+          params: { by: k, values: [v] }
+          input: [{ k: 5, v: 1 }]
+          error: "column 'k' must hold text"
+        - name: a column missing from every row
+          params: { by: k, values: [v, gone] }
+          input: [{ k: a, v: 1 }]
+          error: "column 'gone' is missing from every row"
+        - name: the grouping column also to sum
+          params: { by: k, values: [k] }
+          input: [{ k: a }]
+          error: "cannot be both"
+        - name: no column to sum
+          params: { by: k, values: [] }
+          params_invalid: true
       examples:
         - params: { by: model_id, values: [prompt_tokens, completion_tokens] }
           input:
@@ -379,19 +476,50 @@ entries:
       output:
         format: wippy.dashboard_frame/v1
       max_input_rows: 10000
+      # n is a whole number from 1 to 100; the edges are valid.
+      valid_params:
+        - { by: name, value: v, n: 1 }
+        - { by: name, value: v, n: 100 }
+      expected_failures:
+        - name: n below the range
+          params: { by: name, value: v, n: 0 }
+          params_invalid: true
+        - name: n above the range
+          params: { by: name, value: v, n: 101 }
+          params_invalid: true
+        - name: n that is not a whole number
+          params: { by: name, value: v, n: 2.5 }
+          params_invalid: true
+        - name: other when the consumer gives no output
+          params: { by: name, value: v, n: 1, other: true }
+          input: [{ name: a, v: 1 }, { name: b, v: 2 }]
+          error: "not additive"
+        - name: other on an output field that says additive false
+          params: { by: name, value: v, n: 1, other: true }
+          context: { output: { shape: category, fields: [{ name: name, type: string, nullable: false }, { name: v, type: number, additive: false, nullable: false }] } }
+          input: [{ name: a, v: 1 }]
+          error: "not additive"
+        - name: a decimal value to rank
+          params: { by: name, value: v, n: 1 }
+          input: [{ name: a, v: "12.50" }]
+          error: "column 'v'"
+        - name: a column missing from every row
+          params: { by: name, value: v, n: 1 }
+          input: [{ name: a }]
+          error: "column 'v' is missing from every row"
       examples:
-        - description: Equal values keep their input order (a tie).
+        - description: Equal values keep their input order (a tie), here z before m, so sorting the tied names would give another order.
           params: { by: name, value: v, n: 2 }
           input:
-            - { name: a, v: 5 }
-            - { name: b, v: 5 }
+            - { name: z, v: 5 }
+            - { name: m, v: 5 }
             - { name: c, v: 1 }
           output:
             schema: wippy.dashboard_frame/v1
             fields:
               - { name: name, type: string, role: dimension, nullable: false }
               - { name: v, type: number, role: measure, additive: false, nullable: false }
-            rows: [["a", 5], ["b", 5]]
+            rows: [["z", 5], ["m", 5]]
         - description: With other, the rest is summed into a last row. The consumer's output marks the value as additive.
           params: { by: name, value: v, n: 1, other: true }
           context:
@@ -470,6 +598,14 @@ entries:
       output:
         schema: { type: object }
       max_input_rows: 10000
+      expected_failures:
+        - name: a column to keep that is missing from every row
+          params: { fields: [gone] }
+          input: [{ a: 1 }]
+          error: "column 'gone' is missing from every row"
+        - name: fields that are not text
+          params: { fields: [1] }
+          params_invalid: true
       examples:
         - params: {}
           input:

@@ -27,11 +27,17 @@ Each mapper has at least three examples, with an empty input and a tie among the
 - Fields: sums and counts are `additive: true` and `nullable: false`. In `rows_to_frame`, `nullable` comes from the parameters (default `false`).
 - `top_n` with `other: true` sums rows, so it reads `context.output` and refuses (`not additive`) when the output field for the value is not `additive: true`. Dashboards has no rule of its own for this.
 
-Time zone names need the runtime's time zone database. The local Windows `wippy.exe` has none and refuses a name such as `Europe/Warsaw` (`unknown time zone`); `UTC` always works. That is why the examples of `bucket_by_time` use `UTC`.
+Time zone names need the runtime's time zone database. The local Windows `wippy.exe` has none and refuses a name such as `Europe/Warsaw` (`unknown time zone`); `UTC` always works. **Conversion between named time zones is therefore not tested here.** The examples of `bucket_by_time` use `UTC` (one of them reads a timestamp with a `+01:00` offset in UTC), and the only zone check is that an unknown name gives an error. Test named zones on a runtime that has the database before relying on them.
 
 ## Self-test
 
-`GET /api/v1/demo/mappers/selftest` runs every example of every mapper here and returns `{ ok, mappers: [{ id, examples, passed, failures }] }`. Only an administrator may call it (the group `app.security:user` is denied the action `mock.mappers.selftest`). `e2e/dashboards-mappers.spec.ts` calls it.
+`GET /api/v1/demo/mappers/selftest` returns `{ ok, mappers, points }`. Only an administrator may call it (the group `app.security:user` is denied the action `mock.mappers.selftest`). `e2e/dashboards-mappers.spec.ts` calls it. For every mapper declared in the registry it runs:
+
+- every `examples` entry: the function's output must equal the stated output exactly (at least three each, with an empty input and a tie);
+- every `expected_failures` entry (not part of the contract's example format): a decimal value, a value of the wrong type, a column missing from every row, a missing cell in a field that is not nullable, `n` outside 1 to 100, a bucket that does not exist and so on. A case either gives an error that contains a text, or sets `params_invalid` and must be refused by `params_schema`. `valid_params` lists parameters that `params_schema` must accept (the edges of a range);
+- `check_mappers.validate_mapper` of `wippy/dashboards`, the conformance check of the declaration.
+
+For every demo point that declares a source it runs `check_mappers.validate_point`. The `points` list holds one result for each.
 
 ## Use
 
