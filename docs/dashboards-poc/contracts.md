@@ -18,7 +18,7 @@ The POC is thrown away. It proves the frame, so these contracts stay small. Anyt
 
 ## 2. Folders and namespaces
 
-Since 17 November 2026 the engine is the module `wippy/dashboards`, in its own repository (`git.wippy.ai` `wippy/dashboard`, checked out at `C:/Projects/wippy-dashboards`). Its paths below are relative to that repository. Since 18 November 2026 the app installs the published module from the hub (`wippy.lock` pins 0.0.1); while the module itself is being changed, the gitignored `.wippy.workspace.yaml` can replace it with that checkout. The demo modules and the test fixtures stay in this app.
+Since 17 November 2026 the engine is the module `wippy/dashboards`, in its own repository (`git.wippy.ai` `wippy/dashboard`, checked out at `C:/Projects/wippy-dashboards`). Its paths below are relative to that repository. Since 18 November 2026 the app installs the published module from the hub (`wippy.lock` pins the newest version, 0.0.2 since 20 November 2026); while the module itself is being changed, the gitignored `.wippy.workspace.yaml` can replace it with that checkout. The demo modules and the test fixtures stay in this app.
 
 | Folder | Namespace | Owner stage |
 |---|---|---|
