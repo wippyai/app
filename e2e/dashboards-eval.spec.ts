@@ -12,6 +12,7 @@ import {
   catalogue,
   chartProblem,
   expectedChart,
+  markdownProblem,
   fixedArgs,
   frameStatuses,
   listedIds,
@@ -22,6 +23,7 @@ import {
   removePage,
   renderedChart,
   renderedKpi,
+  renderedMarkdown,
   renderedTable,
   renderedText,
   sameNumber,
@@ -408,10 +410,14 @@ function fieldIndex(frame: { fields: Array<{ name: string }> }, name: string | u
  */
 async function renderedProblem(page: Page, pageId: string, read: TileRead, direct: Envelope): Promise<string | null> {
   const data = direct.data
-  if (!data || !Array.isArray(data.rows))
-    return data && typeof data.text === 'string' && read.tile.tile === 'text'
-      ? ((await renderedText(await boardFrame(page, pageId), read.id)).includes(data.text) ? null : `the text tile does not draw "${data.text}"`)
+  if (!data || !Array.isArray(data.rows)) {
+    // A text tile draws the field that its `text` slot names, through <wippy-markdown>.
+    const field = [read.tile.fields.text ?? 'text'].flat()[0]
+    const text = data ? (data as Record<string, unknown>)[field] : undefined
+    return read.tile.tile === 'text' && typeof text === 'string'
+      ? markdownProblem(text, await renderedMarkdown(await boardFrame(page, pageId), read.id))
       : null
+  }
   const board = await boardFrame(page, pageId)
   const type = read.tile.tile
   const slot = (name: string): string[] => [read.tile.fields[name] ?? []].flat()

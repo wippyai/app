@@ -287,6 +287,69 @@ export async function renderedText(board: FrameLocator, tileId: string): Promise
   return (await board.locator(`[data-tile-id="${tileId}"]`).first().innerText({ timeout: 5000 }).catch(() => '')).trim()
 }
 
+export interface RenderedMarkdown {
+  /** The text that the markdown element drew, read from its shadow root (empty when it cannot be read). */
+  drawn: string
+  /** The text that the tile gave to the element (its `content`). */
+  content: string | null
+  /** The text of the plain fallback paragraph, drawn when the markdown element cannot load. */
+  plain: string
+}
+
+/** Whitespace collapsed to single spaces, and the ends trimmed. */
+export function collapseSpace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+/** The text without the characters that Markdown reads as marks. A plain sentence is the same on both sides. */
+function withoutMarks(text: string): string {
+  return collapseSpace(text.replace(/[*_`#>]/g, ''))
+}
+
+/**
+ * What a text tile drew. The tile hands its text to <wippy-markdown>, which draws it inside its own
+ * shadow root, so the text of the tile (innerText) does not hold it: it is read from the shadow root.
+ */
+export async function renderedMarkdown(board: FrameLocator, tileId: string): Promise<RenderedMarkdown> {
+  const tile = board.locator(`[data-tile-id="${tileId}"]`).first()
+  const element = tile.locator('wippy-markdown').first()
+  let drawn = ''
+  let content: string | null = null
+  if (await element.count() > 0) {
+    const read = await element.evaluate((el) => {
+      const prop = (el as unknown as { content?: unknown }).content
+      return {
+        // The shadow root also holds the element's style sheet: only the other nodes are the drawn text.
+        drawn: (el as HTMLElement).shadowRoot
+          ? Array.from((el as HTMLElement).shadowRoot!.childNodes).filter(n => n.nodeName !== 'STYLE').map(n => n.textContent ?? '').join(' ')
+          : (el.textContent ?? ''),
+        content: typeof prop === 'string' ? prop : el.getAttribute('content'),
+      }
+    }).catch(() => ({ drawn: '', content: null as string | null }))
+    drawn = read.drawn
+    content = read.content
+  }
+  const plain = (await tile.locator('.dash-text__plain').first().textContent({ timeout: 1000 }).catch(() => null)) ?? ''
+  return { drawn: collapseSpace(drawn), content, plain: collapseSpace(plain) }
+}
+
+/**
+ * Compares the text that a text tile drew with the text it read. What the element drew must contain the
+ * text (marks aside); when the element draws nothing that can be read (a closed shadow root), the plain
+ * fallback must equal it, or else the text the tile handed to the element must be exactly it.
+ * Returns what differs, or null.
+ */
+export function markdownProblem(expected: string, got: RenderedMarkdown): string | null {
+  const want = withoutMarks(expected)
+  if (got.drawn !== '')
+    return withoutMarks(got.drawn).includes(want) ? null : `the text tile draws "${got.drawn.slice(0, 160)}", not "${expected.slice(0, 160)}"`
+  if (got.plain !== '')
+    return withoutMarks(got.plain) === want ? null : `the text tile draws "${got.plain.slice(0, 160)}", not "${expected.slice(0, 160)}"`
+  if (got.content !== null)
+    return got.content === expected ? null : `the text tile hands "${got.content.slice(0, 160)}" to the markdown element, not "${expected.slice(0, 160)}"`
+  return 'the text tile drew no text'
+}
+
 /** A number as a tile writes it: digits with an optional thousands separator of any kind. */
 export function numberPattern(n: unknown): RegExp {
   const digits = String(Math.round(Number(n)))

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { chartProblem, expectedChart, isTokenSum, sameNumber, tableProblem, toolCalls, toolNames } from './dashboards-agent.support'
+import { markdownProblem, chartProblem, expectedChart, isTokenSum, sameNumber, tableProblem, toolCalls, toolNames } from './dashboards-agent.support'
 
 /**
  * The reader of agent runs behind the Researcher test, on records in the shape that wippy/dataflow
@@ -155,4 +155,19 @@ test('reads the tool calls of a real Researcher run, captured from the runtime',
   const build = calls[6].args as { title: string, tiles: Array<{ type: string, point?: string }> }
   expect(build.title).toMatch(/^Researcher Tokens /)
   expect(build.tiles.map(t => t.type)).toEqual(['kpi', 'kpi', 'chart', 'chart', 'chart', 'table'])
+})
+
+test('a text tile is compared with what the markdown element drew, not with the text of the tile', () => {
+  const text = '705 calls used 2328600 tokens. deepseek-v4.1-flash used 76.4% of them.'
+  // The element drew the sentence (read from its shadow root), with other spacing.
+  expect(markdownProblem(text, { drawn: '705 calls used 2328600 tokens.  deepseek-v4.1-flash used 76.4% of them.', content: text, plain: '' })).toBeNull()
+  // Markdown marks are not part of what is read.
+  expect(markdownProblem('**705** calls used', { drawn: '705 calls used', content: null, plain: '' })).toBeNull()
+  // Moving data: another number is a difference.
+  expect(markdownProblem(text, { drawn: '706 calls used 2328600 tokens. deepseek-v4.1-flash used 76.4% of them.', content: text, plain: '' })).toMatch(/draws "706 calls/)
+  // A shadow root that cannot be read: the plain fallback, or the content that the tile handed over.
+  expect(markdownProblem(text, { drawn: '', content: null, plain: text })).toBeNull()
+  expect(markdownProblem(text, { drawn: '', content: text, plain: '' })).toBeNull()
+  expect(markdownProblem(text, { drawn: '', content: '700 calls', plain: '' })).toMatch(/hands "700 calls"/)
+  expect(markdownProblem(text, { drawn: '', content: null, plain: '' })).toMatch(/drew no text/)
 })
