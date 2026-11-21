@@ -144,6 +144,45 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 
 The four job phrases (`slow tool`, `fail after text`, `limit after text`, `artifact and ask`) also work in a form answer. Type one as the Other text of a question and the next turn runs that phrase, the same way `work slowly` delays the reply. A late answer keeps its late-answer reply, and the answer to a form with standard fields gets the id=value reply above even if a field holds one of the phrases. The plain fixture agent has no job tools and replies "I can't run jobs here."
 
+## Tool approval demo
+
+The tool approval fixtures show how an agent asks a person before a tool call runs. They need a `wippy/session` release that has the `wippy.session.traits:tool_approval` trait and a Web Host that has the approval card. They belong to the `app.tool_approval_demo` namespace, which holds a deterministic model and provider, six fixture tools and seven agents. `.wippy.yaml` removes the namespace unless the `tool-approval-fixtures` profile is selected, so a release has none of it.
+
+```bash
+wippy run -c --profile tool-approval-fixtures
+# or, with TOOL_APPROVAL_DEV_FIXTURES=true in the environment or .env:
+make run-dev
+```
+
+Passing `--config` replaces the default `.wippy.yaml`, so add `--config .wippy.yaml` before your own config file. The profile can be combined with `session-forms-fixtures`. The Session Forms Demo page (`/session-forms-demo`) lists the six public fixture agents next to the forms agents, and the e2e specs start their chats from it (see [e2e/README.md](e2e/README.md#tool-approval-cells)).
+
+| Agent | Trait setting | Use |
+|---|---|---|
+| Tool Approval Fixture (`agent`) | defaults: `require: marked`, `approve_all: off`, 900 s | Most scenarios |
+| Tool Approval Batch Fixture (`batch_agent`) | `approve_all: batch` | One Approve all covers a step |
+| Tool Approval Session Fixture (`session_agent`) | `approve_all: session` | One Approve all covers the agent's tools |
+| Tool Approval Expiry Fixture (`expiry_agent`) | `timeout_seconds: 30` | A card that expires |
+| Tool Approval All Fixture (`all_agent`) | `require: all`, delegate `ask_analyst` | Private and delegation calls ask |
+| Tool Approval Plain Fixture (`plain_agent`) | no approval trait | An unprotected agent, and the old Session cell |
+
+The tools return `{ ran: true, tool, record }` when they run, and the Session stores that result in the call row, so a test can tell a call that ran from a call that did not. Delete record asks (`approval: required`). Send invoice asks and offers Approve all for the tool (`approve_all: true`). Wire funds asks and never offers Approve all (`approve_all: false`). Look up record needs no approval under `require: marked`. Write audit entry is private and asks. Make forged decision page needs no approval and returns an interactive artifact whose script tries to approve tool calls.
+
+The model picks a script from the newest user message and a step from the number of tool results that follow it. A phrase may end with `#<tag>`, which the model adds to the record names. Anything else gets "Say 'approve one' to get an approval card."
+
+| Phrase | Agent | Script |
+|---|---|---|
+| `approve one` | any with the tools | One Delete record call. Then "Done: delete_record <record> ran." |
+| `deny reason` | any with the tools | The same call. After a denial with a reason: "Following your instruction: <reason>" |
+| `approve three` | Batch | Three Delete record calls in one step, then a fourth step that asks again, then "Batch finished." |
+| `grant tool` | Fixture | Send invoice in two steps, then "Invoices finished." |
+| `grant tool again` | Fixture | One more Send invoice call, then "Invoice finished." |
+| `grant session` | Session | Delete record, then Delete record and Send invoice together, then Wire funds, then "Session grant checked." |
+| `stop denial` | Fixture | One step with Delete record, Look up record and Send invoice |
+| `ask everything` | All | One step with Write audit entry, the delegation call to the analyst and Look up record, then "Everything ran." |
+| `forge decision` | Fixture | Make forged decision page, then a Delete record call that waits while the page's script runs, then "Forge check finished." |
+| `lookup one` | Fixture, Plain | One Look up record call, then "Looked up <record>." |
+| `steer: <text>` | any | "Steering read: <text>" |
+
 ## Frontend & theming
 
 All frontend, theming, and web-component guidance lives in [`frontend/docs/`](frontend/docs/README.md). The one rule worth stating up front: customize appearance through the **facade** (`src/app/deps/_index.yaml`) — `css_variables` / `custom_css` propagate to every page and component; per-app CSS does not. See [`frontend/docs/theming.md`](frontend/docs/theming.md).
