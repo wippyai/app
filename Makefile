@@ -70,11 +70,12 @@ lint:
 # this app's own namespaces (`app`, `app.*`). The CI lint stage covers the whole
 # workspace, which also reports errors in the vendored keeper module that this
 # repo does not own. Needs `wippy` on PATH; make.ps1 has the Windows fallback.
-# The second wippy lint run selects the fixtures profile, because .wippy.yaml
-# removes that namespace from a release.
+# The second and third wippy lint runs select a fixtures profile each, because
+# .wippy.yaml removes those namespaces from a release.
 verify: build lint
 	wippy lint --level error --ns 'app,app.*'
 	wippy lint --level error --ns 'app,app.*' --profile session-forms-fixtures
+	wippy lint --level error --ns 'app,app.*' --profile tool-approval-fixtures
 
 clean-build:
 	cd frontend/applications/main && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir

@@ -34,10 +34,13 @@ function resolveWippyBinary() {
   return existsSync(local) ? local : 'wippy'
 }
 
-// SESSION_FORMS_DEV_FIXTURES=true selects this profile, which keeps the Session
-// Forms dev fixtures in the registry (see README.md).
-const FIXTURES_PROFILE = 'session-forms-fixtures'
-const FIXTURES_ENV_KEY = 'SESSION_FORMS_DEV_FIXTURES'
+// Each dev fixture set has a profile that keeps it in the registry and an env
+// key that selects the profile (see README.md). `wippy run` takes `--profile`
+// more than once, so both sets can be on at the same time.
+const FIXTURE_SETS = [
+  { name: 'session forms', profile: 'session-forms-fixtures', envKey: 'SESSION_FORMS_DEV_FIXTURES' },
+  { name: 'tool approval', profile: 'tool-approval-fixtures', envKey: 'TOOL_APPROVAL_DEV_FIXTURES' },
+]
 
 // Reads one named key the way the runtime's env store does, from the .env file
 // first and then the OS environment. It looks only at that key and never
@@ -111,7 +114,8 @@ async function main() {
   const rootConfig = path.join(cwd, '.wippy.yaml')
   if (configs.length > 0 && existsSync(rootConfig) && !configs.some(cfg => path.resolve(cwd, cfg) === rootConfig))
     configs.unshift('.wippy.yaml')
-  const fixturesOn = readEnvKey(envPath, FIXTURES_ENV_KEY) === 'true'
+  const fixtureSets = FIXTURE_SETS.map(set => ({ ...set, on: readEnvKey(envPath, set.envKey) === 'true' }))
+  const profiles = fixtureSets.filter(set => set.on).map(set => set.profile)
   const facadeUrl = process.env.FACADE_URL || ''
 
   const dryRun = process.env.RUN_DEV_DRY_RUN === '1'
@@ -133,8 +137,8 @@ async function main() {
   const args = ['run', '-c']
   for (const cfg of configs)
     args.push('--config', cfg)
-  if (fixturesOn)
-    args.push('--profile', FIXTURES_PROFILE)
+  for (const profile of profiles)
+    args.push('--profile', profile)
   for (const o of overrides)
     args.push('-o', o)
 
@@ -146,7 +150,7 @@ async function main() {
     facade_url: facadeUrl || null,
     wippy: wippyBin,
     configs,
-    profiles: fixturesOn ? [FIXTURES_PROFILE] : [],
+    profiles,
     overrides,
     env_file: runEnvPath,
     started_at: new Date().toISOString(),
@@ -159,7 +163,8 @@ async function main() {
 
   console.log(`[run-dev] ${wippyBin} ${args.join(' ')}`)
   console.log(`[run-dev] app=${appOrigin} facade=${facadeUrl || '(none)'} manifest=${manifestPath || '(none)'}`)
-  console.log(`[run-dev] session forms dev fixtures: ${fixturesOn ? `on (profile ${FIXTURES_PROFILE})` : 'off'}`)
+  for (const set of fixtureSets)
+    console.log(`[run-dev] ${set.name} dev fixtures: ${set.on ? `on (profile ${set.profile})` : 'off'}`)
   console.log(`[run-dev] env file for this run: ${runEnvPath} (port keys: ${portEnv.changed.join(', ')}; .env is not modified)`)
   // The encryption-key bootloader stores a generated key through the env
   // storage, which here is the per-run copy that is deleted on exit. Each run
