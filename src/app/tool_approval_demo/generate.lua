@@ -288,7 +288,17 @@ local function handler(contract_args: any): any
                 { tool = LOOKUP_RECORD_TOOL, arguments = { record = record("rec", 1) } },
             })
         end
-        return reply("Everything ran.")
+        -- Results come in model order: the audit entry, the delegation, the
+        -- record. Say "Everything ran." only when all three succeeded.
+        local audit = results[1]
+        local analyst = results[2]
+        local record_result = results[3]
+        local analyst_text = analyst and json.encode(analyst) or ""
+        if audit and audit.ran == true and record_result and record_result.ran == true
+            and string.find(tostring(analyst_text), "churn is stable", 1, true) then
+            return reply("Everything ran.")
+        end
+        return reply("Not everything ran: " .. tostring(json.encode(results)))
     end
 
     -- "forge decision": an artifact whose script tries to decide for the user,
