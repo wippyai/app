@@ -47,6 +47,38 @@ const AGENTS: DemoAgent[] = [
     registryId: 'app.session_forms_demo:limit_fixture_agent',
     description: 'Same deterministic fixture whose turn allows one model step. Say "limit after text" to write a preamble and hit the turn limit.',
   },
+  // Tool approval fixtures (app.tool_approval_demo). They need the Session
+  // release with tool approval and are listed only with TOOL_APPROVAL_DEV_FIXTURES.
+  {
+    title: 'Tool Approval Fixture',
+    registryId: 'app.tool_approval_demo:agent',
+    description: 'Deterministic dev fixture with tool approval and its defaults. Say "approve one" to call a tool that needs approval, "grant tool" for two steps that call a tool with Approve all for the tool, "stop denial" for a step of three calls, or "forge decision" for a page whose script tries to approve a call.',
+  },
+  {
+    title: 'Tool Approval Batch Fixture',
+    registryId: 'app.tool_approval_demo:batch_agent',
+    description: 'Same fixture where Approve all covers the pending calls of one step. Say "approve three" for three pending calls, then a fourth step that asks again.',
+  },
+  {
+    title: 'Tool Approval Session Fixture',
+    registryId: 'app.tool_approval_demo:session_agent',
+    description: 'Same fixture where Approve all covers the tools of the agent for the session, except Wire funds, which never offers it. Say "grant session".',
+  },
+  {
+    title: 'Tool Approval Expiry Fixture',
+    registryId: 'app.tool_approval_demo:expiry_agent',
+    description: 'Same fixture with a 30 second approval timeout. Say "approve one" and leave the card unanswered.',
+  },
+  {
+    title: 'Tool Approval All Fixture',
+    registryId: 'app.tool_approval_demo:all_agent',
+    description: 'Same fixture where every call needs approval. Say "ask everything" for a private call, a delegation call and a plain call in one step.',
+  },
+  {
+    title: 'Tool Approval Plain Fixture',
+    registryId: 'app.tool_approval_demo:plain_agent',
+    description: 'Same fixture without the approval trait. Say "lookup one" to call a tool that runs at once.',
+  },
 ]
 
 const api = useApi()
@@ -103,7 +135,8 @@ function openChat(agent: DemoAgent) {
         questions and the standard fields (text, email, date, number, textarea
         and checkbox). Forms demo talks to a real model. When the app runs with
         the Session Forms dev fixtures on, four scripted fixture agents that
-        never leave this server are listed as well.
+        never leave this server are listed as well. With the tool approval dev
+        fixtures on, six more scripted agents show the tool approval card.
       </p>
     </header>
 
