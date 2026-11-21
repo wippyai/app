@@ -322,6 +322,10 @@ part of a scenario. Test 19 also runs a deliberate console error and a deliberat
 404 and expects the capture to see both, so an empty list is not mistaken for a
 working capture.
 
+Decision texts that carry a time follow the Host: an approved decision and a plain denial read <label>, <h:mm> (withTime in helpers/tool-approval.ts), while a denial with a reason, expiry, Stop and a steering message read as the bare label.
+
+Scenario 15 gives the artifact script the real approval id, digest and revision of the pending request, which the test reads from the stored row, so only the Host's guards can refuse the forged command. The test asserts that the Host socket sent no frame that carries the forged request, that every attempt wrote its line, and that the call is still pending.
+
 How the specs read what a tool did: each fixture tool that runs returns
 `{ ran: true, tool, record }`, and the Session stores that result in the call
 row. A spec reads `GET /api/v1/sessions/messages` and counts those rows, so

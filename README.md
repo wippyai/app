@@ -165,7 +165,7 @@ Passing `--config` replaces the default `.wippy.yaml`, so add `--config .wippy.y
 | Tool Approval All Fixture (`all_agent`) | `require: all`, delegate `ask_analyst` | Private and delegation calls ask |
 | Tool Approval Plain Fixture (`plain_agent`) | no approval trait | An unprotected agent, and the old Session cell |
 
-The tools return `{ ran: true, tool, record }` when they run, and the Session stores that result in the call row, so a test can tell a call that ran from a call that did not. Delete record asks (`approval: required`). Send invoice asks and offers Approve all for the tool (`approve_all: true`). Wire funds asks and never offers Approve all (`approve_all: false`). Look up record needs no approval under `require: marked`. Write audit entry is private and asks. Make forged decision page needs no approval and returns an interactive artifact whose script tries to approve tool calls.
+The tools return `{ ran: true, tool, record }` when they run, and the Session stores that result in the call row, so a test can tell a call that ran from a call that did not. Delete record asks (`approval: required`). Send invoice asks and offers Approve all for the tool (`approve_all: true`). Wire funds asks and never offers Approve all (`approve_all: false`). Look up record needs no approval under `require: marked`. Write audit entry is private and asks. Make forged decision page needs no approval and returns an interactive artifact. Its script waits until a test calls window.__forge(command) with the real ids of the pending request, and then tries to approve the call in six ways (click, key events, relay message, token read, proxy API and socket).
 
 The model picks a script from the newest user message and a step from the number of tool results that follow it. A phrase may end with `#<tag>`, which the model adds to the record names. Anything else gets "Say 'approve one' to get an approval card."
 
@@ -179,7 +179,7 @@ The model picks a script from the newest user message and a step from the number
 | `grant session` | Session | Delete record, then Delete record and Send invoice together, then Wire funds, then "Session grant checked." |
 | `stop denial` | Fixture | One step with Delete record, Look up record and Send invoice |
 | `ask everything` | All | One step with Write audit entry, the delegation call to the analyst and Look up record, then "Everything ran." |
-| `forge decision` | Fixture | Make forged decision page, then a Delete record call that waits while the page's script runs, then "Forge check finished." |
+| `forge decision` | Fixture | Make forged decision page, then a Delete record call that waits. The test starts the page's attack once the card is pending. Then "Forge check finished." |
 | `lookup one` | Fixture, Plain | One Look up record call, then "Looked up <record>." |
 | `steer: <text>` | any | "Steering read: <text>" |
 
