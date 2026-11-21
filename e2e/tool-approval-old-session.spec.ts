@@ -17,6 +17,7 @@ import {
   sendMessage,
   sessionCapabilities,
   sessionIdOf,
+  TOOL_TITLE,
 } from './helpers/tool-approval'
 
 /**
@@ -49,7 +50,8 @@ test.describe('Tool approval, old Session cell', () => {
     // A normal tool call: its chip, its result, the reply.
     const record = recordName('rec', 1, tag)
     await expect(scope.getByText(`Looked up ${record}.`, { exact: true })).toBeVisible({ timeout: 20_000 })
-    await expect(scope.locator(SEL.toolChip).filter({ hasText: /lookup[_ ]record/i })).toHaveCount(1)
+    // The chip shows the resolved tool title; the alias shows only while the title loads (Host src/shared/ui/tool/tool-name.vue:12-17).
+    await expect(scope.locator(SEL.toolChip).filter({ hasText: TOOL_TITLE.lookup })).toHaveCount(1)
     const sessionId = await sessionIdOf(page)
     const rows = await expectRows(page, sessionId, 'the tool ran once', current => ranRows(current, 'lookup_record').length === 1)
     expect(allRanRows(rows)).toHaveLength(1)

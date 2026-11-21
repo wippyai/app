@@ -1,6 +1,5 @@
 import type { Page } from '@playwright/test'
-import type { Capture } from './helpers/capture'
-import { expect, test } from './helpers/capture'
+import { Capture, expect, recordSentFrames, test } from './helpers/capture'
 import { loginAsAdmin, pageIframeSelector } from './helpers/login'
 import {
   action,
@@ -18,6 +17,7 @@ import {
   openToolApprovalChat,
   ranRows,
   recordName,
+  resultText,
   SEL,
   sendMessage,
   sessionCapabilities,
@@ -25,6 +25,8 @@ import {
   settle,
   TEXT,
   TOOL_TITLE,
+  toolRows,
+  withTime,
 } from './helpers/tool-approval'
 
 /**
@@ -74,7 +76,7 @@ test.describe('Tool approval, current cell', () => {
     await settle(card)
     await action(card, 'approve').click()
 
-    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(TEXT.approved)
+    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.approved))
     await expect(scope.getByText(`Done: delete_record ${record} ran.`, { exact: true })).toBeVisible({ timeout: 20_000 })
     const rows = await expectRows(page, sessionId, 'the tool ran once', current => ranRows(current, 'delete_record').length === 1)
     expect(allRanRows(rows)).toHaveLength(1)
@@ -92,7 +94,7 @@ test.describe('Tool approval, current cell', () => {
     await action(first, 'approve_all').click()
 
     // One decision, three decided lines. No grant: nothing in the chat lists one.
-    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText([TEXT.approvedAll, TEXT.approvedAll, TEXT.approvedAll])
+    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText([withTime(TEXT.approvedAll), withTime(TEXT.approvedAll), withTime(TEXT.approvedAll)])
     await expect(scope.locator(SEL.grants)).toHaveCount(0)
     const sessionId = await sessionIdOf(page)
     await expectRows(page, sessionId, 'the three calls ran', rows => ranRows(rows, 'delete_record').length === 3)
@@ -119,7 +121,7 @@ test.describe('Tool approval, current cell', () => {
     await expect(scope.getByText('Invoices finished.', { exact: true })).toBeVisible({ timeout: 20_000 })
     await expect(cardFor(scope, recordName('inv', 2, tag))).toHaveCount(0)
     await expect(scope.locator(SEL.autoApproved)).toHaveText(TEXT.autoApproved)
-    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(TEXT.allowedTool(TOOL_TITLE.invoice))
+    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.allowedTool(TOOL_TITLE.invoice)))
     const sessionId = await sessionIdOf(page)
     await expectRows(page, sessionId, 'both invoices ran', rows => ranRows(rows, 'send_invoice').length === 2)
 
@@ -148,7 +150,7 @@ test.describe('Tool approval, current cell', () => {
     await settle(first)
     await expect(action(first, 'approve_all')).toContainText(TEXT.approveAllSession)
     await action(first, 'approve_all').click()
-    await expect(decidedLines(scope).locator(SEL.decidedDecision).first()).toHaveText(TEXT.allowedSession)
+    await expect(decidedLines(scope).locator(SEL.decidedDecision).first()).toHaveText(withTime(TEXT.allowedSession))
 
     // The second step has two marked calls. The session grant covers both: no cards.
     const sessionId = await sessionIdOf(page)
@@ -183,8 +185,8 @@ test.describe('Tool approval, current cell', () => {
     await settle(deleteCard)
     await action(deleteCard, 'deny').click()
     await expect(decidedLines(scope)).toHaveCount(2)
-    await expect(decidedLines(scope).locator(SEL.decidedDecision).filter({ hasText: new RegExp(`^${TEXT.denied}$`) })).toHaveCount(1)
-    await expect(decidedLines(scope).locator(SEL.decidedDecision).filter({ hasText: TEXT.approvedNotRun })).toHaveCount(1)
+    await expect(decidedLines(scope).locator(SEL.decidedDecision).filter({ hasText: withTime(TEXT.denied) })).toHaveCount(1)
+    await expect(decidedLines(scope).locator(SEL.decidedDecision).filter({ hasText: withTime(TEXT.approvedNotRun) })).toHaveCount(1)
     const sessionId = await sessionIdOf(page)
     await expectRows(page, sessionId, 'every call of the batch is settled', rows => rows.length === 3 && rows.every(row => !['pending', 'processing'].includes(row.metadata?.status ?? 'pending')))
     await expect(scope.locator(SEL.stop)).toBeHidden({ timeout: 20_000 })
@@ -201,6 +203,14 @@ test.describe('Tool approval, current cell', () => {
     await action(card, 'reason').click()
     const reason = 'Use the staging record instead'
     await card.locator(SEL.reasonInput).fill(reason)
+    // Opening the reason box changes the card's measured actions, so arming
+    // restarts (Host activation.ts:42-56), and a submit while unarmed is
+    // ignored without a message (tool-approval-card.vue:159). The card reads its
+    // layout once per animation frame (:73-78), so let two frames pass after the
+    // new button is on screen, then wait for the card to be armed again.
+    await expect(action(card, 'send-reason')).toBeVisible()
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+    await settle(card)
     await action(card, 'send-reason').click()
 
     await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(TEXT.deniedReason(reason))
@@ -255,7 +265,7 @@ test.describe('Tool approval, current cell', () => {
     await expect(card).toHaveAttribute(SEL.phaseAttr, 'ready')
     await settle(card)
     await action(card, 'approve').click()
-    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(TEXT.approved)
+    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.approved))
     await expect(scope.getByText(`Done: delete_record ${record} ran.`, { exact: true })).toBeVisible({ timeout: 20_000 })
     const after = await expectRows(page, sessionId, 'the tool ran once', rows => ranRows(rows, 'delete_record').length === 1)
     expect(after.map(row => row.message_id), 'the card belongs to the same stored call').toEqual(before.map(row => row.message_id))
@@ -278,7 +288,7 @@ test.describe('Tool approval, current cell', () => {
     await action(card, 'approve').click()
 
     const elsewhere = decidedLines(second)
-    await expect(elsewhere.locator(SEL.decidedDecision)).toHaveText(TEXT.approved, { timeout: 20_000 })
+    await expect(elsewhere.locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.approved), { timeout: 20_000 })
     await expect(elsewhere.locator(SEL.decidedElsewhere)).toHaveText(TEXT.elsewhere)
     await expect(decidedLines(scope).locator(SEL.decidedElsewhere)).toHaveCount(0)
     await expect(cards(second)).toHaveCount(0)
@@ -323,14 +333,26 @@ test.describe('Tool approval, current cell', () => {
       await settle(card)
       await action(card, 'approve').click()
     }
-    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText([TEXT.approved, TEXT.approved, TEXT.approved])
+    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText([withTime(TEXT.approved), withTime(TEXT.approved), withTime(TEXT.approved)])
+    // The model says "Everything ran." only when it read a successful result of
+    // each of the three calls (generate.lua), and the stored rows must agree.
     await expect(scope.getByText('Everything ran.', { exact: true })).toBeVisible({ timeout: 40_000 })
     // An approved private call still shows no tool chip.
     await expect(scope.locator(SEL.toolChip).filter({ hasText: /write_audit|audit entry/i })).toHaveCount(0)
     const sessionId = await sessionIdOf(page)
-    await expectRows(page, sessionId, 'the private and the delegation call were approved', rows =>
-      rows.some(row => row.type === 'private_function' && row.metadata?.approval?.state === 'approved')
-      && rows.some(row => row.type === 'delegation' && row.metadata?.approval?.state === 'approved'))
+    const rows = await expectRows(page, sessionId, 'all three calls reached a terminal state', current =>
+      current.length === 3 && current.every(row => !['pending', 'processing'].includes(row.metadata?.status ?? 'pending')))
+    for (const row of rows) {
+      expect(row.metadata?.status, `the ${row.type} call succeeded`).toBe('success')
+      expect(row.metadata?.approval?.state, `the ${row.type} call was approved`).toBe('approved')
+      expect(row.metadata?.approval?.disposition, `the ${row.type} call was dispatched`).toBe('dispatched')
+    }
+    expect(rows.filter(row => row.type === 'private_function')).toHaveLength(1)
+    expect(rows.filter(row => row.type === 'delegation')).toHaveLength(1)
+    // The result markers: the private tool and the plain tool ran, and the analyst answered.
+    expect(ranRows(rows, 'write_audit'), 'the private tool ran once').toHaveLength(1)
+    expect(ranRows(rows, 'lookup_record'), 'the plain tool ran once').toHaveLength(1)
+    expect(resultText(rows.find(row => row.type === 'delegation')!), 'the delegation result holds the analyst\'s answer').toContain('churn is stable')
   })
 
   test('13. Host chat and an app-owned <wippy-chat> in an app page: both show the card, one decision updates both', async ({ page, capture }) => {
@@ -358,10 +380,10 @@ test.describe('Tool approval, current cell', () => {
     await settle(card)
     await action(card, 'approve').click()
     const embeddedDecision = decidedLines(embedded)
-    await expect(embeddedDecision.locator(SEL.decidedDecision)).toHaveText(TEXT.approved, { timeout: 20_000 })
+    await expect(embeddedDecision.locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.approved), { timeout: 20_000 })
     await expect(embeddedDecision.locator(SEL.decidedElsewhere)).toHaveText(TEXT.elsewhere)
     await expect(cards(embedded)).toHaveCount(0)
-    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(TEXT.approved)
+    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.approved))
     const sessionId = await sessionIdOf(page)
     await expectRows(page, sessionId, 'the tool ran once', rows => ranRows(rows, 'delete_record').length === 1)
     await app.close()
@@ -389,23 +411,50 @@ test.describe('Tool approval, current cell', () => {
       }
 
       await action(card, 'approve').tap()
-      await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(TEXT.approved)
+      await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.approved))
       await expect(scope.getByText(`Done: delete_record ${record} ran.`, { exact: true })).toBeVisible({ timeout: 20_000 })
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
     })
   })
 
   test('15. Forged decision from an artifact script: nothing is approved', async ({ page, capture }) => {
+    const sent = recordSentFrames(page)
     const { tag, scope } = await converse(page, capture, AGENTS.standard, 'forge decision')
     const record = recordName('rec', 1, tag)
-    // The first step makes the artifact, the second step asks for a marked call
-    // that waits while the artifact's script runs its attempts.
-    const frame = page.frameLocator('iframe[sandbox*="allow-scripts"]').first()
-    const log = frame.locator('#forge-log')
-    await expect(log).toBeAttached({ timeout: 30_000 })
+    // The first step makes the artifact. Its script does nothing until a test
+    // calls window.__forge, so the attack starts when the card is pending.
+    const log = page.frameLocator('iframe[sandbox*="allow-scripts"]').first().locator('#forge-log')
+    await expect(log).toHaveAttribute('data-forge', 'ready', { timeout: 30_000 })
+    // The second step asks for a marked call, which waits.
     const card = cardFor(scope, record)
     await expect(card).toBeVisible({ timeout: 30_000 })
-    await expect(log).toHaveAttribute('data-forge', 'done', { timeout: 45_000 })
+    const sessionId = await sessionIdOf(page)
+
+    // The attacker is given the strongest input it could have: the real approval
+    // id, digest and revision of the pending request, read from the stored row.
+    // Only the Host's own guards stand between this command and an approval.
+    const rows = await expectRows(page, sessionId, 'the marked call is stored with its approval', current =>
+      current.some(row => row.metadata?.function_name === 'delete_record' && !!row.metadata.approval?.intent_digest))
+    const approval = rows.find(row => row.metadata?.function_name === 'delete_record')!.metadata!.approval!
+    expect(approval.state).toBe('pending')
+    const requestId = `forged-${tag}`
+    const forged = {
+      type: 'session_command',
+      session_id: sessionId,
+      request_id: requestId,
+      data: {
+        command: 'tool_approval',
+        approval_id: approval.approval_id,
+        decision: 'approve',
+        intent_digest: approval.intent_digest,
+        expected_revision: approval.revision,
+      },
+    }
+    // Let the card be armed first, so the 500 ms rule is not what stops the attack.
+    await settle(card)
+    const framesBefore = sent.length
+    await log.evaluate((_element, command) => (window as unknown as { __forge: (command: unknown) => Promise<void> }).__forge(command), forged)
+    await expect(log).toHaveAttribute('data-forge', 'done', { timeout: 20_000 })
 
     // Every attempt ran and wrote its line. A blocked attempt is the expected outcome.
     const text = (await log.textContent()) ?? ''
@@ -413,23 +462,27 @@ test.describe('Tool approval, current cell', () => {
       expect(text, `the script ran its ${attempt} attempt`).toContain(attempt)
     expect(text, 'the script could not read the user token').not.toContain('token:exposed')
 
-    // Nothing was approved: the card still waits and the call did not run.
+    // The Host sent nothing for the forged command: no frame carries its request
+    // id or the approval id as a decision. (The Host's own surface declaration
+    // mentions tool_approval, so the check is on the decision command.)
+    const forgedFrames = sent.slice(framesBefore).filter(frame => frame.includes(requestId) || (/"command"\s*:\s*"tool_approval"/.test(frame) && frame.includes(approval.approval_id!)))
+    expect(forgedFrames, 'socket messages of the Host that carry the forged decision').toEqual([])
+
+    // And nothing was approved: the card still waits and the call did not run.
     await expect(card).toBeVisible()
     await expect(decidedLines(scope)).toHaveCount(0)
-    const sessionId = await sessionIdOf(page)
-    const rows = await expectRows(page, sessionId, 'the marked call still waits', current => current.some(row => row.metadata?.function_name === 'delete_record'))
-    const marked = rows.find(row => row.metadata?.function_name === 'delete_record')
-    expect(marked?.metadata?.approval?.state).toBe('pending')
-    expect(ranRows(rows, 'delete_record')).toHaveLength(0)
+    const after = await toolRows(page, sessionId)
+    expect(after.find(row => row.metadata?.function_name === 'delete_record')?.metadata?.approval?.state).toBe('pending')
+    expect(ranRows(after, 'delete_record')).toHaveLength(0)
 
     // The card was not broken by the attempts: a real click still approves it.
     await settle(card)
     await action(card, 'approve').click()
-    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(TEXT.approved)
+    await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.approved))
     await expect(scope.getByText('Forge check finished.', { exact: true })).toBeVisible({ timeout: 20_000 })
     await expectRows(page, sessionId, 'the tool ran once, after the real approval', current => ranRows(current, 'delete_record').length === 1)
+    expect(sent.some(frame => /"command"\s*:\s*"tool_approval"/.test(frame) && frame.includes(approval.approval_id!)), 'the Host sent the real decision').toBe(true)
   })
-
   test('19. console and network logs of a full approve run are clean, and the capture catches a deliberate failure', async ({ page, capture }) => {
     // The run itself: approve once through the facade flow.
     const { tag, scope } = await converse(page, capture, AGENTS.standard, 'approve one')
@@ -442,15 +495,18 @@ test.describe('Tool approval, current cell', () => {
     expect(capture.networkLog(), 'the capture saw the run\'s API traffic').toContain('/api/v1/sessions')
     expect(capture.consoleLog(), 'the capture saw the console').not.toBe('')
 
-    // Positive control: the same capture must see a console error and an HTTP
-    // 404. Without it, an empty problem list above would prove nothing. The
-    // reset keeps the deliberate failures out of the end-of-test check.
-    await page.evaluate(async () => {
-      console.error('capture probe')
-      await fetch('/api/v1/capture-probe-not-found')
-    })
-    await expect.poll(() => capture.problems().join('\n'), { message: 'the capture records the probe' }).toContain('capture probe')
-    expect(capture.problems().join('\n')).toMatch(/HTTP 404 .*capture-probe-not-found/)
-    capture.reset()
+    // Positive control, on its own capture and its own page: a capture must see
+    // a console error and an HTTP 404. Without it, an empty problem list above
+    // would prove nothing. The scenario's capture does not watch this page, so
+    // its logs stay intact for the attachment and for the check at the end.
+    const probe = new Capture()
+    const probePage = await page.context().newPage()
+    probe.watch(probePage, 'probe')
+    await probePage.goto('/capture-probe-not-found')
+    await probePage.evaluate(() => console.error('capture probe'))
+    await expect.poll(() => probe.problems().join('\n'), { message: 'the probe capture records the failures' }).toContain('capture probe')
+    expect(probe.problems().join('\n')).toMatch(/HTTP 404 .*capture-probe-not-found/)
+    await probePage.close()
+    expect(capture.problems(), 'the probe did not leak into the scenario capture').toEqual([])
   })
 })

@@ -81,9 +81,13 @@ export const SEL = {
   textarea: 'textarea.chat-input__textarea',
   /** The Stop button: message-input.vue:578. */
   stop: '.chat-input__stop-button',
-  /** The tool chips: chat-message-list.vue:271 (group), :288 (chip), :312 (Auto-approved mark text), :314 (Not run outcome). */
+  /**
+   * The tool chips: chat-message-list.vue:271 (group), :288 (chip), :312 (Auto-approved mark text), :314 (Not run outcome).
+   * A decided approval line also carries the class `chat-tool-group__badge` (tool-approval-decided.vue:101) and prints the
+   * tool title (:114), so a chip is a badge that is not a decided line.
+   */
   toolGroup: '.chat-tool-group',
-  toolChip: '.chat-tool-group__badge',
+  toolChip: '.chat-tool-group__badge:not(.chat-approval-decided)',
   autoApproved: '.chat-tool-group__auto-text',
   notRunOutcome: '.chat-tool-group__outcome',
 } as const
@@ -135,6 +139,17 @@ export const TEXT = {
   /** The unavailable notice: Host test-support session_error_unavailable.json. Shown by a Host that knows the code. */
   unavailableNotice: 'A tool call needs your approval, but no open chat window can show it. The assistant stopped.',
 } as const
+
+/**
+ * The decision text of a state that carries the decision time: `<label>, <h:mm>`.
+ * Host tool-approval-decided.vue:47-51 adds the time to an approved decision (every
+ * kind of approval) and to a plain denial. It does not add it to a denial with a
+ * reason, expiry, Stop, supersession, interruption, unavailable or limit.
+ * The Host test tool-approval-decided.test.ts:66 matches `/^Approved, \d{1,2}:\d{2}/`.
+ */
+export function withTime(label: string): RegExp {
+  return new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, \\d{1,2}:\\d{2}`)
+}
 
 // ── Names the scripted model uses (src/app/tool_approval_demo/generate.lua) ──
 
@@ -258,8 +273,23 @@ export interface ToolRow {
     registry_id?: string
     outcome?: string
     result?: unknown
-    approval?: { state?: string, disposition?: string | null, decided_via?: string | null, then?: string | null, reason?: string | null }
+    approval?: {
+      approval_id?: string
+      state?: string
+      revision?: number
+      intent_digest?: string
+      disposition?: string | null
+      decided_via?: string | null
+      then?: string | null
+      reason?: string | null
+    }
   }
+}
+
+/** The stored result of a call as text, for a check that a result holds a marker. */
+export function resultText(row: ToolRow): string {
+  const raw = row.metadata?.result
+  return typeof raw === 'string' ? raw : JSON.stringify(raw ?? null)
 }
 
 /** The tool call rows of a session: public, private and delegation calls. */
