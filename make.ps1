@@ -120,8 +120,8 @@ function Resolve-WippyBinary {
 
 function Invoke-WippyLint {
     $wippyBin = Resolve-WippyBinary
-    # Two runs, as in the Makefile. See the comment there.
-    foreach ($profileArgs in @(@(), @('--profile', 'session-forms-fixtures'))) {
+    # Three runs, as in the Makefile. See the comment there.
+    foreach ($profileArgs in @(@(), @('--profile', 'session-forms-fixtures'), @('--profile', 'tool-approval-fixtures'))) {
         Write-Host "==> $wippyBin lint --level error --ns app,app.* $profileArgs" -ForegroundColor Cyan
         & $wippyBin lint --level error --ns 'app,app.*' @profileArgs
         if ($LASTEXITCODE -ne 0) { throw "wippy lint failed (exit $LASTEXITCODE)" }
