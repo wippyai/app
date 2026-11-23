@@ -79,9 +79,16 @@ export class Capture {
       this.problemList.push(`[${label}] console error: ${text}`)
   }
 
-  /** Resolves when every pending source lookup of a console error has put its line in the capture. */
+  /**
+   * Resolves when every pending source lookup of a console error has put its line in the
+   * capture, including lookups that start while it waits.
+   */
   async idle() {
-    await Promise.all(this.lookups)
+    let settled = -1
+    while (settled !== this.lookups.length) {
+      settled = this.lookups.length
+      await Promise.all(this.lookups)
+    }
   }
 
   /**
