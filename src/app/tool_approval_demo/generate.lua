@@ -288,14 +288,23 @@ local function handler(contract_args: any): any
                 { tool = LOOKUP_RECORD_TOOL, arguments = { record = record("rec", 1) } },
             })
         end
-        -- Results come in model order: the audit entry, the delegation, the
-        -- record. Say "Everything ran." only when all three succeeded.
-        local audit = results[1]
-        local analyst = results[2]
-        local record_result = results[3]
-        local analyst_text = analyst and json.encode(analyst) or ""
-        if audit and audit.ran == true and record_result and record_result.ran == true
-            and string.find(tostring(analyst_text), "churn is stable", 1, true) then
+        -- The results come in the order the calls finished, not in model
+        -- order: the plain record lookup finishes before the delegation does.
+        -- Find each result by what it holds. Say "Everything ran." only when
+        -- the audit entry, the record and the delegation all succeeded.
+        local audit_ran = false
+        local record_ran = false
+        local analyst_ran = false
+        for _, result in ipairs(results) do
+            if result.ran == true and result.tool == "write_audit" then
+                audit_ran = true
+            elseif result.ran == true and result.tool == "lookup_record" then
+                record_ran = true
+            elseif string.find(tostring(json.encode(result)), "churn is stable", 1, true) then
+                analyst_ran = true
+            end
+        end
+        if audit_ran and record_ran and analyst_ran then
             return reply("Everything ran.")
         end
         return reply("Not everything ran: " .. tostring(json.encode(results)))
