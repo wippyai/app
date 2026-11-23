@@ -331,14 +331,15 @@ request ends with `in frame <frame url>`.
 - Scenario 15 (`capture.takeExpected`): the browser logs the refusal of the forger's own
   unauthenticated socket (`WebSocket connection to ... /api/v1/ws/join failed`). The
   test requires that refusal first, then removes the lines that were captured.
-- Scenario 12 (`capture.allow`, known Host gap): the state page of the delegation's
-  workflow (wippy/dataflow) runs isolated in a session with tool approval, in a frame
+- Scenario 12 (`capture.allow`, known Phase 1 limit): the state page of the delegation's
+  workflow (wippy/dataflow) runs isolated in a session with tool approval, because
+  registered pages stay isolated in protected sessions in Phase 1. It runs in a frame
   at `about:srcdoc`, and its API calls fail with origin `null`. The errors arrive
   seconds after the test body ends, so the allowance stays in force until the check at
   teardown. It covers the CORS and load errors for the dataflow `nodes` and
   `components/list` URLs and the failed requests of the `about:srcdoc` frame. A failed
   request of the Host frame (for example the Host's own `components/list`) is not
-  covered and fails the test. Remove the allowance when the Host fixes it.
+  covered and fails the test. EE2-2915 removes the allowance.
 - Scenario 13 (`capture.allow`, known Host and runtime gap): the Components page of
   the main app embeds two pages through `GET /api/public/pages/{id}`, which no module
   serves and runtime 0.3.66a answers with 404. The allowance covers only the

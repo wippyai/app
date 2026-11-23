@@ -352,17 +352,17 @@ test.describe('Tool approval, current cell', () => {
     expect(ranRows(rows, 'write_audit'), 'the private tool ran once').toHaveLength(1)
     expect(ranRows(rows, 'lookup_record'), 'the plain tool ran once').toHaveLength(1)
     expect(resultText(rows.find(row => row.type === 'delegation')!), 'the delegation result holds the analyst\'s answer').toContain('churn is stable')
-    // KNOWN HOST DEFECT, not an approval defect. The delegation makes a workflow, and its
+    // KNOWN PHASE 1 LIMIT, not an approval defect. The delegation makes a workflow, and its
     // state page (wippy/dataflow, "Workflow state app") renders as an artifact. A session with
-    // tool approval is protected (EE2-2712), so the Host runs that page isolated: an opaque
-    // origin and no credentials. The page then fetches the API with origin "null", the server
+    // tool approval is protected (EE2-2712), and in Phase 1 registered pages stay isolated in
+    // protected sessions: an opaque origin and no credentials. The page then fetches the API with origin "null", the server
     // refuses the CORS preflight, and the console shows the errors below. They arrive seconds
     // after the test body ends, so the allowance stays in force until the check at teardown
     // and does not require them. Each pattern names the URL or the isolated frame
     // (`about:srcdoc`). The Host's own `components/list` request runs in the Host frame, so
-    // a failure of it there is not covered and still fails the test. Remove the allowance
-    // when the Host lets the dataflow state page load in a protected session.
-    const isolatedApiUrl =String.raw`\S*\/api\/(?:v1\/dataflows\/[^/\s']+\/nodes|public\/components\/list\?auto_register=true)`
+    // a failure of it there is not covered and still fails the test. EE2-2915 removes the
+    // allowance.
+    const isolatedApiUrl = String.raw`\S*\/api\/(?:v1\/dataflows\/[^/\s']+\/nodes|public\/components\/list\?auto_register=true)`
     capture.allow(
       new RegExp(String.raw`console error: Access to (?:fetch|XMLHttpRequest) at '${isolatedApiUrl}' from origin 'null' has been blocked by CORS policy.* \(at about:srcdoc\)$`),
       new RegExp(String.raw`console error: Failed to load resource: net::ERR_FAILED \(at ${isolatedApiUrl}\)$`),
