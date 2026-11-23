@@ -509,7 +509,9 @@ test.describe('Tool approval, current cell', () => {
     const probe = new Capture()
     const probePage = await page.context().newPage()
     probe.watch(probePage, 'probe')
-    await probePage.goto('/capture-probe-not-found')
+    // A handler-level 404 (wippy/views answers an unknown page id). Unknown paths
+    // outside /api answer 200 with the facade page, so they prove nothing.
+    await probePage.goto('/api/public/pages/content/capture-probe-not-found')
     await probePage.evaluate(() => console.error('capture probe'))
     await expect.poll(() => probe.problems().join('\n'), { message: 'the probe capture records the failures' }).toContain('capture probe')
     expect(probe.problems().join('\n')).toMatch(/HTTP 404 .*capture-probe-not-found/)
