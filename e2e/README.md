@@ -303,7 +303,7 @@ the tests of the three files without running them.
 | 15 Forged decision from an artifact script | `15. Forged decision from an artifact script` | `current` |
 | 16 Old Host | `16. old Host` (file `tool-approval-old-host.spec.ts`) | `old-host` |
 | 17 Old Session | `17. old Session` (file `tool-approval-old-session.spec.ts`) | `old-session` |
-| 18 One manual run with a real model | Not a spec. Run it by hand: start a chat with a real model that has the trait, collect the card state screenshots of EE2-2711 (required states in light and dark, compact and expanded) | none |
+| 18 One manual run with a real model | Not a spec. Boot with the `tool-approval-fixtures` profile (the `current` cell) and open a chat with the agent "Tool Approval Real Model" (`app.tool_approval_demo:real_model_agent`, model `deepseek-v4.1-flash`, trait `wippy.session.traits:tool_approval`, tools `lookup_record` and `delete_record`). The demo page lists a fixed set of agents, so start the chat as the page does: in the page's frame (`iframe[name="wippy:page:app.views:session-forms-demo"]`) call `host.startChat(<start_token of this agent from GET /api/v1/agents/list>, { sidebar: false })`. Ask it to look up a record (no card), then to delete it (card; approve), then to delete another one and deny with a reason (the model follows the reason). Take screenshots of each step in light and dark, and read the console and network logs. The run needs the OpenRouter key of the `.env` and costs a few cents | none |
 | 19 Console and network logs, no errors | Every test (see below), and `19. console and network logs` | all |
 
 `tool-approval.spec.ts` also has one `cell check` test that reads

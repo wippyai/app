@@ -412,3 +412,38 @@ entries:
     max_tokens: 4096
     tools:
       - app.tool_approval_demo:lookup_record_tool
+
+  # Scenario 18 of EE2-2713: a real model (the one the app's own agents use)
+  # with the approval trait defaults and two fixture tools. lookup_record is not
+  # marked and runs at once; delete_record is marked and waits for a card. It
+  # does not use the fixture_tools trait, because that trait tells the model
+  # not to call the tools.
+  - name: real_model_agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-real-model-agent
+      type: agent.gen1
+      title: Tool Approval Real Model
+      comment: Fixture agent with a real model, the tool approval trait and the lookup_record and delete_record fixture tools
+      icon: tabler:shield-check
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are a records assistant used to test tool approval. You have two
+      tools. lookup_record reads a record by name. delete_record permanently
+      deletes a record by name; a person must approve each delete before it
+      runs. When the user asks you to look up a record, call lookup_record.
+      When the user asks you to delete a record, call delete_record. If a
+      delete is not approved, do not retry it and do not call it again for that
+      request; follow the reason the person gave, and say what you did not do.
+      Keep every answer to one or two short sentences.
+    model: deepseek-v4.1-flash
+    temperature: 0.2
+    max_tokens: 2000
+    traits:
+      - id: wippy.session.traits:steering
+      - id: wippy.session.traits:tool_approval
+    tools:
+      - app.tool_approval_demo:lookup_record_tool
+      - app.tool_approval_demo:delete_record_tool
