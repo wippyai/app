@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "description": "The base pages and the four change requests of the RC2 evaluation (wippy/dashboards RC2-04, 'Evaluation request set'). Frozen by C0. Each page of `pages` is a page spec that today's publish accepts with no base_revision: the evaluation removes the page, posts the spec to POST /api/v1/dashboards/pages, then sends the request text to the chat agent. A request passes when the change is a new revision of the same page id and route, the expected tiles show real data, every tile the request did not name keeps its point, arguments and row, and the reply links the page. `requests[].expect` names what each request must leave behind; tile ids of a tile that the agent adds are chosen by the agent, so they are given as points. Points are demo declarations (src/demo_actor, src/demo_user_status, src/demo_run_timeline); fields are the output fields of those points.",
+  "pages": [
+    {
+      "spec": "wippy.dashboard_page/v1",
+      "publish": true,
+      "id": "eval_llm_usage",
+      "title": "LLM usage",
+      "route": "/eval/llm-usage",
+      "params": {},
+      "actions": {},
+      "data": {
+        "usage_tokens": { "kind": "function", "ref": "demo.actor:usage_tokens", "args": {} },
+        "usage_by_day": { "kind": "function", "ref": "demo.actor:usage_by_day", "args": {} }
+      },
+      "tiles": {
+        "usage_tokens": {
+          "type": "kpi",
+          "data": { "main": "usage_tokens" },
+          "fields": { "value": "tokens" },
+          "options": { "label": "Total tokens" }
+        },
+        "usage_by_day": {
+          "type": "chart",
+          "data": { "main": "usage_by_day" },
+          "fields": { "x": "day", "y": ["tokens"], "series": "model" },
+          "options": { "kind": "line", "label": "Tokens per day" }
+        }
+      },
+      "rows": [["usage_tokens", "usage_by_day"]]
+    },
+    {
+      "spec": "wippy.dashboard_page/v1",
+      "publish": true,
+      "id": "eval_chat_activity",
+      "title": "Chat activity",
+      "route": "/eval/chat-activity",
+      "params": {},
+      "actions": {},
+      "data": {
+        "app_sessions": { "kind": "function", "ref": "demo.actor:app_sessions", "args": {} },
+        "app_messages": { "kind": "function", "ref": "demo.actor:app_messages", "args": {} },
+        "messages_by_day": { "kind": "function", "ref": "demo.actor:messages_by_day", "args": {} },
+        "message_types": { "kind": "function", "ref": "demo.actor:message_types", "args": {} }
+      },
+      "tiles": {
+        "app_sessions": {
+          "type": "kpi",
+          "data": { "main": "app_sessions" },
+          "fields": { "value": "sessions" },
+          "options": { "label": "Sessions" }
+        },
+        "app_messages": {
+          "type": "kpi",
+          "data": { "main": "app_messages" },
+          "fields": { "value": "messages" },
+          "options": { "label": "Messages" }
+        },
+        "messages_by_day": {
+          "type": "chart",
+          "data": { "main": "messages_by_day" },
+          "fields": { "x": "day", "y": ["messages"] },
+          "options": { "kind": "line", "label": "Messages per day" }
+        },
+        "message_types": {
+          "type": "chart",
+          "data": { "main": "message_types" },
+          "fields": { "x": "type", "y": ["messages"] },
+          "options": { "kind": "bar", "label": "Messages per type" }
+        }
+      },
+      "rows": [
+        ["app_sessions", "app_messages"],
+        ["messages_by_day", "message_types"]
+      ]
+    },
+    {
+      "spec": "wippy.dashboard_page/v1",
+      "publish": true,
+      "id": "eval_token_use",
+      "title": "Token use",
+      "route": "/eval/token-use",
+      "params": {},
+      "actions": {},
+      "data": {
+        "usage_tokens": { "kind": "function", "ref": "demo.actor:usage_tokens", "args": {} },
+        "calls_by_day": { "kind": "function", "ref": "demo.actor:calls_by_day", "args": {} }
+      },
+      "tiles": {
+        "usage_tokens": {
+          "type": "kpi",
+          "data": { "main": "usage_tokens" },
+          "fields": { "value": "tokens" },
+          "options": { "label": "Total tokens" }
+        },
+        "calls_by_day": {
+          "type": "chart",
+          "data": { "main": "calls_by_day" },
+          "fields": { "x": "day", "y": ["calls"] },
+          "options": { "kind": "line", "label": "Calls per day" }
+        }
+      },
+      "rows": [["usage_tokens", "calls_by_day"]]
+    },
+    {
+      "spec": "wippy.dashboard_page/v1",
+      "publish": true,
+      "id": "eval_users",
+      "title": "Users",
+      "route": "/eval/users",
+      "params": {},
+      "actions": {
+        "set_status": { "kind": "function", "ref": "demo.user_status:set_status" }
+      },
+      "data": {
+        "users": { "kind": "function", "ref": "demo.user_status:users", "args": {} }
+      },
+      "tiles": {
+        "users": {
+          "type": "demo.user_status",
+          "data": { "main": "users" },
+          "actions": { "set_status": "set_status" }
+        }
+      },
+      "rows": [["users"]]
+    }
+  ],
+  "requests": [
+    {
+      "n": 1,
+      "page_id": "eval_llm_usage",
+      "text": "Add a breakdown of tokens by model to my LLM usage page.",
+      "consent": false,
+      "expect": {
+        "added": [
+          { "point": "demo.actor:usage_by_model", "measure": "tokens", "group": "model_id" }
+        ],
+        "removed": [],
+        "unchanged": ["usage_tokens", "usage_by_day"],
+        "main": null
+      }
+    },
+    {
+      "n": 2,
+      "page_id": "eval_chat_activity",
+      "text": "On the chat activity page, remove the session count and make messages per day the main chart.",
+      "consent": false,
+      "expect": {
+        "added": [],
+        "removed": ["app_sessions"],
+        "unchanged": ["app_messages", "message_types"],
+        "main": "messages_by_day",
+        "wider_than": { "tile": "messages_by_day", "than": "message_types", "at_board_width": 1024 }
+      }
+    },
+    {
+      "n": 3,
+      "page_id": "eval_token_use",
+      "text": "Let me pick a model on the token use page, and make both tiles follow it.",
+      "consent": false,
+      "expect": {
+        "added": [
+          { "type": "control.select", "point": "demo.actor:usage_models" }
+        ],
+        "removed": [],
+        "unchanged": [],
+        "bound": [
+          { "tile": "usage_tokens", "point": "demo.actor:usage_tokens", "arg": "model" },
+          { "tile": "calls_by_day", "point": "demo.actor:calls_by_day", "arg": "model" }
+        ],
+        "reads_after_choosing_a_model": ["usage_tokens", "calls_by_day"]
+      }
+    },
+    {
+      "n": 4,
+      "page_id": "eval_users",
+      "text": "On the users page, put the user count at the top and add the latest workflow run below the list.",
+      "consent": true,
+      "consent_sentence": " I confirm that the page may let admins change a user's status.",
+      "expect": {
+        "added": [
+          { "point": "demo.actor:app_users", "measure": "users", "row": "above users" },
+          { "point": "demo.run_timeline:latest_run", "plugin_tile": "demo.run_timeline", "row": "below users, alone in its row" }
+        ],
+        "removed": [],
+        "unchanged": ["users"],
+        "main": null
+      }
+    }
+  ]
+}
