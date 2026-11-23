@@ -288,10 +288,12 @@ local function handler(contract_args: any): any
                 { tool = LOOKUP_RECORD_TOOL, arguments = { record = record("rec", 1) } },
             })
         end
-        -- The results come in the order the calls finished, not in model
-        -- order: the plain record lookup finishes before the delegation does.
-        -- Find each result by what it holds. Say "Everything ran." only when
-        -- the audit entry, the record and the delegation all succeeded.
+        -- The results are not in model order. The Session lists the results of
+        -- plain calls first, in model order, and the results of delegation
+        -- calls after them, so the delegation result comes last. Find each
+        -- result by what it holds, not by its place. Say "Everything ran."
+        -- only when the audit entry, the record and the delegation all
+        -- succeeded.
         local audit_ran = false
         local record_ran = false
         local analyst_ran = false
