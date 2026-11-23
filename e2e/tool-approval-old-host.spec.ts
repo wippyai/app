@@ -54,10 +54,12 @@ test.describe('Tool approval, old Host cell', () => {
     // shell loads `import-map.json` and `module.js` from the facade URL in the top frame.
     // The one exception is the set of stylesheets that the app's own login page pins to
     // the Host release the app was built for (src/app/api/login.jet, static/login.html).
-    // They are skipped by their exact URL, read from those two files, not by frame.
+    // They are skipped only as top-document requests with their exact URL, read from those
+    // two files, so the same URL loaded by a Host frame still counts.
+    expect(LOGIN_PAGE_PINS.size, 'the login page pins were read from the two files').toBeGreaterThan(0)
     const hostVersions = new Set<string>()
     page.on('request', (request) => {
-      if (LOGIN_PAGE_PINS.has(request.url()))
+      if (request.frame() === page.mainFrame() && LOGIN_PAGE_PINS.has(request.url()))
         return
       const match = request.url().match(/web-host\.wippy\.ai\/webcomponents-(1\.0\.\d+)/)
       if (match)
