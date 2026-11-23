@@ -225,6 +225,158 @@ the queue releases its preview data without deleting the server upload. When
 the capture provider denies the request, the semantic Attention data stays and
 no file is prepared.
 
+### Tool approval cells
+
+The tool approval suite (`tool-approval.spec.ts`, `tool-approval-old-host.spec.ts`
+and `tool-approval-old-session.spec.ts`) proves EE2-2713, the Demo part of the
+tool approval epic. Like the Attention suite, each run must name its runtime
+cell, because the Host and Session versions cannot change after Wippy starts.
+All three files skip themselves unless two variables are set in the Playwright
+process:
+
+| Variable | Value | Meaning |
+|---|---|---|
+| `TOOL_APPROVAL_DEV_FIXTURES` | `true` | The app runs with the tool approval dev fixtures. The suite fails fast when the demo page does not list the fixture agents. |
+| `TOOL_APPROVAL_CELL` | `current`, `old-host` or `old-session` | The cell of this run. Each file runs in one cell only. Default: `current`. |
+
+The deterministic agents, tools and model are in
+`src/app/tool_approval_demo`. `.wippy.yaml` removes that namespace unless the
+`tool-approval-fixtures` profile is selected, so a release has none of it.
+`make.bat run-dev` (`scripts/run-dev.mjs`) selects the profile when
+`TOOL_APPROVAL_DEV_FIXTURES=true` is in `.env` or in the environment. It can
+run next to `SESSION_FORMS_DEV_FIXTURES=true`, because `wippy run` takes
+`--profile` more than once. The specs sign in through the facade, open the
+Session Forms Demo page (`/session-forms-demo`), start a chat with a fixture
+agent from its list, and type the phrases from [Tool approval demo](../README.md#tool-approval-demo).
+They never open the Host dev server on `:5173` directly.
+
+The fixture agents need a `wippy/session` release that has the
+`wippy.session.traits:tool_approval` trait (wippyai/session#121), and the Web
+Host build of MR !67, which has the approval card and is not released yet. Run
+the cells one at a time, because they share one port and one database.
+
+| Cell | Runtime | Host | Playwright environment | Scenarios |
+|---|---|---|---|---|
+| `current` | Session with tool approval, by a `--config` workspace file that replaces `wippy/session` (keep `--config .wippy.yaml` before it) | Local build of MR !67, served with `pnpm serve` on `:5173`: `-o wippy.facade:fe_facade_url:default=http://localhost:5173` | `TOOL_APPROVAL_DEV_FIXTURES=true`, `TOOL_APPROVAL_CELL=current` | 1 to 15 and 19 |
+| `old-host` | The same Session | Web Host 1.0.71, the last Host without approval: `-o wippy.facade:fe_facade_url:default=https://web-host.wippy.ai/webcomponents-1.0.71` | the same, with `TOOL_APPROVAL_CELL=old-host` and `WIPPY_HOST_VERSION=1.0.71` | 16 |
+| `old-session` | Published `wippy/session` 0.7.0 from `wippy.lock`, no replacement | Local build of MR !67 | the same, with `TOOL_APPROVAL_CELL=old-session` | 17 |
+
+Launch a cell from this repository, then run its specs from another shell. The
+`current` cell, for example:
+
+```powershell
+$env:TOOL_APPROVAL_DEV_FIXTURES = 'true'
+$env:FACADE_URL = 'http://localhost:5173'
+$env:WIPPY_CONFIG = '<workspace.yaml that replaces wippy/session>'
+make.bat run-dev
+```
+
+```powershell
+$env:WIPPY_URL = '<the app origin that run-dev printed>'
+$env:TOOL_APPROVAL_DEV_FIXTURES = 'true'
+$env:TOOL_APPROVAL_CELL = 'current'
+pnpm test:e2e:tool-approval -- --project=chromium
+```
+
+For `old-host`, launch with `FACADE_URL=https://web-host.wippy.ai/webcomponents-1.0.71`
+and run with `TOOL_APPROVAL_CELL=old-host` and `WIPPY_HOST_VERSION=1.0.71`. For
+`old-session`, launch without the workspace file and run with
+`TOOL_APPROVAL_CELL=old-session`. `pnpm test:e2e:tool-approval -- --list` shows
+the tests of the three files without running them.
+
+| Scenario of EE2-2713 | Test (title starts with) | Cell |
+|---|---|---|
+| 1 Approve | `1. approve` | `current` |
+| 2 Approve all, scope batch | `2. Approve all with scope batch` | `current` |
+| 3 Approve all, scope tool, Auto-approved, grants chip, Revoke | `3. Approve all with scope tool` | `current` |
+| 4 Approve all, scope session, second agent | `4. Approve all with scope session` | `current` |
+| 5 Stop denial | `5. Stop denial` | `current` |
+| 6 Deny with reason | `6. Deny with a reason` | `current` |
+| 7 Expiry, 30 s timeout | `7. Expiry with a 30 s timeout` | `current` |
+| 8 Stop while waiting | `8. Stop while waiting` | `current` |
+| 9 Reload while waiting | `9. Reload while waiting` | `current` |
+| 10 Two tabs | `10. Two tabs` | `current` |
+| 11 Steering while waiting | `11. Steering while waiting` | `current` |
+| 12 `require: all`, private tool and delegation call | `12. require all` | `current` |
+| 13 Host chat and an app-owned `<wippy-chat>` | `13. Host chat and an app-owned <wippy-chat>` | `current` |
+| 14 Phone width, 375px | `14. phone width` | `current` |
+| 15 Forged decision from an artifact script | `15. Forged decision from an artifact script` | `current` |
+| 16 Old Host | `16. old Host` (file `tool-approval-old-host.spec.ts`) | `old-host` |
+| 17 Old Session | `17. old Session` (file `tool-approval-old-session.spec.ts`) | `old-session` |
+| 18 One manual run with a real model | Not a spec. Boot with the `tool-approval-fixtures` profile (the `current` cell) and open a chat with the agent "Tool Approval Real Model" (`app.tool_approval_demo:real_model_agent`, model `deepseek-v4.1-flash`, trait `wippy.session.traits:tool_approval`, tools `lookup_record` and `delete_record`). The demo page lists a fixed set of agents, so start the chat as the page does: in the page's frame (`iframe[name="wippy:page:app.views:session-forms-demo"]`) call `host.startChat(<start_token of this agent from GET /api/v1/agents/list>, { sidebar: false })`. Ask it to look up a record (no card), then to delete it (card; approve), then to delete another one and deny with a reason (the model follows the reason). Take screenshots of each step in light and dark, and read the console and network logs. The run needs the OpenRouter key of the `.env` and costs a few cents | none |
+| 19 Console and network logs, no errors | Every test (see below), and `19. console and network logs` | all |
+
+`tool-approval.spec.ts` also has one `cell check` test that reads
+`GET /api/v1/sessions/capabilities` and expects `tool_approval: 1`, so a run
+against the wrong Session fails at once.
+
+Scenario 19 is built into every test. The `capture` fixture in
+`helpers/capture.ts` records the console and the network of the test's pages,
+and fails the test at its end on any console error, uncaught page error, failed
+request or HTTP response with status 400 or higher. The one exception is
+`net::ERR_ABORTED`, which the browser reports when its own navigation cancels a
+request. Each test attaches `console.log` and `network.log` to the report.
+Extra pages (a second tab) are added with `capture.watch(page)`. The capture
+starts after sign-in, because the facade's own requests before sign-in are not
+part of a scenario. Test 19 also runs a deliberate console error and a deliberate
+404 and expects the capture to see both, so an empty list is not mistaken for a
+working capture.
+
+Three kinds of console or network lines are kept out of the failure list on purpose,
+each by a narrow pattern, and a different error still fails the test. Every pattern
+names the URL or the frame (or tab) its line belongs to. The capture puts the source
+into its lines for this: a console error ends with `(at <url or frame>)`, and a failed
+request ends with `in frame <frame url>`.
+
+- Scenario 15 (`capture.takeExpected`): the browser logs the refusal of the forger's own
+  unauthenticated socket (`WebSocket connection to ... /api/v1/ws/join failed`). The
+  test requires that refusal first, then removes the lines that were captured.
+- Scenario 12 (`capture.allow`, known Phase 1 limit): the state page of the delegation's
+  workflow (wippy/dataflow) runs isolated in a session with tool approval, because
+  registered pages stay isolated in protected sessions in Phase 1. It runs in a frame
+  at `about:srcdoc`, and its API calls fail with origin `null`. The errors arrive
+  seconds after the test body ends, so the allowance stays in force until the check at
+  teardown. It covers the CORS and load errors for the dataflow `nodes` and
+  `components/list` URLs and the failed requests of the `about:srcdoc` frame. A failed
+  request of the Host frame (for example the Host's own `components/list`) is not
+  covered and fails the test. EE2-2915 removes the allowance.
+- Scenario 13 (`capture.allow`, known Host and runtime gap): the Components page of
+  the main app embeds two pages through `GET /api/public/pages/{id}`, which no module
+  serves and runtime 0.3.66a answers with 404. The allowance covers only the
+  `app-page` tab and the two page ids. Remove the allowance when the Host stops
+  calling that route.
+
+`capture.allow(...patterns)` is in force until the check at teardown, so a line that
+arrives late is covered; `capture.takeExpected(...patterns)` removes only lines that
+were already captured, so a test uses it only after it asserted the line itself.
+
+The old-host test counts the Web Host versions on the wire for every request of every
+frame, the top-level document included, because the facade shell loads `import-map.json`
+and `module.js` from the facade URL there. Only the stylesheets that the login page pins
+to the Host release the app was built for are skipped, by their exact URL (the test reads
+them from `src/app/api/login.jet` and `static/login.html`). It checks the version set
+after the load and again at the end of the test.
+
+`approveWhenArmed` (helpers/tool-approval.ts) clicks Approve once. It scrolls the button
+into view, waits for `data-armed="true"`, waits two animation frames, checks that the
+card is still armed, clicks, and expects the card to be gone. It fails when the card is
+ever in the phase `failed` or `not_confirmed`. It does not retry: the Host restarts its
+500 ms wait when the buttons move, and Playwright's own scroll right before a click counts
+as a move, which is why the button is scrolled into view first.
+
+Decision texts that carry a time follow the Host: an approved decision and a plain denial read <label>, <h:mm> (withTime in helpers/tool-approval.ts), while a denial with a reason, expiry, Stop and a steering message read as the bare label.
+
+Scenario 15 gives the artifact script the real approval id, digest and revision of the pending request, which the test reads from the stored row, so only the Host's guards can refuse the forged command. The test asserts that the Host socket sent no frame that carries the forged request, that every attempt wrote its line, and that the call is still pending.
+
+How the specs read what a tool did: each fixture tool that runs returns
+`{ ran: true, tool, record }`, and the Session stores that result in the call
+row. A spec reads `GET /api/v1/sessions/messages` and counts those rows, so
+"ran once" and "nothing ran" come from the app. Every test adds a tag to its
+phrases (`approve one #t1abc`), which the model puts in the record names, so one
+test never reads the rows of another. The specs wait for events on screen and
+in the stored rows. The only long wait is test 7, which waits for the Session's
+own 30 second expiry with a 90 second bound.
+
 ### Real runtime restart recovery
 
 Restart recovery is a two-run test so Playwright never starts, stops, or kills a
@@ -330,6 +482,15 @@ pnpm test:e2e:headed
   renders on `<html>`, and the theme switchers on both login pages.
 - `version-leak.spec.ts` checks that only the Web Host version in
   `WIPPY_HOST_VERSION` loads from the CDN.
+- `tool-approval.spec.ts`, `tool-approval-old-host.spec.ts` and
+  `tool-approval-old-session.spec.ts` check the tool approval card against the
+  scripted fixture agents: approve, the three Approve all scopes with the
+  grants chip and Revoke, Stop denial, a denial with a reason, expiry, Stop,
+  reload, two tabs, steering, `require: all` with a private tool and a
+  delegation call, a `<wippy-chat>` in an app page, phone width, a forged
+  decision from an artifact script, an old Host and an old Session. Every test
+  fails on a console or network error. They run only in their cell. See
+  [Tool approval cells](#tool-approval-cells).
 
 - `attention-tracer.spec.ts`: five tests, run once for each layout and engine cell.
   1. Keeps nested navigation in sync through tab clicks, browser history and

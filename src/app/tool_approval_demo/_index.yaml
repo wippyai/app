@@ -1,0 +1,449 @@
+# Tool approval dev fixtures. This namespace holds scripted agents, a
+# deterministic model and the fixture tools that the tool approval e2e specs
+# use. .wippy.yaml removes it unless the tool-approval-fixtures profile is
+# selected (see README.md). The agents need a wippy/session release that has
+# the wippy.session.traits:tool_approval trait.
+version: "1.0"
+namespace: app.tool_approval_demo
+
+entries:
+  - name: generate
+    kind: function.lua
+    meta:
+      type: llm_function
+      comment: Deterministic tool approval demo generator
+    source: file://generate.lua
+    modules:
+      - json
+    imports: {}
+    method: handler
+
+  - name: status
+    kind: function.lua
+    meta:
+      type: llm_function
+      comment: Deterministic tool approval demo provider status
+    source: file://status.lua
+    modules: []
+    imports: {}
+    method: handler
+
+  - name: driver
+    kind: contract.binding
+    meta:
+      name: Tool approval demo driver
+      comment: Local deterministic provider used by the tool approval demo fixture agents
+      tags:
+        - tool-approval
+        - fixture
+    contracts:
+      - contract: wippy.llm:generator
+        methods:
+          generate: app.tool_approval_demo:generate
+      - contract: wippy.llm:provider
+        methods:
+          status: app.tool_approval_demo:status
+
+  - name: provider
+    kind: registry.entry
+    meta:
+      name: tool-approval-demo
+      type: llm.provider
+      title: Tool Approval Demo
+      comment: Deterministic local provider for the tool approval demo fixture agents
+      tags:
+        - tool-approval
+        - fixture
+    driver:
+      id: app.tool_approval_demo:driver
+      options: {}
+
+  - name: model
+    kind: registry.entry
+    meta:
+      name: tool-approval-deterministic
+      type: llm.model
+      title: Tool Approval Deterministic
+      comment: Deterministic model that forces the tool calls of the tool approval scenarios without a real LLM
+      capabilities:
+        - generate
+        - tool_use
+      class:
+        - tool-approval-fixture
+      priority: 100
+    max_tokens: 32768
+    output_tokens: 4096
+    providers:
+      - id: app.tool_approval_demo:provider
+        provider_model: tool-approval-deterministic
+
+  # Fixture tools. Each one that runs returns { ran = true, tool, record }, which
+  # the Session stores in the call row (see tools.lua).
+
+  # Marked: asks before it runs. The agent's approve_all mode decides whether
+  # Approve all is offered.
+  - name: delete_record_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Delete record
+      comment: Fixture tool that needs approval and that the agent mode alone decides Approve all for
+      llm_alias: delete_record
+      llm_description: Permanently deletes a record.
+      approval: required
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "record": { "type": "string", "description": "Name of the record." }
+          },
+          "required": ["record"]
+        }
+    source: file://tools.lua
+    modules: []
+    method: delete_record
+    pool:
+      size: 4
+
+  # Marked, and the author allows Approve all for this tool.
+  - name: send_invoice_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Send invoice
+      comment: Fixture tool that needs approval and offers Approve all for the tool
+      llm_alias: send_invoice
+      llm_description: Sends an invoice to a customer.
+      approval:
+        required: true
+        approve_all: true
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "invoice": { "type": "string", "description": "Name of the invoice." }
+          },
+          "required": ["invoice"]
+        }
+    source: file://tools.lua
+    modules: []
+    method: send_invoice
+    pool:
+      size: 4
+
+  # Marked, and the author never allows Approve all for this tool.
+  - name: wire_funds_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Wire funds
+      comment: Fixture tool that needs approval and never offers Approve all
+      llm_alias: wire_funds
+      llm_description: Wires funds to an account.
+      approval:
+        required: true
+        approve_all: false
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "account": { "type": "string", "description": "Name of the account." }
+          },
+          "required": ["account"]
+        }
+    source: file://tools.lua
+    modules: []
+    method: wire_funds
+    pool:
+      size: 4
+
+  # Not marked: runs without approval under `require: marked`.
+  - name: lookup_record_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Look up record
+      comment: Fixture tool that needs no approval under require marked
+      llm_alias: lookup_record
+      llm_description: Reads a record.
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "record": { "type": "string", "description": "Name of the record." }
+          },
+          "required": ["record"]
+        }
+    source: file://tools.lua
+    modules: []
+    method: lookup_record
+    pool:
+      size: 4
+
+  # Private and marked: its call has no tool chip, and it still asks.
+  - name: write_audit_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Write audit entry
+      comment: Fixture tool that is private and needs approval
+      llm_alias: write_audit
+      llm_description: Writes an entry to the audit log.
+      private: true
+      approval: required
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "entry": { "type": "string", "description": "Text of the entry." }
+          },
+          "required": ["entry"]
+        }
+    source: file://tools.lua
+    modules: []
+    method: write_audit
+    pool:
+      size: 2
+
+  # Not marked. Returns the page of the forged-decision fixture as an artifact.
+  - name: make_forger_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Make forged decision page
+      comment: Fixture tool that returns an interactive artifact whose script tries to approve tool calls
+      llm_alias: make_forger
+      llm_description: Saves a page that tries to approve tool calls.
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "tag": { "type": "string", "description": "Tag of the run." }
+          }
+        }
+    source: file://tools.lua
+    modules: []
+    method: make_forger
+    pool:
+      size: 2
+
+  - name: fixture_tools
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      title: Tool Approval Fixture Tools
+      comment: Offers the fixture tools to a fixture agent
+      tags:
+        - tool-approval
+        - fixture
+    prompt: |
+      The fixture tools delete_record, send_invoice, wire_funds, lookup_record,
+      write_audit and make_forger are used only by scripted phrases. The
+      scripted model calls them; do not call them.
+    tools:
+      - app.tool_approval_demo:delete_record_tool
+      - app.tool_approval_demo:send_invoice_tool
+      - app.tool_approval_demo:wire_funds_tool
+      - app.tool_approval_demo:lookup_record_tool
+      - app.tool_approval_demo:write_audit_tool
+      - app.tool_approval_demo:make_forger_tool
+
+  # Agent A: the trait with its defaults (require marked, approve_all off,
+  # timeout 900 s, 10 requests per turn). The steering trait lets a person type
+  # while a card waits.
+  - name: agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-fixture-agent
+      type: agent.gen1
+      title: Tool Approval Fixture
+      comment: Deterministic fixture agent with the tool approval trait and its defaults
+      icon: tabler:shield-check
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic tool approval fixture agent used for demos and
+      tests. Say "approve one" to call a tool that needs approval.
+    model: tool-approval-deterministic
+    max_tokens: 4096
+    traits:
+      - id: wippy.session.traits:steering
+      - id: wippy.session.traits:tool_approval
+      - id: app.tool_approval_demo:fixture_tools
+
+  # approve_all: batch, so one Approve all covers every pending call of a step.
+  - name: batch_agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-batch-fixture-agent
+      type: agent.gen1
+      title: Tool Approval Batch Fixture
+      comment: Deterministic fixture agent whose Approve all covers the pending calls of one step
+      icon: tabler:shield-plus
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic tool approval fixture agent with Approve all
+      for a step. Say "approve three" for three pending calls in one step.
+    model: tool-approval-deterministic
+    max_tokens: 4096
+    traits:
+      - id: wippy.session.traits:steering
+      - id: wippy.session.traits:tool_approval
+        context:
+          approve_all: batch
+      - id: app.tool_approval_demo:fixture_tools
+
+  # Agent B: approve_all: session, so one Approve all covers the tools of the
+  # agent for the rest of the session, except a tool that opts out.
+  - name: session_agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-session-fixture-agent
+      type: agent.gen1
+      title: Tool Approval Session Fixture
+      comment: Deterministic fixture agent whose Approve all covers its tools for the session
+      icon: tabler:shield-lock
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic tool approval fixture agent with Approve all
+      for the session. Say "grant session" to run the session grant scenario.
+    model: tool-approval-deterministic
+    max_tokens: 4096
+    traits:
+      - id: wippy.session.traits:steering
+      - id: wippy.session.traits:tool_approval
+        context:
+          approve_all: session
+      - id: app.tool_approval_demo:fixture_tools
+
+  # timeout_seconds: 30, the shortest request lifetime, so an unanswered card
+  # expires within a test.
+  - name: expiry_agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-expiry-fixture-agent
+      type: agent.gen1
+      title: Tool Approval Expiry Fixture
+      comment: Deterministic fixture agent whose approval requests expire after 30 seconds
+      icon: tabler:shield-x
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic tool approval fixture agent with a 30 second
+      approval timeout. Say "approve one" and do not answer the card.
+    model: tool-approval-deterministic
+    max_tokens: 4096
+    traits:
+      - id: wippy.session.traits:steering
+      - id: wippy.session.traits:tool_approval
+        context:
+          timeout_seconds: 30
+      - id: app.tool_approval_demo:fixture_tools
+
+  # require: all, so every call asks: private tools, delegation calls and tools
+  # that are not marked.
+  - name: all_agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-all-fixture-agent
+      type: agent.gen1
+      title: Tool Approval All Fixture
+      comment: Deterministic fixture agent where every call needs approval, delegation calls included
+      icon: tabler:shield-half
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic tool approval fixture agent where every call
+      needs approval. Say "ask everything" for a private call, a delegation
+      call and a plain call in one step.
+    model: tool-approval-deterministic
+    max_tokens: 4096
+    traits:
+      - id: wippy.session.traits:steering
+      - id: wippy.session.traits:tool_approval
+        context:
+          require: all
+      - id: app.tool_approval_demo:fixture_tools
+    delegates:
+      - id: app.tool_approval_demo:analyst_agent
+        name: ask_analyst
+        rule: for the churn analysis
+
+  # The delegate target. It is not offered in the agents list (no public class).
+  - name: analyst_agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-analyst-fixture-agent
+      type: agent.gen1
+      title: Analyst
+      comment: Deterministic delegate target of the tool approval demo
+      icon: tabler:report-analytics
+      group: Test fixtures
+    prompt: |
+      You are the deterministic analyst of the tool approval demo. You answer
+      one scripted question about the churn report.
+    model: tool-approval-deterministic
+    max_tokens: 4096
+
+  # No approval trait: the control for an agent that is not protected, and the
+  # agent the old Session cell uses, because it does not need the trait.
+  - name: plain_agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-plain-fixture-agent
+      type: agent.gen1
+      title: Tool Approval Plain Fixture
+      comment: Deterministic fixture agent without the tool approval trait
+      icon: tabler:shield-off
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are the deterministic tool approval fixture agent without approval.
+      Say "lookup one" to call a tool that needs no approval.
+    model: tool-approval-deterministic
+    max_tokens: 4096
+    tools:
+      - app.tool_approval_demo:lookup_record_tool
+
+  # Scenario 18 of EE2-2713: a real model (the one the app's own agents use)
+  # with the approval trait defaults and two fixture tools. lookup_record is not
+  # marked and runs at once; delete_record is marked and waits for a card. It
+  # does not use the fixture_tools trait, because that trait tells the model
+  # not to call the tools.
+  - name: real_model_agent
+    kind: registry.entry
+    meta:
+      name: tool-approval-real-model-agent
+      type: agent.gen1
+      title: Tool Approval Real Model
+      comment: Fixture agent with a real model, the tool approval trait and the lookup_record and delete_record fixture tools
+      icon: tabler:shield-check
+      group: Test fixtures
+      class:
+        - public
+    prompt: |
+      You are a records assistant used to test tool approval. You have two
+      tools. lookup_record reads a record by name. delete_record permanently
+      deletes a record by name; a person must approve each delete before it
+      runs. When the user asks you to look up a record, call lookup_record.
+      When the user asks you to delete a record, call delete_record. If a
+      delete is not approved, do not retry it and do not call it again for that
+      request; follow the reason the person gave, and say what you did not do.
+      Keep every answer to one or two short sentences.
+    model: deepseek-v4.1-flash
+    temperature: 0.2
+    max_tokens: 2000
+    traits:
+      - id: wippy.session.traits:steering
+      - id: wippy.session.traits:tool_approval
+    tools:
+      - app.tool_approval_demo:lookup_record_tool
+      - app.tool_approval_demo:delete_record_tool
