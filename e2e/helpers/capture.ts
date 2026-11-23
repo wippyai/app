@@ -59,6 +59,18 @@ export class Capture {
     return [...this.problemList]
   }
 
+  /**
+   * Removes the problems that match `pattern` and returns them. A test calls it
+   * for a failure that the scenario itself causes on purpose, after it has
+   * checked that the failure happened. The logs keep the lines.
+   */
+  takeExpected(pattern: RegExp): string[] {
+    const taken = this.problemList.filter(problem => pattern.test(problem))
+    for (const problem of taken)
+      this.problemList.splice(this.problemList.indexOf(problem), 1)
+    return taken
+  }
+
   /** Forgets everything captured so far, problems and logs. */
   reset() {
     this.problemList.length = 0

@@ -460,6 +460,14 @@ test.describe('Tool approval, current cell', () => {
     for (const attempt of ['click:', 'keys:', 'relay:', 'token:', 'socket:', 'api:', 'forge:complete'])
       expect(text, `the script ran its ${attempt} attempt`).toContain(attempt)
     expect(text, 'the script could not read the user token').not.toContain('token:exposed')
+    // The attack opens its own socket without a token. The server refuses the
+    // handshake, and the browser logs that refusal as a console error. It is
+    // the expected outcome of the attack, so it is the one error this test
+    // takes out of the capture. Any other error still fails the test.
+    expect(text, 'the script\'s own socket was refused').toContain('socket:refused')
+    const refusedSocket = /console error: WebSocket connection to '[^']*\/api\/v1\/ws\/join' failed: HTTP Authentication failed/
+    await expect.poll(() => capture.problems().filter(problem => refusedSocket.test(problem)).length, { message: 'the browser logged the refused socket' }).toBeGreaterThan(0)
+    capture.takeExpected(refusedSocket)
 
     // The Host sent nothing for the forged command: no frame carries its request
     // id or the approval id as a decision. (The Host's own surface declaration
