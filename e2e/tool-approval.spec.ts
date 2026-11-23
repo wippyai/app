@@ -5,6 +5,7 @@ import {
   action,
   AGENTS,
   allRanRows,
+  approveWhenArmed,
   cardFor,
   cards,
   CELL,
@@ -329,10 +330,8 @@ test.describe('Tool approval, current cell', () => {
     await action(delegationCard, 'details').click()
     await expect(delegationCard).toContainText(TEXT.delegatesTo('Analyst'))
 
-    for (const card of [privateCard, delegationCard, plainCard]) {
-      await settle(card)
-      await action(card, 'approve').click()
-    }
+    for (const card of [privateCard, delegationCard, plainCard])
+      await approveWhenArmed(card)
     await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText([withTime(TEXT.approved), withTime(TEXT.approved), withTime(TEXT.approved)])
     // The model says "Everything ran." only when it read a successful result of
     // each of the three calls (generate.lua), and the stored rows must agree.

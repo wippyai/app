@@ -237,6 +237,22 @@ export async function settle(card: Locator) {
   await expect(card).toHaveAttribute(SEL.armedAttr, 'true')
 }
 
+/**
+ * Clicks Approve on a card and waits until the card is gone (its decided line
+ * replaces it). `data-armed` is refreshed once per animation frame, so right
+ * after another card was decided and the layout moved, a card can still read
+ * `true` while the Host already counts it as moving and ignores the click. The
+ * whole step repeats until the click took. A click on a card that is already
+ * sending is ignored by the Host, so a repeat never decides twice.
+ */
+export async function approveWhenArmed(card: Locator) {
+  await expect(async () => {
+    await settle(card)
+    await action(card, 'approve').click({ timeout: 2_000 })
+    await expect(card).toHaveCount(0, { timeout: 3_000 })
+  }, 'the card took the approval click').toPass({ timeout: 20_000 })
+}
+
 /** The decided lines of the chat (a call that had a card and now has a decision). */
 export function decidedLines(scope: Scope): Locator {
   return scope.locator(SEL.decided)
