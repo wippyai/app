@@ -322,23 +322,46 @@ part of a scenario. Test 19 also runs a deliberate console error and a deliberat
 404 and expects the capture to see both, so an empty list is not mistaken for a
 working capture.
 
-Three console or network lines are taken out of the capture on purpose
-(`capture.takeExpected`), each by a narrow pattern, and a different error still
-fails the test:
+Three kinds of console or network lines are kept out of the failure list on purpose,
+each by a narrow pattern, and a different error still fails the test. Every pattern
+names the URL or the frame (or tab) its line belongs to. The capture puts the source
+into its lines for this: a console error ends with `(at <url or frame>)`, and a failed
+request ends with `in frame <frame url>`.
 
-- Scenario 15: the browser logs the refusal of the forger's own unauthenticated
-  socket (`WebSocket connection to ... /api/v1/ws/join failed`). The test requires
-  that refusal first.
-- Scenario 12 (known Host gap): the state page of the delegation's workflow
-  (wippy/dataflow) runs isolated in a session with tool approval, and its API calls
-  fail with origin `null`. Remove the exemption when the Host fixes it.
-- Scenario 13 (known Host and runtime gap): the Components page of the main app
-  embeds two pages through `GET /api/public/pages/{id}`, which no module serves and
-  runtime 0.3.66a answers with 404. Remove the exemption when the Host stops calling it.
+- Scenario 15 (`capture.takeExpected`): the browser logs the refusal of the forger's own
+  unauthenticated socket (`WebSocket connection to ... /api/v1/ws/join failed`). The
+  test requires that refusal first, then removes the lines that were captured.
+- Scenario 12 (`capture.allow`, known Host gap): the state page of the delegation's
+  workflow (wippy/dataflow) runs isolated in a session with tool approval, in a frame
+  at `about:srcdoc`, and its API calls fail with origin `null`. The errors arrive
+  seconds after the test body ends, so the allowance stays in force until the check at
+  teardown. It covers the CORS and load errors for the dataflow `nodes` and
+  `components/list` URLs and the failed requests of the `about:srcdoc` frame. A failed
+  request of the Host frame (for example the Host's own `components/list`) is not
+  covered and fails the test. Remove the allowance when the Host fixes it.
+- Scenario 13 (`capture.allow`, known Host and runtime gap): the Components page of
+  the main app embeds two pages through `GET /api/public/pages/{id}`, which no module
+  serves and runtime 0.3.66a answers with 404. The allowance covers only the
+  `app-page` tab and the two page ids. Remove the allowance when the Host stops
+  calling that route.
 
-The old-host test counts the Web Host versions on the wire only for the frames below
-the top-level document. The login page pins its own stylesheets to the Host release the
-app was built for, which is not the Host of the cell.
+`capture.allow(...patterns)` is in force until the check at teardown, so a line that
+arrives late is covered; `capture.takeExpected(...patterns)` removes only lines that
+were already captured, so a test uses it only after it asserted the line itself.
+
+The old-host test counts the Web Host versions on the wire for every request of every
+frame, the top-level document included, because the facade shell loads `import-map.json`
+and `module.js` from the facade URL there. Only the stylesheets that the login page pins
+to the Host release the app was built for are skipped, by their exact URL (the test reads
+them from `src/app/api/login.jet` and `static/login.html`). It checks the version set
+after the load and again at the end of the test.
+
+`approveWhenArmed` (helpers/tool-approval.ts) clicks Approve once. It scrolls the button
+into view, waits for `data-armed="true"`, waits two animation frames, checks that the
+card is still armed, clicks, and expects the card to be gone. It fails when the card is
+ever in the phase `failed` or `not_confirmed`. It does not retry: the Host restarts its
+500 ms wait when the buttons move, and Playwright's own scroll right before a click counts
+as a move, which is why the button is scrolled into view first.
 
 Decision texts that carry a time follow the Host: an approved decision and a plain denial read <label>, <h:mm> (withTime in helpers/tool-approval.ts), while a denial with a reason, expiry, Stop and a steering message read as the bare label.
 
