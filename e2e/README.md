@@ -258,7 +258,7 @@ the cells one at a time, because they share one port and one database.
 | Cell | Runtime | Host | Playwright environment | Scenarios |
 |---|---|---|---|---|
 | `current` | Session with tool approval, by a `--config` workspace file that replaces `wippy/session` (keep `--config .wippy.yaml` before it) | Local build of MR !67, served with `pnpm serve` on `:5173`: `-o wippy.facade:fe_facade_url:default=http://localhost:5173` | `TOOL_APPROVAL_DEV_FIXTURES=true`, `TOOL_APPROVAL_CELL=current` | 1 to 15 and 19 |
-| `old-host` | The same Session | Web Host 1.0.70, the last Host without approval: `-o wippy.facade:fe_facade_url:default=https://web-host.wippy.ai/webcomponents-1.0.70` | the same, with `TOOL_APPROVAL_CELL=old-host` and `WIPPY_HOST_VERSION=1.0.70` | 16 |
+| `old-host` | The same Session | Web Host 1.0.71, the last Host without approval: `-o wippy.facade:fe_facade_url:default=https://web-host.wippy.ai/webcomponents-1.0.71` | the same, with `TOOL_APPROVAL_CELL=old-host` and `WIPPY_HOST_VERSION=1.0.71` | 16 |
 | `old-session` | Published `wippy/session` 0.7.0 from `wippy.lock`, no replacement | Local build of MR !67 | the same, with `TOOL_APPROVAL_CELL=old-session` | 17 |
 
 Launch a cell from this repository, then run its specs from another shell. The
@@ -278,8 +278,8 @@ $env:TOOL_APPROVAL_CELL = 'current'
 pnpm test:e2e:tool-approval -- --project=chromium
 ```
 
-For `old-host`, launch with `FACADE_URL=https://web-host.wippy.ai/webcomponents-1.0.70`
-and run with `TOOL_APPROVAL_CELL=old-host` and `WIPPY_HOST_VERSION=1.0.70`. For
+For `old-host`, launch with `FACADE_URL=https://web-host.wippy.ai/webcomponents-1.0.71`
+and run with `TOOL_APPROVAL_CELL=old-host` and `WIPPY_HOST_VERSION=1.0.71`. For
 `old-session`, launch without the workspace file and run with
 `TOOL_APPROVAL_CELL=old-session`. `pnpm test:e2e:tool-approval -- --list` shows
 the tests of the three files without running them.

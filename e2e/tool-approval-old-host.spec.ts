@@ -24,22 +24,22 @@ import {
  * Tool approval, scenario 16 of EE2-2713: an old Web Host with a new Session.
  *
  * The app boots with the Session that has tool approval, and the facade points
- * at the last Host without approval support, Web Host 1.0.70 on the CDN:
+ * at the last Host without approval support, Web Host 1.0.71 on the CDN:
  *
- *   -o wippy.facade:fe_facade_url:default=https://web-host.wippy.ai/webcomponents-1.0.70
+ *   -o wippy.facade:fe_facade_url:default=https://web-host.wippy.ai/webcomponents-1.0.71
  *
  * That Host never declares an approval surface, so the Session settles a gated
  * call at once as not run and sends a notice. The turn must not hang.
  *
  * Runs only with `TOOL_APPROVAL_CELL=old-host` (and `WIPPY_HOST_VERSION`, which
- * defaults to 1.0.70). See e2e/README.md.
+ * defaults to 1.0.71). See e2e/README.md.
  */
 
 test.skip(!FIXTURES_ON, FIXTURES_SKIP_REASON)
 test.skip(CELL !== 'old-host', cellSkipReason('old-host'))
 test.describe.configure({ timeout: 90_000 })
 
-const OLD_HOST_VERSION = process.env.WIPPY_HOST_VERSION ?? '1.0.70'
+const OLD_HOST_VERSION = process.env.WIPPY_HOST_VERSION ?? '1.0.71'
 
 test.describe('Tool approval, old Host cell', () => {
   test('16. old Host: a gated call shows the unavailable notice and the chat does not hang', async ({ page, capture }) => {
