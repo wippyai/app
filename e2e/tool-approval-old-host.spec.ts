@@ -44,8 +44,14 @@ const OLD_HOST_VERSION = process.env.WIPPY_HOST_VERSION ?? '1.0.71'
 test.describe('Tool approval, old Host cell', () => {
   test('16. old Host: a gated call shows the unavailable notice and the chat does not hang', async ({ page, capture }) => {
     // The cell is what it claims to be: only the old Host version loads from the CDN.
+    // Requests of the top-level document are not counted. They are the login page and
+    // the shell, and the app pins its own stylesheets there (src/app/api/login.jet,
+    // static/login.html) to the Host release the app was built for. The Host bundle
+    // and everything it loads run in the frames below that document.
     const hostVersions = new Set<string>()
     page.on('request', (request) => {
+      if (request.frame() === page.mainFrame())
+        return
       const match = request.url().match(/web-host\.wippy\.ai\/webcomponents-(1\.0\.\d+)/)
       if (match)
         hostVersions.add(match[1])
