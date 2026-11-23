@@ -238,19 +238,42 @@ export async function settle(card: Locator) {
 }
 
 /**
- * Clicks Approve on a card and waits until the card is gone (its decided line
- * replaces it). `data-armed` is refreshed once per animation frame, so right
- * after another card was decided and the layout moved, a card can still read
- * `true` while the Host already counts it as moving and ignores the click. The
- * whole step repeats until the click took. A click on a card that is already
- * sending is ignored by the Host, so a repeat never decides twice.
+ * Clicks Approve on a card once and waits until the card is gone (its decided
+ * line replaces it). `data-armed` is refreshed once per animation frame, so
+ * right after another card was decided and the layout moved, a card can still
+ * read `true` for a frame while the Host already counts it as moving. The step
+ * therefore scrolls the button into view, waits for `true`, waits two animation
+ * frames in the page, checks that the card is still armed, and clicks exactly once.
+ * There is no retry: a click that a card armed for two frames still drops is a Host
+ * defect, and the step reports it by failing on the card that stays. The step also fails when
+ * the card is ever in the phase `failed` or `not_confirmed` (the Host could not
+ * send, or did not get the confirmation).
  */
 export async function approveWhenArmed(card: Locator) {
-  await expect(async () => {
-    await settle(card)
-    await action(card, 'approve').click({ timeout: 2_000 })
-    await expect(card).toHaveCount(0, { timeout: 3_000 })
-  }, 'the card took the approval click').toPass({ timeout: 20_000 })
+  // A scroll moves the buttons, and the Host restarts its 500 ms wait on any move. Playwright
+  // scrolls the button into view by itself right before it clicks, and the Host then counts
+  // that scroll as a move and drops the click. So the button is brought into view first.
+  await action(card, 'approve').scrollIntoViewIfNeeded()
+  await settle(card)
+  await card.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  await expect(card, 'the card is still armed two animation frames later').toHaveAttribute(SEL.armedAttr, 'true')
+  // Records the bad phases from now on, even ones that last only a moment. The array
+  // lives in the page and stays readable after the card left the DOM.
+  const badPhases = await card.evaluateHandle((element, attribute) => {
+    const seen: string[] = []
+    const read = () => {
+      const phase = element.getAttribute(attribute)
+      if (phase === 'failed' || phase === 'not_confirmed')
+        seen.push(phase)
+    }
+    read()
+    new MutationObserver(read).observe(element, { attributes: true, attributeFilter: [attribute] })
+    return seen
+  }, SEL.phaseAttr)
+  await action(card, 'approve').click()
+  const gone = await expect(card).toHaveCount(0).then(() => true, () => false)
+  expect(await badPhases.jsonValue(), 'the card was never in phase failed or not_confirmed').toEqual([])
+  expect(gone, 'the card took the approval click and went away').toBe(true)
 }
 
 /** The decided lines of the chat (a call that had a card and now has a decision). */
