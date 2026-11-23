@@ -18,22 +18,37 @@ import { expect, test as base } from '@playwright/test'
  * browser reports for a request that its own navigation cancelled (a reload in
  * the middle of a fetch). Everything else is, including a 404.
  *
+ * A test can keep a narrow allowance for a known failure with `allow()` (in force
+ * until the teardown check, whenever the line arrives) or remove an already
+ * captured failure with `takeExpected()`.
+ *
  * `reset()` drops what the capture holds so far. A test calls it once after
  * `loginAsAdmin`, because the facade's own requests before sign-in (and the
  * errors the login helper classifies) are not part of the scenario.
  */
 export class Capture {
   private readonly problemList: string[] = []
+  private readonly allowances: RegExp[] = []
+  private readonly lookups: Promise<void>[] = []
   private readonly consoleLines: string[] = []
   private readonly networkLines: string[] = []
 
   /** Starts watching one page. Call it for every extra tab or context page. */
   watch(page: Page, label = 'page') {
     page.on('console', (message: ConsoleMessage) => {
-      const text = message.text()
-      this.consoleLines.push(`[${label}] ${message.type()}: ${text}`)
-      if (message.type() === 'error')
-        this.problemList.push(`[${label}] console error: ${text}`)
+      // The browser names the script or the resource a message belongs to. It is part of the
+      // line, so an allowance can name the URL and not only the text.
+      const source = message.location().url
+      if (source || message.type() !== 'error') {
+        this.recordConsole(label, message, source)
+        return
+      }
+      // An error without a source (`console.error(text, error)` in a frame's own code): ask the
+      // frame that logged it for its address, through the first argument's handle.
+      const first = message.args()[0]
+      const lookup = (first ? first.evaluate(() => location.href).catch(() => '') : Promise.resolve(''))
+        .then(frame => this.recordConsole(label, message, frame))
+      this.lookups.push(lookup)
     })
     page.on('pageerror', (error: Error) => {
       this.consoleLines.push(`[${label}] pageerror: ${error.message}`)
@@ -48,21 +63,53 @@ export class Capture {
     })
     page.on('requestfailed', (request: Request) => {
       const failure = request.failure()?.errorText ?? 'unknown failure'
-      this.networkLines.push(`[${label}] FAILED ${request.method()} ${request.url()} (${failure})`)
+      // The frame that made the request is part of the line: a failure in the Host frame is not
+      // the same as one in an isolated artifact frame (`about:srcdoc`).
+      const frame = request.frame().url()
+      this.networkLines.push(`[${label}] FAILED ${request.method()} ${request.url()} (${failure}) in frame ${frame}`)
       if (failure !== 'net::ERR_ABORTED')
-        this.problemList.push(`[${label}] request failed: ${request.method()} ${request.url()} (${failure})`)
+        this.problemList.push(`[${label}] request failed: ${request.method()} ${request.url()} (${failure}) in frame ${frame}`)
     })
   }
 
-  /** The problems so far, as one line each. */
-  problems(): string[] {
-    return [...this.problemList]
+  private recordConsole(label: string, message: ConsoleMessage, source: string) {
+    const text = source ? `${message.text()} (at ${source})` : message.text()
+    this.consoleLines.push(`[${label}] ${message.type()}: ${text}`)
+    if (message.type() === 'error')
+      this.problemList.push(`[${label}] console error: ${text}`)
+  }
+
+  /** Resolves when every pending source lookup of a console error has put its line in the capture. */
+  async idle() {
+    await Promise.all(this.lookups)
   }
 
   /**
-   * Removes the problems that match any of `patterns` and returns them. A test calls it
-   * for a failure that the scenario itself causes on purpose, after it has
-   * checked that the failure happened. The logs keep the lines.
+   * The problems so far, as one line each, without the ones an `allow()` pattern covers.
+   * The teardown check of the `capture` fixture reads this list, so an allowed line that
+   * arrives late (after the test body) is still covered.
+   */
+  problems(): string[] {
+    return this.problemList.filter(problem => !this.allowances.some(pattern => pattern.test(problem)))
+  }
+
+  /**
+   * Keeps a narrow allowance in force until the teardown check: a problem that matches any
+   * of `patterns` does not fail the test, whenever it arrives. A test calls it for a known
+   * failure that the scenario causes but that has no fixed time (a late console error of a
+   * frame the Host owns). Every pattern must name the URL or the frame the line belongs to,
+   * so a similar failure elsewhere still fails the test. The logs keep the lines. For a
+   * failure the test asserts first, use `takeExpected`.
+   */
+  allow(...patterns: RegExp[]) {
+    this.allowances.push(...patterns)
+  }
+
+  /**
+   * Removes the problems captured so far that match any of `patterns` and returns them. A
+   * test calls it for a failure that the scenario itself causes on purpose, after it has
+   * checked that the failure happened. It does not cover a line that arrives later: use
+   * `allow()` for that. The logs keep the lines.
    */
   takeExpected(...patterns: RegExp[]): string[] {
     const taken = this.problemList.filter(problem => patterns.some(pattern => pattern.test(problem)))
@@ -104,6 +151,7 @@ export const test = base.extend<{ capture: Capture }>({
     const capture = new Capture()
     capture.watch(page)
     await use(capture)
+    await capture.idle()
     await attachLogs(testInfo, capture)
     expect(capture.problems(), 'console errors, page errors, failed requests and HTTP errors').toEqual([])
   }, { auto: true }],

@@ -356,14 +356,19 @@ test.describe('Tool approval, current cell', () => {
     // state page (wippy/dataflow, "Workflow state app") renders as an artifact. A session with
     // tool approval is protected (EE2-2712), so the Host runs that page isolated: an opaque
     // origin and no credentials. The page then fetches the API with origin "null", the server
-    // refuses the CORS preflight, and the console shows the errors below. They can arrive
-    // after the test body ends, so the exemption is narrow and does not require them. Remove
-    // it when the Host lets the dataflow state page load in a protected session.
-    capture.takeExpected(
-      /console error: Access to (?:fetch|XMLHttpRequest) at '[^']*\/api\/(?:v1\/dataflows\/[^/']+\/nodes|public\/components\/list\?auto_register=true)' from origin 'null' has been blocked by CORS policy/,
-      /request failed: GET \S*\/api\/(?:v1\/dataflows\/\S+\/nodes|public\/components\/list\?auto_register=true) \(net::ERR_FAILED\)/,
-      /console error: Failed to load resource: net::ERR_FAILED/,
-      /console error: Failed to fetch dataflow data: TypeError: Failed to fetch/,
+    // refuses the CORS preflight, and the console shows the errors below. They arrive seconds
+    // after the test body ends, so the allowance stays in force until the check at teardown
+    // and does not require them. Each pattern names the URL or the isolated frame
+    // (`about:srcdoc`). The Host's own `components/list` request runs in the Host frame, so
+    // a failure of it there is not covered and still fails the test. Remove the allowance
+    // when the Host lets the dataflow state page load in a protected session.
+    const isolatedApiUrl =String.raw`\S*\/api\/(?:v1\/dataflows\/[^/\s']+\/nodes|public\/components\/list\?auto_register=true)`
+    capture.allow(
+      new RegExp(String.raw`console error: Access to (?:fetch|XMLHttpRequest) at '${isolatedApiUrl}' from origin 'null' has been blocked by CORS policy.* \(at about:srcdoc\)$`),
+      new RegExp(String.raw`console error: Failed to load resource: net::ERR_FAILED \(at ${isolatedApiUrl}\)$`),
+      new RegExp(String.raw`request failed: GET ${isolatedApiUrl} \(net::ERR_FAILED\) in frame about:srcdoc$`),
+      // The message carries the stack of the page's own code, so it spans lines.
+      /console error: Failed to fetch dataflow data: TypeError: Failed to fetch[\s\S]* \(at about:srcdoc\)$/,
     )
   })
 
@@ -402,11 +407,13 @@ test.describe('Tool approval, current cell', () => {
     // embeds app.views:iframe-demo and app.views:iframe-demo-themed with <w-artifact type="page">.
     // The Host asks GET /api/public/pages/{id}, which no module serves, and runtime 0.3.66a
     // answers an unmatched /api route with a JSON 404 (the earlier runtimes answered the facade
-    // page). The exemption names those two ids; a 404 for any other URL still fails the test.
-    // Remove it when the Host stops calling that route.
-    capture.takeExpected(
-      /\[app-page\] HTTP 404 GET \S*\/api\/public\/pages\/app\.views:iframe-demo(?:-themed)?$/,
-      /\[app-page\] console error: Failed to load resource: the server responded with a status of 404 \(Not Found\)$/,
+    // page). The allowance stays in force until the check at teardown, covers only the
+    // `app-page` tab and names those two ids; a 404 for any other URL, or in any other tab,
+    // still fails the test. Remove it when the Host stops calling that route.
+    const pagesUrl = String.raw`\S*\/api\/public\/pages\/app\.views:iframe-demo(?:-themed)?`
+    capture.allow(
+      new RegExp(String.raw`\[app-page\] HTTP 404 GET ${pagesUrl}$`),
+      new RegExp(String.raw`\[app-page\] console error: Failed to load resource: the server responded with a status of 404 \(Not Found\) \(at ${pagesUrl}\)$`),
       /\[app-page\] console error: .*\[wippy-artifact\] Page "app\.views:iframe-demo(?:-themed)?" failed to load: Request failed with status code 404/,
     )
     await app.close()
