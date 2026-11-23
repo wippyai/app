@@ -322,6 +322,24 @@ part of a scenario. Test 19 also runs a deliberate console error and a deliberat
 404 and expects the capture to see both, so an empty list is not mistaken for a
 working capture.
 
+Three console or network lines are taken out of the capture on purpose
+(`capture.takeExpected`), each by a narrow pattern, and a different error still
+fails the test:
+
+- Scenario 15: the browser logs the refusal of the forger's own unauthenticated
+  socket (`WebSocket connection to ... /api/v1/ws/join failed`). The test requires
+  that refusal first.
+- Scenario 12 (known Host gap): the state page of the delegation's workflow
+  (wippy/dataflow) runs isolated in a session with tool approval, and its API calls
+  fail with origin `null`. Remove the exemption when the Host fixes it.
+- Scenario 13 (known Host and runtime gap): the Components page of the main app
+  embeds two pages through `GET /api/public/pages/{id}`, which no module serves and
+  runtime 0.3.66a answers with 404. Remove the exemption when the Host stops calling it.
+
+The old-host test counts the Web Host versions on the wire only for the frames below
+the top-level document. The login page pins its own stylesheets to the Host release the
+app was built for, which is not the Host of the cell.
+
 Decision texts that carry a time follow the Host: an approved decision and a plain denial read <label>, <h:mm> (withTime in helpers/tool-approval.ts), while a denial with a reason, expiry, Stop and a steering message read as the bare label.
 
 Scenario 15 gives the artifact script the real approval id, digest and revision of the pending request, which the test reads from the stored row, so only the Host's guards can refuse the forged command. The test asserts that the Host socket sent no frame that carries the forged request, that every attempt wrote its line, and that the call is still pending.
