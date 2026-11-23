@@ -1,5 +1,5 @@
 import type { ConsoleMessage, Page, Request, Response, TestInfo, WebSocket } from '@playwright/test'
-import { expect, test as base } from '@playwright/test'
+import { test as base, expect } from '@playwright/test'
 
 /**
  * Console and network capture for the tool approval specs. It keeps two things

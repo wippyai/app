@@ -1,5 +1,6 @@
 import type { FrameLocator, Locator, Page } from '@playwright/test'
 import type { Capture } from './capture'
+import process from 'node:process'
 import { expect } from '@playwright/test'
 import { getHostFrame, loginAsAdmin, pageIframeSelector } from './login'
 import { sessionMessages } from './session-messages'
