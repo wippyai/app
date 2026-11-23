@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { expect, test } from './helpers/capture'
 import {
   AGENTS,
@@ -41,16 +43,21 @@ test.describe.configure({ timeout: 90_000 })
 
 const OLD_HOST_VERSION = process.env.WIPPY_HOST_VERSION ?? '1.0.71'
 
+/** The Host stylesheets that the login page pins, by exact URL, read from the two files (paths from the repository root). */
+const LOGIN_PAGE_PINS = new Set(['src/app/api/login.jet', 'static/login.html'].flatMap(file =>
+  Array.from(readFileSync(resolve(__dirname, '..', file), 'utf8').matchAll(/href="(https:\/\/web-host\.wippy\.ai\/webcomponents-1\.0\.\d+\/[^"]+)"/g), match => match[1])))
+
 test.describe('Tool approval, old Host cell', () => {
   test('16. old Host: a gated call shows the unavailable notice and the chat does not hang', async ({ page, capture }) => {
     // The cell is what it claims to be: only the old Host version loads from the CDN.
-    // Requests of the top-level document are not counted. They are the login page and
-    // the shell, and the app pins its own stylesheets there (src/app/api/login.jet,
-    // static/login.html) to the Host release the app was built for. The Host bundle
-    // and everything it loads run in the frames below that document.
+    // Every request of every frame counts, the top-level document included: the facade
+    // shell loads `import-map.json` and `module.js` from the facade URL in the top frame.
+    // The one exception is the set of stylesheets that the app's own login page pins to
+    // the Host release the app was built for (src/app/api/login.jet, static/login.html).
+    // They are skipped by their exact URL, read from those two files, not by frame.
     const hostVersions = new Set<string>()
     page.on('request', (request) => {
-      if (request.frame() === page.mainFrame())
+      if (LOGIN_PAGE_PINS.has(request.url()))
         return
       const match = request.url().match(/web-host\.wippy\.ai\/webcomponents-(1\.0\.\d+)/)
       if (match)
@@ -85,5 +92,8 @@ test.describe('Tool approval, old Host cell', () => {
     // The chat still works: a call that needs no approval runs and is answered.
     await sendMessage(scope, `lookup one #${tag}`)
     await expect(scope.getByText(`Looked up ${recordName('rec', 1, tag)}.`, { exact: true })).toBeVisible({ timeout: 20_000 })
+
+    // Still only the old Host after the whole run, not only after the load.
+    expect(Array.from(hostVersions), `only Web Host ${OLD_HOST_VERSION} loaded from the CDN during the test`).toEqual([OLD_HOST_VERSION])
   })
 })
