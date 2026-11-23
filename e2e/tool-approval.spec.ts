@@ -352,6 +352,19 @@ test.describe('Tool approval, current cell', () => {
     expect(ranRows(rows, 'write_audit'), 'the private tool ran once').toHaveLength(1)
     expect(ranRows(rows, 'lookup_record'), 'the plain tool ran once').toHaveLength(1)
     expect(resultText(rows.find(row => row.type === 'delegation')!), 'the delegation result holds the analyst\'s answer').toContain('churn is stable')
+    // KNOWN HOST DEFECT, not an approval defect. The delegation makes a workflow, and its
+    // state page (wippy/dataflow, "Workflow state app") renders as an artifact. A session with
+    // tool approval is protected (EE2-2712), so the Host runs that page isolated: an opaque
+    // origin and no credentials. The page then fetches the API with origin "null", the server
+    // refuses the CORS preflight, and the console shows the errors below. They can arrive
+    // after the test body ends, so the exemption is narrow and does not require them. Remove
+    // it when the Host lets the dataflow state page load in a protected session.
+    capture.takeExpected(
+      /console error: Access to (?:fetch|XMLHttpRequest) at '[^']*\/api\/(?:v1\/dataflows\/[^/']+\/nodes|public\/components\/list\?auto_register=true)' from origin 'null' has been blocked by CORS policy/,
+      /request failed: GET \S*\/api\/(?:v1\/dataflows\/\S+\/nodes|public\/components\/list\?auto_register=true) \(net::ERR_FAILED\)/,
+      /console error: Failed to load resource: net::ERR_FAILED/,
+      /console error: Failed to fetch dataflow data: TypeError: Failed to fetch/,
+    )
   })
 
   test('13. Host chat and an app-owned <wippy-chat> in an app page: both show the card, one decision updates both', async ({ page, capture }) => {
@@ -385,6 +398,17 @@ test.describe('Tool approval, current cell', () => {
     await expect(decidedLines(scope).locator(SEL.decidedDecision)).toHaveText(withTime(TEXT.approved))
     const sessionId = await sessionIdOf(page)
     await expectRows(page, sessionId, 'the tool ran once', rows => ranRows(rows, 'delete_record').length === 1)
+    // KNOWN HOST AND RUNTIME GAP, not an approval defect. The Components page of the main app
+    // embeds app.views:iframe-demo and app.views:iframe-demo-themed with <w-artifact type="page">.
+    // The Host asks GET /api/public/pages/{id}, which no module serves, and runtime 0.3.66a
+    // answers an unmatched /api route with a JSON 404 (the earlier runtimes answered the facade
+    // page). The exemption names those two ids; a 404 for any other URL still fails the test.
+    // Remove it when the Host stops calling that route.
+    capture.takeExpected(
+      /\[app-page\] HTTP 404 GET \S*\/api\/public\/pages\/app\.views:iframe-demo(?:-themed)?$/,
+      /\[app-page\] console error: Failed to load resource: the server responded with a status of 404 \(Not Found\)$/,
+      /\[app-page\] console error: .*\[wippy-artifact\] Page "app\.views:iframe-demo(?:-themed)?" failed to load: Request failed with status code 404/,
+    )
     await app.close()
   })
 
