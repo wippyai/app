@@ -626,3 +626,141 @@ test.describe('withdrawn access is refused on every read path (RC1-08)', () => {
     }
   })
 })
+
+// ── RC2-07: refresh ──────────────────────────────────────────────────
+
+/**
+ * Browser tests of the refresh controls (RC2-07), on the page reads_toggle, as the regular user. The page has three
+ * tiles: ok_kpi ("Fixed number", point ok), slow_kpi ("Slow number", point slow, computing for about 5 s) and
+ * users_tile (point users, no label). A read is a GET of a point; a new run is a read without an `operation` token.
+ *
+ * NOT RUN by the builder (the coordinator runs browser tests at integration). They pass only after WP-READ (wave 2),
+ * which makes a read with a token follow the running operation and keeps the read limit.
+ */
+interface PointRead {
+  point: string
+  operation: string | null
+}
+
+/** Records every GET of a point of the page that the signed-in page sends, in order. */
+function recordReads(page: Page, pageId: string): PointRead[] {
+  const reads: PointRead[] = []
+  page.on('request', (r) => {
+    if (r.method() !== 'GET')
+      return
+    const url = new URL(r.url())
+    const marker = `/pages/${pageId}/points/`
+    const at = url.pathname.indexOf(marker)
+    if (at < 0)
+      return
+    const point = decodeURIComponent(url.pathname.slice(at + marker.length)).split('/')[0] ?? ''
+    reads.push({ point, operation: url.searchParams.get('operation') })
+  })
+  return reads
+}
+
+/** The points of the reads that start work (no operation token), since `from`, sorted. */
+function startedSince(reads: PointRead[], from: number): string[] {
+  return reads.slice(from).filter(r => r.operation === null).map(r => r.point).sort()
+}
+
+test.describe('refresh controls (RC2-07)', () => {
+  test('a regular user refreshes a tile and a page', async ({ browser }) => {
+    test.setTimeout(90_000)
+    const viewer = await signedIn(browser, 'viewer', 'viewer')
+    await viewer.setViewportSize({ width: 1920, height: 1000 })
+    const reads = recordReads(viewer, 'reads_toggle')
+    await openInShell(viewer, '/reads/toggle')
+    const f = pageFrame(viewer, 'reads_toggle')
+    await expect(f.locator('[data-tile-id="ok_kpi"]')).toContainText('42', { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="slow_kpi"]')).toContainText('7', { timeout: 30_000 })
+    await expect(f.locator('[data-tile-id="users_tile"] tr[data-user-id]').first()).toBeVisible({ timeout: 20_000 })
+
+    // The controls need no right: the regular user sees one for each tile and one for the page, named after the tile.
+    await expect(f.locator('[data-tile-refresh]')).toHaveCount(3)
+    await expect(f.getByRole('button', { name: 'Refresh Fixed number' })).toBeVisible()
+    await expect(f.getByRole('button', { name: 'Refresh Slow number' })).toBeVisible()
+    await expect(f.getByRole('button', { name: 'Refresh page' })).toBeVisible()
+    await expect(f.locator('[data-page-refresh]')).toHaveCount(1)
+
+    // The refresh control of a tile reads only the inputs of that tile, once.
+    let from = reads.length
+    await f.getByRole('button', { name: 'Refresh Fixed number' }).click()
+    await expect.poll(() => startedSince(reads, from), { timeout: 10_000 }).toEqual(['ok'])
+    await viewer.waitForTimeout(1500)
+    expect(startedSince(reads, from)).toEqual(['ok'])
+    await expect(f.locator('[data-tile-id="ok_kpi"]')).toHaveAttribute('data-frame-status', 'ready', { timeout: 10_000 })
+    await expect(f.locator('[data-tile-id="ok_kpi"]')).toContainText('42')
+
+    // The page refresh reads each input once. users_tile is a demo tile that carries its own copy of the tile
+    // helper, so its read is allowed but not required; the built-in tiles must read exactly once.
+    from = reads.length
+    await f.getByRole('button', { name: 'Refresh page' }).click()
+    await expect.poll(() => startedSince(reads, from).filter(p => p !== 'users'), { timeout: 10_000 }).toEqual(['ok', 'slow'])
+    await viewer.waitForTimeout(1500)
+    const started = startedSince(reads, from)
+    expect(started.filter(p => p === 'ok')).toEqual(['ok'])
+    expect(started.filter(p => p === 'slow')).toEqual(['slow'])
+    expect(started.filter(p => p === 'users').length).toBeLessThanOrEqual(1)
+  })
+
+  test('a refresh during computing starts no second run', async ({ browser }) => {
+    test.setTimeout(90_000)
+    const viewer = await signedIn(browser, 'viewer', 'viewer')
+    await viewer.setViewportSize({ width: 1920, height: 1000 })
+    const reads = recordReads(viewer, 'reads_toggle')
+    await openInShell(viewer, '/reads/toggle')
+    const f = pageFrame(viewer, 'reads_toggle')
+    const slow = f.locator('[data-tile-id="slow_kpi"]')
+    await expect(slow).toHaveAttribute('data-frame-status', 'computing', { timeout: 20_000 })
+    const runs = () => reads.filter(r => r.point === 'slow' && r.operation === null).length
+    const followed = () => reads.filter(r => r.point === 'slow' && r.operation !== null)
+    expect(runs()).toBe(1)
+    const followedBefore = followed().length
+
+    await f.getByRole('button', { name: 'Refresh Slow number' }).click()
+    // The refresh follows the running operation at once, with its token.
+    await expect.poll(() => followed().length, { timeout: 10_000 }).toBeGreaterThan(followedBefore)
+    expect(runs()).toBe(1)
+
+    // The run ends with its result, still the only run, and every follow-up read carries the one token.
+    await expect(slow).toContainText('7', { timeout: 30_000 })
+    expect(runs()).toBe(1)
+    expect(new Set(followed().map(r => r.operation)).size).toBe(1)
+  })
+
+  test('a refresh past the read limit shows rate_limited', async ({ browser }) => {
+    test.setTimeout(90_000)
+    const viewer = await signedIn(browser, 'viewer', 'viewer')
+    // The engine refuses reads past its limit on purpose (10 a second, burst 30); the page watch counts each 429.
+    expectFailures(viewer, { status: 429, path: '/api/v1/dashboards/pages/reads_toggle/points/ok' })
+    await viewer.setViewportSize({ width: 1920, height: 1000 })
+    await openInShell(viewer, '/reads/toggle')
+    const f = pageFrame(viewer, 'reads_toggle')
+    const ok = f.locator('[data-tile-id="ok_kpi"]')
+    await expect(ok).toContainText('42', { timeout: 20_000 })
+
+    let refused = 0
+    viewer.on('response', (r) => {
+      if (r.url().includes('/pages/reads_toggle/points/ok') && r.status() === 429)
+        refused += 1
+    })
+    const refresh = f.getByRole('button', { name: 'Refresh Fixed number' })
+    // Refresh faster than the limit allows until the engine refuses a read, then a few times more.
+    for (let i = 0; i < 200 && refused === 0; i++)
+      await refresh.click()
+    expect(refused).toBeGreaterThan(0)
+    for (let i = 0; i < 5; i++)
+      await refresh.click()
+
+    // The refused read is the tile state error with the code rate_limited. The number from before stays on screen.
+    await expect.poll(() => ok.getAttribute('data-frame-error-code'), { timeout: 10_000 }).toBe('rate_limited')
+    await expect(ok).toHaveAttribute('data-frame-status', 'error')
+    await expect(ok).toContainText('42')
+
+    // After the bucket refills, the same control reads again and the tile is ready.
+    await viewer.waitForTimeout(4000)
+    await refresh.click()
+    await expect(ok).toHaveAttribute('data-frame-status', 'ready', { timeout: 10_000 })
+  })
+})

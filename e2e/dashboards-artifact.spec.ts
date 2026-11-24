@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
-import { WIDE, pageFrame, publish, refreshShell, remove, routeOf } from './dashboards-wp5.support'
+import { WIDE, answerReads, frame, pageFrame, publish, ready, refreshShell, remove, routeOf } from './dashboards-wp5.support'
 
 /**
  * RC1-21 browser tests: the built-in `artifact` tile shows a fixture artifact by id and a fixture web
@@ -145,6 +145,83 @@ test.describe('RC1-21: publish checks', () => {
       const res = await api(page, 'POST', '/api/v1/dashboards/pages', spec(id, options))
       expect(res.status, `${id}: ${res.body}`).toBe(200)
       await remove(page, id)
+    }
+  })
+})
+
+/**
+ * RC2-08 browser test: an artifact tile takes its `artifact_id` from a page parameter. Choosing a value in the
+ * picker shows another artifact, and only the inputs that are bound to the parameter read again. The tile has no
+ * data input, so it reads nothing itself. The reads of the page are answered by the test and counted.
+ *
+ * NOT RUN by the builder. It needs the engine side of the bound tile (WP-READ: the claim, the publish check and the
+ * `params` of the tile), so it passes only after wave 2.
+ */
+const POINT = (ref: string, args: Record<string, unknown> = {}) => ({ kind: 'function', ref: `app.dashboards_fixtures:${ref}`, args })
+const param = (name: string) => ({ $param: name })
+
+const BOUND_PAGE = {
+  id: 'fx_artifact_bound',
+  title: 'Fixture bound artifact',
+  route: '/fx/artifact-bound',
+  params: { pick: { type: 'select', label: 'Artifact', options: { data: 'o' } } },
+  // o lists the artifacts to choose from, n is bound to nothing, sm is bound to the parameter.
+  data: { o: POINT('options'), n: POINT('numbers'), sm: POINT('series', { model: param('pick') }) },
+  actions: {},
+  tiles: {
+    sel: { type: 'control.select', param: 'pick' },
+    kp: { type: 'kpi', data: { main: 'n' }, fields: { value: 'value' }, options: { label: 'Fixed number' } },
+    tb: { type: 'table', data: { main: 'sm' } },
+    art: { type: 'artifact', options: { artifact_id: param('pick'), artifact_type: 'page' } },
+  },
+  rows: [['sel', 'kp'], ['tb'], ['art']],
+}
+
+test.describe('RC2-08: the artifact tile bound to a parameter', () => {
+  test('choosing a value shows another artifact, and only the bound inputs read again', async ({ page }) => {
+    await page.setViewportSize(WIDE)
+    await loginAsAdmin(page)
+    await publish(page, BOUND_PAGE)
+    try {
+      const calls = await answerReads(page, BOUND_PAGE.id, {
+        o: ready('o', frame([{ name: 'value', type: 'string' }, { name: 'label', type: 'string' }], [['app.views:iframe-demo', 'Demo'], ['app.views:iframe-demo-themed', 'Themed']])),
+        n: ready('n', frame([{ name: 'value', type: 'number', role: 'measure' }], [[1]])),
+        sm: ready('sm', frame([{ name: 'model', type: 'string' }, { name: 'n', type: 'number', role: 'measure' }], [['x', 1]])),
+      })
+      const counts = (list: Array<{ point: string }>) => {
+        const out: Record<string, number> = {}
+        for (const c of list)
+          out[c.point] = (out[c.point] ?? 0) + 1
+        return out
+      }
+      await openInShell(page, BOUND_PAGE.route)
+      const f = pageFrame(page, BOUND_PAGE.id)
+      for (const id of ['sel', 'kp', 'tb'])
+        await expect(f.locator(`[data-tile-id="${id}"]`)).toHaveAttribute('data-frame-status', 'ready', { timeout: 20_000 })
+      // No value yet: the artifact tile shows the empty state (not an error), and nothing is loaded.
+      const art = f.locator('[data-tile-id="art"]')
+      await expect(art).toHaveAttribute('data-frame-status', 'empty', { timeout: 20_000 })
+      await expect(f.locator('[data-tile-id="art"] w-artifact')).toHaveCount(0)
+      expect(counts(calls), 'the first load reads each input once, and the artifact tile reads nothing').toEqual({ o: 1, n: 1, sm: 1 })
+
+      const pick = async (label: string) => {
+        await f.locator('[data-tile-id="sel"] [role="combobox"]').click()
+        await f.getByRole('option', { name: label }).click()
+      }
+      const choose = async (label: string, id: string) => {
+        const before = calls.length
+        await pick(label)
+        await expect(f.locator('[data-tile-id="art"] w-artifact')).toHaveAttribute('id', id, { timeout: 20_000 })
+        await expect(art).toHaveAttribute('data-frame-status', 'ready')
+        await page.waitForTimeout(1500)
+        // Only the input whose argument uses the parameter reads again, once. The picker's options, the kpi and the artifact read nothing.
+        expect(counts(calls.slice(before))).toEqual({ sm: 1 })
+      }
+      await choose('Demo', 'app.views:iframe-demo')
+      await choose('Themed', 'app.views:iframe-demo-themed')
+    }
+    finally {
+      await remove(page, BOUND_PAGE.id)
     }
   })
 })
