@@ -149,6 +149,33 @@ local function slow(input)
     }
 end
 
+-- A slow source (RC2-06) for a point with a mapper and for an open point: it works like `slow`, and when the
+-- work is ready it gives the rows of three LLM calls. The field `secret` is not in the open point's rows_schema.
+local function slow_rows(input)
+    local now = clock.now()
+    if type(input) == "table" and input.operation ~= nil then
+        ran("slow_rows_follow")
+        local ready_at = tonumber(string.match(input.operation, "^slowrows%-(%d+)%-"))
+        if ready_at == nil then
+            return nil, "unknown work"
+        end
+        if now >= ready_at then
+            return {
+                { day = "2026-11-17", model_id = "a", prompt_tokens = 10, completion_tokens = 5, secret = "s1" },
+                { day = "2026-11-17", model_id = "b", prompt_tokens = 20, completion_tokens = 10, secret = "s2" },
+                { day = "2026-11-18", model_id = "a", prompt_tokens = 30, completion_tokens = 15, secret = "s3" },
+            }
+        end
+        return { computing = true, operation = input.operation, retry_after_ms = 1000 }
+    end
+    ran("slow_rows_start")
+    return {
+        computing = true,
+        operation = string.format("slowrows-%d-%d", now + SLOW_SECONDS, math.random(100000, 999999)),
+        retry_after_ms = 1000,
+    }
+end
+
 -- The same for an action.
 local function slow_action(input)
     local now = clock.now()
@@ -284,7 +311,7 @@ end
 return {
     numbers = numbers, series = series, options = options, noop = noop,
     fails = fails, wrong_shape = wrong_shape, bad_cell = bad_cell, empty_series = empty_series,
-    echo = echo, sleepy = sleepy, slow = slow, slow_action = slow_action,
+    echo = echo, sleepy = sleepy, slow = slow, slow_rows = slow_rows, slow_action = slow_action,
     values = values, null_strict = null_strict, record_nulls = record_nulls, schema_nulls = schema_nulls,
     source_rows = source_rows, refuse = refuse, mapper_modes = mapper_modes,
 }
