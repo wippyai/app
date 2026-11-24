@@ -103,6 +103,16 @@ entries:
       - name: gc_interval
         value: 300s
 
+  # Serves GET /api/v1/agents/details and GET /api/v1/tools/by-name for the
+  # Web Host chat (start prompts and tool titles).
+  - name: session_util
+    kind: ns.dependency
+    component: wippy/session-util
+    version: '>=v0.0.1'
+    parameters:
+      - name: api_router
+        value: app:api
+
   - name: terminal
     kind: ns.dependency
     component: wippy/terminal
