@@ -178,33 +178,3 @@ entries:
       test: wippy.test:test
       generator: app.attention_e2e:generate
     method: run
-
-  - name: provider_test_runner_policy
-    kind: security.policy
-    meta:
-      comment: Allows the local provider test runner to call only its owning suite
-    policy:
-      resources:
-        - app.attention_e2e:generate_test
-      actions:
-        - funcs.call
-      effect: allow
-
-  - name: provider_test_runner
-    kind: process.lua
-    meta:
-      comment: Runs the deterministic Attention provider suite through wippy test
-      command:
-        name: attention-provider-test
-        short: Run Attention provider tests
-        use_case: test
-        security:
-          actor:
-            id: app.attention_e2e:provider_test_runner
-          policies:
-            - app.attention_e2e:provider_test_runner_policy
-    source: file://provider_test_runner.lua
-    method: main
-    modules:
-      - funcs
-      - io
