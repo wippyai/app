@@ -713,7 +713,10 @@ test.describe('refresh controls (RC2-07)', () => {
     await openInShell(viewer, '/reads/toggle')
     const f = pageFrame(viewer, 'reads_toggle')
     await expect(f.locator('[data-tile-id="ok_kpi"]')).toContainText('42', { timeout: 20_000 })
-    await expect(f.locator('[data-tile-id="slow_kpi"]')).toContainText('7', { timeout: 30_000 })
+    // Wait for the first result of slow itself: the frame is ready, and the number is the result. The text "7" alone
+    // is not enough, because the footer of a computing tile can hold a time that contains a 7.
+    await expect(f.locator('[data-tile-id="slow_kpi"]')).toHaveAttribute('data-frame-status', 'ready', { timeout: 30_000 })
+    await expect(f.locator('[data-tile-id="slow_kpi"]')).toContainText('7')
     await expect(f.locator('[data-tile-id="users_tile"] tr[data-user-id]').first()).toBeVisible({ timeout: 20_000 })
 
     // The controls need no right: the regular user sees one for each tile and one for the page, named after the tile.
@@ -737,6 +740,14 @@ test.describe('refresh controls (RC2-07)', () => {
     // The page refresh reads each input once, users included. users_tile (demo.user_status) is a plugin tile that
     // takes the tile helper from the module build: this needs the demo's plugin tiles rebuilt against the new helper
     // (the integration step does that), else the tile ignores the `refresh` counter and reads nothing.
+    // Nothing may be computing or in flight when the page refresh is clicked: a refresh of an input that still
+    // computes follows its run with the token and starts no new one (that case is the next test). So every tile
+    // is ready, and every input has an answer that ended its run, before the click.
+    for (const id of ['ok_kpi', 'slow_kpi', 'users_tile'])
+      await expect(f.locator(`[data-tile-id="${id}"]`)).toHaveAttribute('data-frame-status', 'ready', { timeout: 30_000 })
+    for (const point of ['ok', 'slow', 'users'])
+      expect(lastReadAnswered(reads, point), `the newest read of ${point} is answered`).toBe(true)
+    await viewer.waitForTimeout(1500)
     from = reads.length
     await f.getByRole('button', { name: 'Refresh page' }).click()
     await expect.poll(() => startedSince(reads, from), { timeout: 10_000 }).toEqual(['ok', 'slow', 'users'])
@@ -819,23 +830,31 @@ test.describe('refresh controls (RC2-07)', () => {
     const ok = f.locator('[data-tile-id="ok_kpi"]')
     await expect(ok).toContainText('42', { timeout: 20_000 })
 
-    let refused = 0
-    viewer.on('response', (r) => {
-      if (r.url().includes('/pages/reads_toggle/points/ok') && r.status() === 429)
-        refused += 1
-    })
     const refresh = f.getByRole('button', { name: 'Refresh Fixed number' })
-    // Refresh faster than the limit allows until the engine refuses a read, then a few times more.
-    for (let i = 0; i < 200 && refused === 0; i++)
+    // Nothing else reads ok: the point has no timed refresh and no live signal, so only this control does.
+    const newestOk = () => reads.filter(r => r.point === 'ok').slice(-1)[0]
+    // Refresh faster than the limit allows (10 reads a second, burst 30) until the engine refuses a read. Clicks
+    // come in a burst: each one replaces the read before it, which is aborted.
+    for (let i = 0; i < 200 && !reads.some(r => r.point === 'ok' && r.status === 429); i++)
       await refresh.click()
-    expect(refused).toBeGreaterThan(0)
-    for (let i = 0; i < 5; i++)
+    expect(reads.some(r => r.point === 'ok' && r.status === 429)).toBe(true)
+    // Stop the burst and look at the newest read. A click that came after the refused answer may have been
+    // allowed and replaced the error. Then click again, one click at a time and only after the newest read has an
+    // answer (the bucket is empty, so the read is refused), until the newest read is the refused one.
+    for (let i = 0; i < 20; i++) {
+      await expect.poll(() => newestOk().status, { timeout: 10_000 }).not.toBeNull()
+      if (newestOk().status === 429)
+        break
       await refresh.click()
+    }
+    expect(newestOk().status).toBe(429)
 
-    // The refused read is the tile state error with the code rate_limited. The number from before stays on screen.
-    await expect.poll(() => ok.getAttribute('data-frame-error-code'), { timeout: 10_000 }).toBe('rate_limited')
+    // No click and no other read of ok follows. The refused read is the tile state error with the code
+    // rate_limited, and the number from before stays on screen.
+    await expect(ok).toHaveAttribute('data-frame-error-code', 'rate_limited', { timeout: 10_000 })
     await expect(ok).toHaveAttribute('data-frame-status', 'error')
     await expect(ok).toContainText('42')
+    expect(newestOk().status).toBe(429)
 
     // After the bucket refills, the same control reads again and the tile is ready.
     await viewer.waitForTimeout(4000)
