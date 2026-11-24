@@ -1,4 +1,4 @@
-.PHONY: build clean-build dev run run-dev run-e2e prepare-e2e lint verify test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-session-forms-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist tile-helper test-pkg-app-nav build-wc-run-timeline build-wc-user-status build-wc-fixture-tiles
+.PHONY: build clean-build dev run run-dev run-e2e prepare-e2e lint lint-lua verify test-attention test-attention-touch test-attention-helpers build-app-main build-app-iframe-demo build-app-session-forms-demo build-wc-reaction-bar build-wc-websocket-log build-wc-chart-circle build-wc-mermaid build-wc-markdown build-wc-model-gallery build-wc-counter-persist tile-helper test-pkg-app-nav build-wc-run-timeline build-wc-user-status build-wc-fixture-tiles
 
 # Use NPM_INSTALL=true after installing local release packages for a smoke build.
 NPM_INSTALL ?= npm install
@@ -121,14 +121,17 @@ lint: tile-helper
 	cd frontend/web-components/fixture-tiles && npm run lint
 
 # Frontend build and lint for every app and web component, then the Lua lint for
-# this app's own namespaces (`app`, `app.*`). The CI lint stage covers the whole
+# this app's own namespaces (`app`, `app.*`) and the demo seed. The CI lint stage covers the whole
 # workspace, which also reports errors in the vendored keeper module that this
 # repo does not own. Needs `wippy` on PATH; make.ps1 has the Windows fallback.
 # The second wippy lint run selects the fixtures profile, because .wippy.yaml
 # removes that namespace from a release.
 verify: build lint
-	wippy lint --level error --ns 'app,app.*'
-	wippy lint --level error --ns 'app,app.*' --profile session-forms-fixtures
+	$(MAKE) lint-lua
+
+lint-lua:
+	$(WIPPY) lint --level error --ns 'app,app.*,demo.seed' $(WIPPY_ARGS)
+	$(WIPPY) lint --level error --ns 'app,app.*,demo.seed' $(WIPPY_ARGS) --profile session-forms-fixtures
 
 clean-build: tile-helper
 	cd frontend/applications/main && rm -rf node_modules package-lock.json && npm install && npm run build -- --outDir ../../../static/app/main --emptyOutDir
