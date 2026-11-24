@@ -113,6 +113,10 @@ The tracked `wippy.lock` pins hub versions only, including `wippy/dashboards` 0.
 
 ## How to run the POC
 
+The default Playwright config and `playwright.regression.config.ts` run `e2e/global-setup.ts` before any spec. It signs in with the admin environment variables used by `loginAsAdmin`, then calls `POST /api/v1/demo/seed-users` and `POST /api/v1/demo/seed-history`. Migrations must have finished first. The history endpoint adds only missing model/day usage, linked session activity, and a completed workflow with one node on SQLite or PostgreSQL. Existing fixture history is kept, and repeated calls add no rows. The regression keeps its spec list and zero retries.
+
+Run `make.bat lint-lua` on Windows or `make lint-lua` elsewhere to check the app and seed Lua in both profiles. The request watch still reports API aborts as failures. The `/api/public/pages/list` abort in the tall-page test has no proved cause in the test or watch code, so its rule is unchanged.
+
 1. The app reads `.env` and keeps its data in `.wippy/app.db`. The local checkout listens on `127.0.0.1:8086`, because its `.env` sets that port.
 2. After a `wippy.lock` change, run `wippy install`.
 3. Build the front end: `make.bat build` on Windows, `make build` elsewhere. To build one package, use the `build-wc-<name>` or `build-app-<name>` target. The two demo tiles take the tile helper from the installed `wippy/dashboards` module, so the build needs the Wippy CLI (`WIPPY`) and step 2 first.

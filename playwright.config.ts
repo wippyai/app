@@ -20,6 +20,7 @@ const WIPPY_URL = process.env.WIPPY_URL || 'http://localhost:8086'
 
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './e2e/global-setup.ts',
   /*
    * `managed-layout.spec.ts` needs the app launched with
    * `-o wippy.facade:fe_mode:default=managed`, and managed and compat

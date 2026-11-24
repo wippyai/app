@@ -222,8 +222,8 @@ function Invoke-WippyLint {
     $wippyBin = Resolve-WippyBinary
     # Two runs, as in the Makefile. See the comment there.
     foreach ($profileArgs in @(@(), @('--profile', 'session-forms-fixtures'))) {
-        Write-Host "==> $wippyBin lint --level error --ns app,app.* $profileArgs" -ForegroundColor Cyan
-        & $wippyBin lint --level error --ns 'app,app.*' @profileArgs
+        Write-Host "==> $wippyBin lint --level error --ns app,app.*,demo.seed $profileArgs" -ForegroundColor Cyan
+        & $wippyBin lint --level error --ns 'app,app.*,demo.seed' @RuntimeArguments @profileArgs
         if ($LASTEXITCODE -ne 0) { throw "wippy lint failed (exit $LASTEXITCODE)" }
     }
 }
@@ -236,10 +236,11 @@ function Show-Help {
     Write-Host "  build-app-<name>   Build a single app (e.g. build-app-main)"
     Write-Host "  build-wc-<name>    Build a single web component"
     Write-Host "  lint               npm run lint across every package"
+    Write-Host "  lint-lua           Lua lint for app, app.* and demo.seed in both profiles"
     Write-Host "  tile-helper        Materialize the wippy/dashboards tile helper into the demo tiles"
     Write-Host "                     (-DashboardsWapp <file> or -DashboardsDir <checkout>)"
     Write-Host "  test-pkg-<name>    Typecheck and unit-test a package (e.g. test-pkg-app-nav)"
-    Write-Host "  verify             build + lint + wippy lint --level error for app, app.*"
+    Write-Host "  verify             build + lint + lint-lua"
     Write-Host "  test-attention     Run Attention acceptance in Chromium"
     Write-Host "  test-attention-touch Run Attention touch acceptance in Chromium"
     Write-Host "  test-attention-helpers Run Attention codec and helper checks"
@@ -293,6 +294,10 @@ try {
         '^lint$' {
             Invoke-TileHelper
             foreach ($d in $lintDirs) { Invoke-Lint -Dir $d }
+            break
+        }
+        '^lint-lua$' {
+            Invoke-WippyLint
             break
         }
         '^tile-helper$' {

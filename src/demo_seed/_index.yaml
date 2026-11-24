@@ -53,3 +53,34 @@ entries:
     method: POST
     func: seed_users
     path: /demo/seed-users
+
+  - name: deny_seed_history
+    kind: security.policy
+    meta:
+      comment: app.security:user may not seed dashboard history
+    groups:
+      - app.security:user
+    policy:
+      resources: demo.seed:history
+      actions: demo.seed_history
+      effect: deny
+
+  - name: seed_history
+    kind: function.lua
+    source: file://seed_history.lua
+    method: handler
+    modules:
+      - http
+      - security
+    imports:
+      database: wippy.dashboards:database
+    pool:
+      size: 1
+
+  - name: seed_history.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: seed_history
+    path: /demo/seed-history
