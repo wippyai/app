@@ -8,10 +8,15 @@ type AnswersBlock = {
     answers: {[string]: any},
     order: {string},
     late: boolean,
+    -- The record's form_version: 2 when the form has a field that is not a choice.
+    version: number,
 }
 
 local FIXTURE_PROVIDER = "app.session_forms_demo:provider"
+-- ask_user takes choice questions only, and ask_user_fields also takes the
+-- standard fields. Each tool comes with its own trait.
 local ASK_USER_TOOL = "wippy.session.forms:ask_user_tool"
+local ASK_USER_FIELDS_TOOL = "wippy.session.forms:ask_user_fields_tool"
 local READ_FORM_TOOL = "wippy.session.forms:read_form_tool"
 local READ_FORM_TOOL_NAME = "read_form"
 -- The fixture tools in jobs.lua. Their names are the llm_alias values in _index.yaml.
@@ -20,13 +25,13 @@ local QUICK_JOB_TOOL = "app.session_forms_demo:quick_job_tool"
 local NOTE_TOOL = "app.session_forms_demo:note_tool"
 local SLOW_JOB_TOOL_NAME = "slow_job"
 local QUICK_JOB_TOOL_NAME = "quick_job"
-local NOTE_TOOL_NAME = "make_note"
 -- Must match the element that wippy/session's forms/answer_text.lua writes,
 -- with the record in a single-quoted attribute.
 local ANSWERS_OPEN = "<wippy-form-answers record='"
 local ANSWERS_CLOSE = "</wippy-form-answers>"
 local READ_FORM_PREFIX = "read form"
 local NO_FORMS_HERE_TEXT = "I can't create forms here."
+local NO_FIELD_FORMS_TEXT = "I can't create forms with these fields here."
 local NO_JOBS_HERE_TEXT = "I can't run jobs here."
 local PROPOSE_ACTION_TEXT = "I plan to book a courier pickup. I will only do it after you confirm."
 local WORK_SLOWLY_TEXT = "Done working."
@@ -40,7 +45,7 @@ local LATE_ANSWER_TEXT = "This answer arrived after the conversation moved on. P
 local CHECKPOINT_SUMMARY_TEXT = "Summary: deterministic Session Forms fixture checkpoint. Recent activity "
     .. "has been condensed for this test session; consult the session's own form and message records for "
     .. "exact details."
-local READ_FORM_RESULT_MAX_CHARS = 1000
+local TOOL_RESULT_MAX_CHARS = 1000
 local CHECKPOINT_TOKENS_TRIGGER = "checkpoint now"
 local LIST_FORMS_TRIGGER = "list forms"
 -- Must match the opening of HEADING in wippy/session's forms/form_index.lua.
@@ -147,6 +152,159 @@ local ASK_USER_MANY_ARGUMENTS = {
                 { value = "email", label = "Email" },
                 { value = "phone", label = "Phone" },
             },
+        },
+    },
+}
+
+-- Version 2 fixture form for "ask me delivery": one field of each standard
+-- type, each with the keys that type takes:
+--   text      min_length / max_length / pattern (full match, RE2 subset)
+--   email     no extra keys
+--   date      min / max, fixed ISO dates (never relative: a model, and this
+--             fixture, do not know today's date)
+--   number    min / max / step / integer, plus `default` (prefill only)
+--   textarea  max_length
+--   checkbox  required means the box must be ticked
+-- Each field id is also the key printed by the acknowledgement reply
+-- (fields_reply below), so a test can compare saved values.
+local ASK_USER_DELIVERY_ARGUMENTS = {
+    title = "Delivery details",
+    answered_message = "Sent my delivery details.",
+    fields = {
+        {
+            id = "full_name",
+            type = "text",
+            label = "Full name",
+            required = true,
+            max_length = 100,
+        },
+        {
+            id = "email",
+            type = "email",
+            label = "Email address",
+            required = true,
+        },
+        {
+            id = "phone",
+            type = "text",
+            label = "Phone number",
+            -- No backslash: models often mis-escape `\+` in JSON, so the plus is
+            -- a one-character class.
+            pattern = "[+]?[0-9 ]{6,20}",
+        },
+        {
+            id = "delivery_date",
+            type = "date",
+            label = "Delivery date",
+            required = true,
+            min = "2026-01-01",
+            max = "2027-12-31",
+        },
+        {
+            id = "parcel_count",
+            type = "number",
+            label = "Number of parcels",
+            required = true,
+            integer = true,
+            min = 1,
+            max = 20,
+            default = 1,
+        },
+        {
+            id = "notes",
+            type = "textarea",
+            label = "Delivery notes",
+            max_length = 1000,
+        },
+        {
+            id = "consent",
+            type = "checkbox",
+            label = "I agree to be contacted about this delivery",
+            required = true,
+        },
+    },
+}
+
+-- Version 2 fixture form for "ask me preferences": mixes one required
+-- single-choice question (a version 1 field) with three optional checkboxes
+-- and an optional short text note (version 2 fields), so the form is rendered
+-- by the fields form and an optional checkbox left unticked is a saved
+-- `false`, not a skipped question.
+local ASK_USER_PREFERENCES_ARGUMENTS = {
+    title = "Preferences",
+    answered_message = "Answered questions about my delivery preferences.",
+    fields = {
+        {
+            id = "delivery",
+            type = "choice",
+            label = "How should the parcel be delivered?",
+            required = true,
+            options = { "Courier", "Pickup point", "Locker" },
+        },
+        {
+            id = "sms_updates",
+            type = "checkbox",
+            label = "Send me SMS updates",
+        },
+        {
+            id = "email_updates",
+            type = "checkbox",
+            label = "Send me email updates",
+        },
+        {
+            id = "leave_at_door",
+            type = "checkbox",
+            label = "Leave the parcel at the door",
+        },
+        {
+            id = "note",
+            type = "text",
+            label = "Anything else we should know?",
+            max_length = 200,
+        },
+    },
+}
+
+-- Version 2 fixture form for "ask me limits": the rules the other forms do not
+-- reach. A floating `step` with bounds, the longest text cap (2000) and the
+-- longest textarea cap (8000), and an optional email and an optional date
+-- that a test can leave blank. The number is required and has no `default`,
+-- so a test fills it; the optional fields are left out of the answer when
+-- blank (see fields_reply).
+local ASK_USER_LIMITS_ARGUMENTS = {
+    title = "Limits",
+    answered_message = "Sent my limits.",
+    fields = {
+        {
+            id = "quantity",
+            type = "number",
+            label = "Quantity",
+            required = true,
+            min = 0,
+            max = 10,
+            step = 0.25,
+        },
+        {
+            id = "summary",
+            type = "text",
+            label = "Summary",
+            max_length = 2000,
+        },
+        {
+            id = "details",
+            type = "textarea",
+            label = "Details",
+            max_length = 8000,
+        },
+        {
+            id = "backup_email",
+            type = "email",
+            label = "Backup email",
+        },
+        {
+            id = "reminder_date",
+            type = "date",
+            label = "Reminder date",
         },
     },
 }
@@ -298,19 +456,15 @@ local function is_checkpoint_summary_request(messages)
     return false
 end
 
+local function result_tool_name(message)
+    return message.name or message.tool_name or message.function_name
+end
+
 local function is_read_form_result(message)
     if type(message) ~= "table" or message.role ~= "function_result" then
         return false
     end
-    local name = message.name or message.tool_name or message.function_name
-    return name == READ_FORM_TOOL_NAME
-end
-
-local function function_result_name(message)
-    if type(message) ~= "table" or message.role ~= "function_result" then
-        return nil
-    end
-    return message.name or message.tool_name or message.function_name
+    return result_tool_name(message) == READ_FORM_TOOL_NAME
 end
 
 local JOB_PHRASES = { PHRASE_SLOW_TOOL, PHRASE_FAIL_AFTER_TEXT, PHRASE_LIMIT_AFTER_TEXT, PHRASE_ARTIFACT_AND_ASK }
@@ -325,10 +479,10 @@ local function job_phrase(lower: string): string?
     return nil
 end
 
-local function read_form_result_text(message)
+local function tool_result_text(message)
     local text = table.concat(content_texts(message.content), "\n")
-    if #text > READ_FORM_RESULT_MAX_CHARS then
-        text = string.sub(text, 1, READ_FORM_RESULT_MAX_CHARS)
+    if #text > TOOL_RESULT_MAX_CHARS then
+        text = string.sub(text, 1, TOOL_RESULT_MAX_CHARS)
     end
     return text
 end
@@ -346,10 +500,14 @@ local function read_form_id(user_text)
 end
 
 -- One answer from the server's record, reduced to what the fixture echoes:
--- the option value, "value (note: …)", {other = …}, or a list of those; nil
--- for a question left unanswered.
+-- a scalar answer of a text, textarea, email, date, number or checkbox field
+-- (string, number or boolean, passed through unchanged: `false` is a real
+-- answer), or for a choice question the option value, "value (note: …)",
+-- {other = …}, or a list of those; nil for a question left unanswered.
 local function simple_value(answer: any): any
-    if type(answer) ~= "table" then return nil end
+    local kind = type(answer)
+    if kind == "string" or kind == "number" or kind == "boolean" then return answer end
+    if kind ~= "table" then return nil end
     if answer.other ~= nil then return { other = answer.other } end
     if answer.value ~= nil then
         return type(answer.note) == "string" and (answer.value .. " (note: " .. answer.note .. ")") or answer.value
@@ -372,10 +530,15 @@ local function parse_answers_block(json_text: string): (AnswersBlock?, string?)
     for id in string.gmatch(json_text, '"([%w_]+)":{"question"') do table.insert(order, id) end
     local answers: {[string]: any} = {}
     for id, entry in pairs(decoded.answers) do
-        local value = type(entry) == "table" and simple_value(entry.answer) or nil
+        -- Not `cond and simple_value(...) or nil`: that turns a saved `false`
+        -- (an unticked checkbox) into nil, an unanswered question.
+        local value = nil
+        if type(entry) == "table" then value = simple_value(entry.answer) end
         if value ~= nil then answers[id] = value end
     end
-    return { answers = answers, order = order, late = decoded.late == true }, nil
+    local version = 1
+    if type(decoded.form_version) == "number" then version = decoded.form_version end
+    return { answers = answers, order = order, late = decoded.late == true, version = version }, nil
 end
 
 local function answers_key_count(answers: {[string]: any}): number
@@ -384,6 +547,27 @@ local function answers_key_count(answers: {[string]: any}): number
         count = count + 1
     end
     return count
+end
+
+-- One answered value as the fixture prints it: a string verbatim, a number
+-- after JSON decoding (a whole number as its digits, any other number as the
+-- JSON encoder writes it), a boolean as yes/no, an Other answer as its text,
+-- a list as its items joined by ", ".
+local function value_text(value: any): string
+    local kind = type(value)
+    if kind == "string" then return value end
+    if kind == "boolean" then return value and "yes" or "no" end
+    if kind == "number" then
+        if value == math.floor(value) and math.abs(value) < 1e15 then
+            return string.format("%d", value)
+        end
+        return tostring((json.encode(value)))
+    end
+    if kind ~= "table" then return tostring(value) end
+    if type(value.other) == "string" then return value.other end
+    local parts: {string} = {}
+    for _, part in ipairs(value) do table.insert(parts, value_text(part)) end
+    return table.concat(parts, ", ")
 end
 
 -- The first answered question's value as text, in the server's order.
@@ -395,14 +579,25 @@ local function first_answer_value(parsed: AnswersBlock): (string?, string?)
     if value == nil then
         return nil, "SESSION_FORMS_FIXTURE_ANSWERS_EMPTY"
     end
-    local function item_text(item: any): string
-        if type(item) ~= "table" then return tostring(item) end
-        if type(item.other) == "string" then return item.other end
-        local parts = {}
-        for _, part in ipairs(item) do table.insert(parts, item_text(part)) end
-        return table.concat(parts, ", ")
+    return value_text(value)
+end
+
+-- Reply for a version 2 form: every answered field as `<id>=<value>` in the
+-- server's order, separated by "; ", with the values as value_text prints
+-- them. Fields left unanswered do not appear, so a skipped optional note is
+-- absent while an unticked checkbox reads `no`.
+local function fields_reply(parsed: AnswersBlock): string
+    local parts: {string} = {}
+    for _, id in ipairs(parsed.order) do
+        local value = parsed.answers[id]
+        if value ~= nil then
+            table.insert(parts, id .. "=" .. value_text(value))
+        end
     end
-    return item_text(value)
+    if #parts == 0 then
+        return "Thanks, noted: no answers."
+    end
+    return "Thanks, noted: " .. table.concat(parts, "; ")
 end
 
 -- Compact `{"id":value,...}` of the answered questions in the server's order
@@ -466,14 +661,19 @@ local function handler(contract_args)
     for index = #messages, user_index + 1, -1 do
         local message = messages[index]
         if is_read_form_result(message) then
-            return finish("Form record: " .. read_form_result_text(message))
+            return finish("Form record: " .. tool_result_text(message))
         end
-        local name = function_result_name(message)
-        if name == SLOW_JOB_TOOL_NAME or name == QUICK_JOB_TOOL_NAME then
-            -- The newest job result decides the reply.
-            job_result_name = job_result_name or name
-        elseif type(message) == "table" and message.role == "function_result" then
-            return finish("Unexpected tool result: " .. tostring(message.name))
+        if type(message) == "table" and message.role == "function_result" then
+            local name = result_tool_name(message)
+            if name == SLOW_JOB_TOOL_NAME or name == QUICK_JOB_TOOL_NAME then
+                -- The newest job result decides the reply.
+                job_result_name = job_result_name or name
+            else
+                -- Any other result, such as a form the server refused, is
+                -- quoted on one line, so a test can read what the agent was told.
+                local text = (string.gsub(tool_result_text(message), "%s*\n%s*", " "))
+                return finish("Tool result from " .. tostring(name) .. ": " .. text)
+            end
         end
     end
 
@@ -492,10 +692,12 @@ local function handler(contract_args)
         return finish(content, tool_calls, tokens)
     end
 
-    local function ask_form(arguments)
-        local call = tool_call(messages, contract_args.tools, ASK_USER_TOOL, arguments)
+    -- Asks for a form through the given tool, or replies with missing_text
+    -- when the agent does not offer that tool.
+    local function ask_form(tool_id: string, arguments, missing_text: string)
+        local call = tool_call(messages, contract_args.tools, tool_id, arguments)
         if not call then
-            return reply(NO_FORMS_HERE_TEXT)
+            return reply(missing_text)
         end
         return reply("", { call })
     end
@@ -552,7 +754,13 @@ local function handler(contract_args)
         if parsed.late then
             return reply(LATE_ANSWER_TEXT)
         end
-        -- The other phrases script the model round the same way when typed or
+        -- A version 2 form echoes its saved values, so text typed into a field
+        -- never starts a job phrase. "work slowly" is the exception: the scan
+        -- above reads the whole record, so it delays the reply here as well.
+        if parsed.version >= 2 then
+            return reply(fields_reply(parsed))
+        end
+        -- The job phrases script the model round the same way when typed or
         -- sent as an Other text. A late answer keeps its late reply.
         local answer_phrase = job_phrase(string.lower(record_json))
         if answer_phrase then
@@ -569,22 +777,43 @@ local function handler(contract_args)
         return reply("Thanks, noted: " .. answers_json)
     end
 
+    -- The job phrases share no text with the form phrases below.
     local typed_phrase = job_phrase(lower)
     if typed_phrase then
         return start_job(typed_phrase)
     end
 
+    -- A longer phrase comes before any shorter phrase that it contains.
+    -- "ask me delivery via ask_user" sends the delivery form to ask_user,
+    -- which takes choice questions only, so the server refuses it with
+    -- unsupported_type and the result reply above quotes the refusal.
+    if string.find(lower, "ask me delivery via ask_user", 1, true) then
+        return ask_form(ASK_USER_TOOL, ASK_USER_DELIVERY_ARGUMENTS, NO_FORMS_HERE_TEXT)
+    end
+
+    if string.find(lower, "ask me delivery", 1, true) then
+        return ask_form(ASK_USER_FIELDS_TOOL, ASK_USER_DELIVERY_ARGUMENTS, NO_FIELD_FORMS_TEXT)
+    end
+
+    if string.find(lower, "ask me preferences", 1, true) then
+        return ask_form(ASK_USER_FIELDS_TOOL, ASK_USER_PREFERENCES_ARGUMENTS, NO_FIELD_FORMS_TEXT)
+    end
+
+    if string.find(lower, "ask me limits", 1, true) then
+        return ask_form(ASK_USER_FIELDS_TOOL, ASK_USER_LIMITS_ARGUMENTS, NO_FIELD_FORMS_TEXT)
+    end
+
     if string.find(lower, "ask me many", 1, true) then
-        return ask_form(ASK_USER_MANY_ARGUMENTS)
+        return ask_form(ASK_USER_TOOL, ASK_USER_MANY_ARGUMENTS, NO_FORMS_HERE_TEXT)
     end
 
     -- Before "ask me", which this phrase also contains.
     if string.find(lower, "ask me several", 1, true) then
-        return ask_form(ASK_USER_SEVERAL_ARGUMENTS)
+        return ask_form(ASK_USER_TOOL, ASK_USER_SEVERAL_ARGUMENTS, NO_FORMS_HERE_TEXT)
     end
 
     if string.find(lower, "ask me", 1, true) then
-        return ask_form(ASK_USER_ARGUMENTS)
+        return ask_form(ASK_USER_TOOL, ASK_USER_ARGUMENTS, NO_FORMS_HERE_TEXT)
     end
 
     if string.find(lower, "propose action", 1, true) then
