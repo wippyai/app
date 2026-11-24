@@ -194,15 +194,20 @@ answer from the newest user text. A message of the form `ATTENTION_READ <mode>
 history, and `forced-cursor` emits a call the agent was never offered. The text
 `ATTENTION_E2E_FORCE_PROVIDER_ERROR` makes the provider fail the turn.
 
-The provider has a committed `wippy test` entry point. Run it from the prepared
-test app against its lock while unrelated application services stay inactive:
+The provider has a committed `wippy test` suite, `app.attention_e2e:generate_test`.
+Run it from the prepared test app against its lock while unrelated application
+services stay inactive. The filter after `--` selects only this suite, because
+the users suite needs the database that this command keeps stopped:
 
 ```powershell
-C:/Projects/app-template-raw/wippy.exe test -c -o app:gateway:lifecycle.auto_start=false -o app:db:lifecycle.auto_start=false -o wippy.bootloader:bootloader.service:lifecycle.auto_start=false -o userspace.uploads:recover_pending.service:lifecycle.auto_start=false -o userspace.user.security:token_storage:lifecycle.auto_start=false
+$env:WIPPY_TEST_REQUIRE_CASES = '1'
+wippy test -c -o app:gateway:lifecycle.auto_start=false -o app:db:lifecycle.auto_start=false -o wippy.bootloader:bootloader.service:lifecycle.auto_start=false -o userspace.uploads:recover_pending.service:lifecycle.auto_start=false -o userspace.user.security:token_storage:lifecycle.auto_start=false -- app.attention_e2e
 ```
 
-The command exits nonzero when any provider case fails. It does not update the
-lock or install a replacement test framework.
+This form needs Wippy runtime `0.3.63a` or later. Older runtimes take the runner
+name before the filter: `wippy test ... test -- app.attention_e2e`. The command
+exits nonzero when any provider case fails or no case runs. It does not update
+the lock or install a replacement test framework.
 
 The expiry test needs a short lifetime cell. Set
 `SESSION_UI_ACTION_TTL_SECONDS=5` in the runtime process and

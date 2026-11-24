@@ -22,12 +22,14 @@ Lint:
 Test:
   stage: test
   image: ubuntu:22.04
+  variables:
+    WIPPY_TEST_REQUIRE_CASES: "1"
   before_script:
     - apt-get update -qq && apt-get install -y -qq curl > /dev/null
     - curl -fsSL https://hub.wippy.ai/install.sh -o /tmp/wippy-install.sh && . /tmp/wippy-install.sh
   script:
     - wippy install
-    - wippy test users-test
+    - wippy test
   tags:
     - hetzner
 

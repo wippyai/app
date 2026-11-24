@@ -56,10 +56,12 @@ function panelDoc(page: Page, panelId: string) {
   return page.evaluate((id) => {
     const frame = document
       .querySelector(`[data-wippy-panel-mount="${id}"] iframe`) as HTMLIFrameElement | null
-    const doc = frame?.contentDocument
-    if (!doc)
+    // A srcdoc frame has a document before it has a body. Return null then,
+    // so `expect.poll` asks again instead of failing on a thrown TypeError.
+    const body = frame?.contentDocument?.body
+    if (!body)
       return null
-    return { children: doc.body.children.length, text: (doc.body.textContent || '').trim() }
+    return { children: body.children.length, text: (body.textContent || '').trim() }
   }, panelId)
 }
 
@@ -70,7 +72,10 @@ test.describe('managed layout — real facade flow', () => {
     // would otherwise green-pass the compat chrome and report a parity
     // that was never tested.
     await bootManaged(page)
-    await expect(page.locator('.wippy-host-app')).toHaveCount(0)
+    // Since Web Host 1.0.69 the managed shell also carries `.wippy-host-app`
+    // (the scope for host-only CSS), so only a root without the managed
+    // shell class is the compat chrome.
+    await expect(page.locator('.wippy-host-app:not(.managed-layout-shell)')).toHaveCount(0)
   })
 
   test('the flat JSON string reached the host as a parsed declaration', async ({ page }) => {
