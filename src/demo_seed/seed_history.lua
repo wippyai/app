@@ -10,6 +10,19 @@ end
 
 local function statements(user_id)
     return {
+        -- Add another day before the selected-day rows, only when usage holds no rows but this seed's own,
+        -- so a point that ignores the selected day shows a different total. Real history is never touched.
+        {
+            table = "token_usage",
+            text = [[
+                INSERT INTO token_usage
+                    (usage_id, user_id, model_id, prompt_tokens, completion_tokens, timestamp)
+                SELECT 'demo.dashboard.sonnet.2026-08-30', ?, 'claude-sonnet-4-6', 60, 40, '2026-08-30T10:00:00Z'
+                WHERE NOT EXISTS (SELECT 1 FROM token_usage WHERE usage_id NOT LIKE 'demo.dashboard.%')
+                ON CONFLICT (usage_id) DO NOTHING
+            ]],
+            params = { user_id },
+        },
         -- dashboards.spec.ts selects both models and clicks this day. Keep existing positive calls.
         {
             table = "token_usage",
