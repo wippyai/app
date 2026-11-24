@@ -1,14 +1,15 @@
 import type { Page } from '@playwright/test'
+import rc2Fixture from './fixtures/rc2-eval-pages.json'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, openInShell } from './helpers/page-watch'
 import { publishPage } from './dashboards-wp5.support'
+import { ProviderStopped, turnFailure } from './dashboards-run-failure'
 import type { CatalogueDoc, Envelope, PageProps } from './dashboards-agent.support'
 import {
   PAGE_LINK,
   SPEND_CAP_USD,
   SpendCapReached,
-  assertBudget,
   boardFrame,
   catalogue,
   chartProblem,
@@ -35,11 +36,9 @@ import {
 } from './dashboards-agent.support'
 
 /**
- * RC1-01 and decision A: the evaluation of the chat agent. Six written requests on the demo's data
- * (the "Evaluation request set" of docs/rc1-acceptance.md), each run three times (18 runs) with the
- * demo chat agent ("Ask Wippy", deepseek-v4.1-flash). The spend, together with the Researcher test
- * of dashboards-discovery.spec.ts, is capped at $5 (SPEND_CAP_USD), counted from the usage table of
- * the app; the runs stop when the cap is reached, and a run that did not happen counts as not passed.
+ * RC2-04 evaluates four changes and keeps RC1's six build requests. Each request runs three times.
+ * Chat, evaluation and the Researcher campaign share a $10 cap and the usage-table start time.
+ * A cap or provider stop is no verdict. Nine of ten requests must pass at least two runs.
  *
  * A run passes when it meets the RC1-01 check and the pages contain the expected content:
  *   - every page it asked for exists, and its link opens the page (the board draws every tile);
@@ -51,8 +50,7 @@ import {
  *     reference page that this spec publishes, one data entry for each point);
  *   - a required filter re-reads only the tiles bound to it (request 3, in the browser);
  *   - no custom code or frontend build is involved: the pages only use the catalogue's tiles and points.
- * A request passes when at least two of its three runs pass; the evaluation passes when at least five
- * of the six requests pass. The last test of this file decides.
+ * The last test combines the six build requests and four change requests.
  *
  * The runs call a real LLM, so this file runs only with RUN_LLM_DEMO=1. It does not fail a run's test
  * when a run does not pass: the reasons go to the console, and the last test counts. Request 4 shows
@@ -68,8 +66,8 @@ import {
  * Drawn values are compared with the responses that the board itself got for its tiles (the data is live,
  * and the evaluation's own LLM calls change it), and the direct read only checks the point, the fields and
  * the arguments that the agent chose. Request 3 chooses a model in the browser, because the page shows every
- * model until one is chosen. A turn that the model provider refuses ("Turn failed", for example a key limit)
- * stops the suite: it is no verdict on the agent. Known limit (accepted): the spend cap is a check
+ * model until one is chosen. A confirmed provider error or limit stops the suite with no verdict.
+ * Other turn failures count as failed runs. Known limit (accepted): the spend cap is a check
  * before each chat turn (and on every poll while it goes on) with one worker, not an atomic
  * reservation: two spec files that run at the same time can pass it together.
  */
@@ -77,6 +75,16 @@ test.skip(process.env.RUN_LLM_DEMO !== '1', 'calls a real LLM; set RUN_LLM_DEMO=
 test.describe.configure({ mode: 'serial' })
 
 const RUNS_PER_REQUEST = 3
+async function assertBudget(page: Page, reserve = 0.25) {
+  spendStart()
+  const spent = await spentUsd(page)
+  if (spent + reserve >= SPEND_CAP_USD) {
+    const error = new SpendCapReached(spent)
+    error.message = `The shared RC2 campaign cap of $10 was reached (spent $${spent.toFixed(3)}).`
+    throw error
+  }
+  return spent
+}
 const CONSENT = ' I confirm that the page may let admins change a user\'s status.'
 
 const P = {
@@ -453,14 +461,12 @@ function pageIdOfTitle(title: string): string {
   return `gen_${title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}`.slice(0, 41).replace(/_+$/, '')
 }
 
-/** The model provider refused a turn ("Turn failed: Key limit exceeded"): nothing after it can run. */
-class LlmUnavailable extends Error {}
 let llmDown: string | null = null
 
-/** Does the chat show a failed turn? Returns its text. */
-async function failedTurn(page: Page): Promise<string | null> {
+/** Classify the actual cause shown by a new failed chat turn. */
+async function failedTurn(page: Page, before: number): Promise<Error | null> {
   const failed = page.getByText(/Turn failed/i)
-  return (await failed.count()) > 0 ? ((await failed.last().textContent()) ?? 'Turn failed').trim().slice(0, 300) : null
+  return (await failed.count()) > before ? turnFailure(((await failed.last().textContent()) ?? 'Turn failed').trim()) : null
 }
 
 /**
@@ -497,6 +503,7 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
   // The cap is checked before each model request: this chat turn. The agent makes several model calls
   // inside the turn, so the check goes on while the turn runs, and the run is abandoned at the cap.
   await assertBudget(page)
+  const beforeFailures = await page.getByText(/Turn failed/i).count()
   await send(page, req.text + naming + (req.consent ? CONSENT : ''))
 
   // Every page it asked for: one link for each, in the reply. A turn that the provider refuses ends the wait.
@@ -504,9 +511,9 @@ async function evaluateRun(page: Page, req: Request, run: number, stamp: string,
   const deadline = Date.now() + 180_000
   while ((await links.count()) < before + titles.length && Date.now() < deadline) {
     await assertBudget(page, 0)
-    const failed = await failedTurn(page)
+    const failed = await failedTurn(page, beforeFailures)
     if (failed)
-      throw new LlmUnavailable(failed)
+      throw failed
     await page.waitForTimeout(3000)
   }
   if ((await links.count()) < before + titles.length) {
@@ -625,7 +632,7 @@ for (const req of REQUESTS) {
         await evaluateRun(page, req, run, stamp, reasons)
       }
       catch (e) {
-        if (e instanceof LlmUnavailable) {
+        if (e instanceof ProviderStopped) {
           // Not a verdict on the agent: the provider refused the turn (a key limit, for example), and every later run would too.
           llmDown = e.message
           console.log(`request ${req.n} run ${run} stopped: the model provider refused the turn: ${e.message}`)
@@ -633,7 +640,7 @@ for (const req of REQUESTS) {
           return
         }
         if (e instanceof SpendCapReached) {
-          // The cap stops the run, and the runs after it: a run that did not complete does not pass.
+          // A cap stop is no verdict on the agent.
           console.log(`request ${req.n} run ${run} stopped: ${e.message} (cap $${SPEND_CAP_USD})`)
           results.push({ request: req.n, run, pass: false, skipped: true, reasons: [e.message] })
           return
@@ -646,12 +653,171 @@ for (const req of REQUESTS) {
   }
 }
 
-test('the evaluation passes: two of three runs for five of the six requests', () => {
-  const byRequest = REQUESTS.map((req) => {
-    const mine = results.filter(r => r.request === req.n)
-    return { request: req.n, passed: mine.filter(r => r.pass).length, ran: mine.filter(r => !r.skipped).length }
+interface LayoutNode { panel?: string, size?: string, children?: LayoutNode[] }
+type ChangeProps = PageProps & { revision: number, layout: { layouts: Record<string, LayoutNode> } }
+
+function panels(node: LayoutNode): string[] {
+  return node.panel ? [node.panel] : (node.children ?? []).flatMap(panels)
+}
+
+function rowOf(props: ChangeProps, tile: string): string[] {
+  const tree = props.layout.layouts.lg ?? props.layout.layouts.default
+  return (tree.children ?? []).map(panels).find(row => row.includes(tile)) ?? []
+}
+
+async function evaluateChange(page: Page, req: typeof rc2Fixture.requests[number], reasons: string[]) {
+  const removed: readonly string[] = req.expect.removed
+  const base = rc2Fixture.pages.find(p => p.id === req.page_id)!
+  builtIds.push(base.id)
+  await removePage(page, base.id)
+  const published = await publishPage(page, base)
+  expect(published.status, published.body).toBe(200)
+  const beforeProps = await pageProps(page, base.id) as ChangeProps
+  const beforeIds = await listedIds(page)
+  const doc = await catalogue(page)
+  const reads = new BoardReads()
+  reads.attach(page)
+  await openChat(page)
+  const replies = page.locator('.chat-message--agent-message')
+  const beforeReplies = await replies.count()
+  await assertBudget(page)
+  const beforeFailures = await page.getByText(/Turn failed/i).count()
+  await send(page, req.text + (req.consent ? CONSENT : ''))
+  const end = Date.now() + 180_000
+  let changed: ChangeProps | null = null
+  let replyHref: string | null = null
+  while (Date.now() < end) {
+    await assertBudget(page, 0)
+    const failure = await failedTurn(page, beforeFailures)
+    if (failure)
+      throw failure
+    changed = await pageProps(page, base.id) as ChangeProps | null
+    // Change links use the fixture's /eval route rather than a generated /dash route.
+    for (let i = beforeReplies; i < await replies.count(); i++) {
+      const link = replies.nth(i).locator(`a[href$="${base.route}"]`).last()
+      if (await link.count() > 0)
+        replyHref = await link.getAttribute('href')
+    }
+    if (changed && changed.revision > beforeProps.revision && replyHref)
+      break
+    await page.waitForTimeout(2000)
+  }
+  if (!changed || changed.revision !== beforeProps.revision + 1)
+    reasons.push('the change did not publish exactly one new revision of the same page')
+  if (!replyHref)
+    reasons.push('the reply did not link the changed page')
+  if (!changed || !replyHref)
+    return
+  expect(changed.title).toBe(base.title)
+  expect(Object.keys(changed.tiles)).toHaveLength(Object.keys(base.tiles).length + req.expect.added.length - req.expect.removed.length)
+  expect(await listedIds(page)).toEqual(beforeIds)
+  await openInShell(page, replyHref)
+  await expect.poll(async () => Object.keys(await frameStatuses(page, base.id)).length, { timeout: 30_000 }).toBe(Object.keys(changed!.tiles).length)
+  await expect.poll(async () => Object.values(await frameStatuses(page, base.id)).every(s => s === 'ready'), { timeout: 30_000 }).toBe(true)
+  await untilRead(page, reads, base.id, changed)
+  for (const id of req.expect.removed) {
+    if (changed.tiles[id])
+      reasons.push(`tile ${id} was not removed`)
+  }
+  for (const id of req.expect.unchanged) {
+    const before = beforeProps.tiles[id]
+    const after = changed.tiles[id]
+    if (!after || JSON.stringify(before.data) !== JSON.stringify(after.data) || JSON.stringify(before.fields) !== JSON.stringify(after.fields))
+      reasons.push(`unnamed tile ${id} changed its point, arguments or fields`)
+    const expectedPeers = rowOf(beforeProps, id).filter(peer => !removed.includes(peer)).sort()
+    const actualPeers = rowOf(changed, id).filter(peer => Object.prototype.hasOwnProperty.call(beforeProps.tiles, peer) && !removed.includes(peer)).sort()
+    if (JSON.stringify(expectedPeers) !== JSON.stringify(actualPeers))
+      reasons.push(`unnamed tile ${id} moved to another row`)
+  }
+  const required: Need[] = req.n === 1
+    ? [{ point: 'usage_by_model', measure: 'tokens', group: 'model_id' }, { point: 'usage_tokens', measure: 'tokens' }, { point: 'usage_by_day', measure: 'tokens', group: 'day' }]
+    : req.n === 2
+      ? [{ point: 'app_messages', measure: 'messages' }, { point: 'messages_by_day', measure: 'messages', group: 'day' }, { point: 'message_types', measure: 'messages', group: 'type' }]
+      : req.n === 3
+        ? [{ point: 'usage_models' }, { point: 'usage_tokens', measure: 'tokens', bound: true }, { point: 'calls_by_day', measure: 'calls', group: 'day', bound: true }]
+        : [{ point: 'app_users', measure: 'users' }, { point: 'users', plugin: true }, { point: 'latest_run', plugin: true }]
+  const model = req.n === 3 ? await chooseModel(page, reads, base.id, changed, reasons) : null
+  const tileData = tileReads(reads, base.id, changed)
+  for (const need of required) {
+    const matching = tilesFor(need, tileData, doc).filter(t => (!need.measure || mappedFields(t.tile).includes(need.measure)) && (!need.group || mappedFields(t.tile).includes(need.group)))
+    if (!matching.length) {
+      reasons.push(`the page does not show ${need.point} with the requested fields`)
+      continue
+    }
+    const tile = matching[0]
+    const mine = tile.inputs.main
+    if (!mine || mine.state !== 'ready') {
+      reasons.push(`tile ${tile.id} did not return real data`)
+      continue
+    }
+    const direct = await directRead(page, need.point, need.bound ? model : null)
+    const structure = structureProblem(direct, mine)
+    if (structure)
+      reasons.push(structure)
+    if (need.bound && (!model || mine.args?.model !== model))
+      reasons.push(`tile ${tile.id} did not follow the chosen model`)
+    const drawn = await renderedProblem(page, base.id, tile, mine)
+    if (drawn)
+      reasons.push(drawn)
+  }
+  if (req.n === 2) {
+    // Inspect the lg row's weights at its 1024 px lower bound.
+    const row = changed.layout.layouts.lg.children?.find(node => panels(node).includes('messages_by_day'))
+    const main = row?.children?.find(node => node.panel === 'messages_by_day')
+    const other = row?.children?.find(node => node.panel === 'message_types')
+    if (!main || !other || parseFloat(main.size ?? '0') <= parseFloat(other.size ?? '0'))
+      reasons.push('messages_by_day is not wider than message_types in the 1024 px layout')
+    const board = await boardFrame(page, base.id)
+    const a = await board.locator('[data-tile-id="messages_by_day"]').boundingBox()
+    const b = await board.locator('[data-tile-id="message_types"]').boundingBox()
+    if (!a || !b || a.width <= b.width)
+      reasons.push('the board did not draw the main chart wider than message_types')
+  }
+  if (req.n === 4) {
+    const list = tileData.find(t => t.id === 'users')!
+    const count = tilesFor({ point: 'app_users' }, tileData, doc)[0]
+    const latest = tilesFor({ point: 'latest_run', plugin: true }, tileData, doc)[0]
+    const rows = (changed.layout.layouts.lg.children ?? []).map(panels)
+    const at = (tile: string) => rows.findIndex(row => row.includes(tile))
+    if (!count || !latest || at(count.id) >= at(list.id) || at(latest.id) <= at(list.id) || rowOf(changed, latest.id).length !== 1)
+      reasons.push('the user count, users list and full-row latest run are not in the requested order')
+  }
+}
+
+for (const req of rc2Fixture.requests) {
+  for (let run = 1; run <= RUNS_PER_REQUEST; run++) {
+    test(`change request ${req.n}, run ${run}`, async ({ page }) => {
+      test.setTimeout(420_000)
+      await page.setViewportSize({ width: 1400, height: 900 })
+      await loginAsAdmin(page)
+      const reasons: string[] = []
+      let skipped = false
+      try {
+        if (llmDown)
+          throw new ProviderStopped(llmDown)
+        await evaluateChange(page, req, reasons)
+      }
+      catch (error) {
+        if (error instanceof SpendCapReached || error instanceof ProviderStopped) {
+          skipped = true
+          if (error instanceof ProviderStopped)
+            llmDown = error.message
+        }
+        reasons.push(String(error).slice(0, 400))
+      }
+      results.push({ request: req.n + 6, run, pass: !skipped && reasons.length === 0, skipped, reasons })
+      console.log(`change request ${req.n} run ${run}: ${skipped ? 'NO VERDICT' : reasons.length ? 'FAIL' : 'PASS'}`, reasons)
+    })
+  }
+}
+
+test('the evaluation passes: two of three runs for nine of the ten requests', () => {
+  const byRequest = Array.from({ length: 10 }, (_, i) => {
+    const mine = results.filter(r => r.request === i + 1)
+    return { request: i + 1, passed: mine.filter(r => r.pass).length, failed: mine.filter(r => !r.pass && !r.skipped).length }
   })
   console.log('evaluation', JSON.stringify(byRequest), JSON.stringify(results.filter(r => !r.pass)))
   const passing = byRequest.filter(r => r.passed >= 2).length
-  expect(passing, `requests with at least two passing runs: ${JSON.stringify(byRequest)}`).toBeGreaterThanOrEqual(5)
+  test.skip(byRequest.some(r => r.passed < 2 && r.failed < 2), 'Needs owner review. A request has no verdict because the cap or provider stopped required runs.')
+  expect(passing, JSON.stringify(byRequest)).toBeGreaterThanOrEqual(9)
 })

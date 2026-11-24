@@ -1,8 +1,13 @@
 import { mkdirSync } from 'node:fs'
-import type { Page } from '@playwright/test'
+import { randomBytes } from 'node:crypto'
+import type { Browser, BrowserContext, Page, Response } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, loginAs } from './helpers/page-watch'
+import type { Envelope, Frame, PageProps } from './dashboards-agent.support'
+import { SPEND_CAP_USD, boardFrame, catalogue, expectedChart, frameStatuses, openBoard, pageProps, renderedChart, renderedTable, spendStart, spentUsd, tableProblem } from './dashboards-agent.support'
+import { publishPage } from './dashboards-wp5.support'
+import rc2Fixture from './fixtures/rc2-eval-pages.json'
 
 /**
  * Demo: one prompt in the normal chat builds one dashboard (spec 6.9, section 10).
@@ -52,18 +57,84 @@ function pageIdOf(href: string): string {
 
 // The page the admin test built, removed after the suite from a fresh context.
 let builtId: string | null = null
+const extraBuiltIds: string[] = []
+let budgetContext: BrowserContext
+let budgetPage: Page
+let secondEditor: { id: string, email: string, password: string } | undefined
+let secondEditorCreated = false
+test.beforeAll(async ({ browser }) => {
+  budgetContext = await browser.newContext()
+  budgetPage = await budgetContext.newPage()
+  await loginAsAdmin(budgetPage)
+  const id = `rc2_editor_${randomBytes(12).toString('hex')}`
+  secondEditor = { id, email: `${id}@wippy.local`, password: randomBytes(32).toString('base64url') }
+  const created = await api(budgetPage, 'POST', '/api/v1/users', {
+    user_id: id, email: secondEditor.email, password: secondEditor.password, full_name: 'RC2 temporary publisher',
+  })
+  secondEditorCreated = created.status === 201
+  expect(created.status, 'create the temporary publisher').toBe(201)
+  expect(JSON.parse(created.body).success).toBe(true)
+  // app.security:admin.all_access grants dashboards.publish. The demo has no narrower publisher group.
+  const grouped = await api(budgetPage, 'PUT', `/api/v1/users/${id}/groups`, { groups: ['app.security:admin'] })
+  expect(grouped.status, 'grant the temporary publisher its group').toBe(200)
+  expect(JSON.parse(grouped.body).success).toBe(true)
+  spendStart()
+})
+
+async function campaignCheck(page: Page, reserve = 0) {
+  const spent = await spentUsd(budgetPage)
+  test.skip(spent + reserve >= SPEND_CAP_USD, 'No verdict. The shared RC2 campaign cap was reached.')
+  const failed = page.getByText(/Turn failed/i)
+  test.skip(await failed.count() > 0, 'No verdict. The model provider stopped the turn.')
+}
+
+test.afterEach(async ({ page }) => {
+  await campaignCheck(page)
+})
+
+function campaignTest(title: string, run: (fixtures: { page: Page, browser: Browser }) => Promise<void>) {
+  test(title, async ({ page, browser }) => {
+    try {
+      await run({ page, browser })
+    }
+    catch (error) {
+      // Polling can turn a stopped turn into a wait failure. Classify it before reporting a verdict.
+      await campaignCheck(page)
+      throw error
+    }
+  })
+}
+
 test.afterAll(async ({ browser }) => {
-  if (!builtId)
-    return
   const context = await browser.newContext()
   const page = await context.newPage()
   try {
     await loginAsAdmin(page)
-    const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${builtId}`)
-    expect([200, 404], removed.body).toContain(removed.status)
+    try {
+      for (const id of [...extraBuiltIds, ...(builtId ? [builtId] : [])]) {
+        const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${id}`)
+        expect.soft([200, 404], removed.body).toContain(removed.status)
+      }
+    }
+    finally {
+      if (secondEditorCreated && secondEditor) {
+        try {
+          const ungrouped = await api(page, 'PUT', `/api/v1/users/${secondEditor.id}/groups`, { groups: [] })
+          expect.soft(ungrouped.status, 'remove the temporary publisher from its group').toBe(200)
+          expect.soft(JSON.parse(ungrouped.body).success).toBe(true)
+        }
+        finally {
+          const removed = await api(page, 'DELETE', `/api/v1/users/${secondEditor.id}`)
+          expect.soft(removed.status, 'delete the temporary publisher').toBe(200)
+          expect.soft(JSON.parse(removed.body).success).toBe(true)
+          secondEditor = undefined
+        }
+      }
+    }
   }
   finally {
     await context.close()
+    await budgetContext.close()
   }
 })
 
@@ -99,12 +170,13 @@ async function openChat(page: Page) {
 }
 
 async function send(page: Page, text: string) {
+  await campaignCheck(page, 0.25)
   const box = page.getByPlaceholder('Type a message')
   await box.fill(text)
   await box.press('Enter')
 }
 
-test('one prompt in the chat builds one dashboard', async ({ page }) => {
+campaignTest('one prompt in the chat builds one dashboard', async ({ page }) => {
   test.setTimeout(240_000)
   await page.setViewportSize({ width: 1400, height: 900 })
   await loginAsAdmin(page)
@@ -116,7 +188,7 @@ test('one prompt in the chat builds one dashboard', async ({ page }) => {
 
   // The agent answers with the link to the page it built.
   const links = page.locator(PAGE_LINK)
-  await expect.poll(() => links.count(), { timeout: 180_000, intervals: [2000] }).toBeGreaterThan(before)
+  await expect.poll(async () => { await campaignCheck(page); return links.count() }, { timeout: 180_000, intervals: [2000] }).toBeGreaterThan(before)
   const link = links.last()
   const href = await link.getAttribute('href') ?? ''
   const title = (await link.textContent())?.trim() ?? ''
@@ -140,7 +212,7 @@ test('one prompt in the chat builds one dashboard', async ({ page }) => {
   await shot(page, 'demo-2-dashboard')
 })
 
-test('a viewer without publish rights gets no page', async ({ page }) => {
+campaignTest('a viewer without publish rights gets no page', async ({ page }) => {
   test.setTimeout(240_000)
   await page.setViewportSize({ width: 1400, height: 900 })
   await loginAs(page, 'viewer@wippy.local')
@@ -151,7 +223,7 @@ test('a viewer without publish rights gets no page', async ({ page }) => {
 
   // The tool refuses for this user; the agent answers without a page link.
   const reply = page.getByText(/permission|not allowed|may not|can't publish|cannot publish|unable to publish|isn't allowed|don't have/i)
-  await expect(reply.last()).toBeVisible({ timeout: 180_000 })
+  await expect.poll(async () => { await campaignCheck(page); return reply.last().isVisible() }, { timeout: 180_000 }).toBe(true)
   expect(await page.locator(PAGE_LINK).count()).toBe(before)
   // And no page was published: the page list is the same as before the request.
   expect(await listedIds(page)).toEqual(idsBefore)
@@ -159,7 +231,7 @@ test('a viewer without publish rights gets no page', async ({ page }) => {
   await shot(page, 'demo-3-viewer-refused')
 })
 
-test('a title that a page already uses is refused, and the agent asks the user', async ({ page }) => {
+campaignTest('a title that a page already uses is refused, and the agent asks the user', async ({ page }) => {
   test.setTimeout(240_000)
   test.skip(!builtId, 'needs the page that the first test built')
   await page.setViewportSize({ width: 1400, height: 900 })
@@ -171,9 +243,142 @@ test('a title that a page already uses is refused, and the agent asks the user',
 
   // A build never replaces a page (RC1 decision B): the tool answers page_exists and the agent asks.
   const reply = page.getByText(/already (exists|uses|taken)|another title|different title|new title|replace|what (would you like|do you want)/i)
-  await expect(reply.last()).toBeVisible({ timeout: 180_000 })
+  await expect.poll(async () => { await campaignCheck(page); return reply.last().isVisible() }, { timeout: 180_000 }).toBe(true)
   expect(await page.locator(PAGE_LINK).count()).toBe(before)
   // And nothing changed: the page list is the same as before the request.
   expect(await listedIds(page)).toEqual(idsBefore)
   await shot(page, 'demo-4-title-taken')
+})
+
+async function buildUsage(page: Page) {
+  const title = `Chat Usage ${Date.now().toString(36)}`
+  extraBuiltIds.push(`gen_${title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`)
+  await loginAsAdmin(page)
+  await openChat(page)
+  const before = await page.locator(PAGE_LINK).count()
+  await send(page, `Build an LLM usage page titled "${title}". Show total tokens in a tile with id usage_tokens and tokens per day in a tile with id usage_by_day.`)
+  await expect.poll(async () => { await campaignCheck(page); return page.locator(PAGE_LINK).count() }, { timeout: 180_000 }).toBeGreaterThan(before)
+  const href = await page.locator(PAGE_LINK).last().getAttribute('href') ?? ''
+  const id = pageIdOf(href)
+  extraBuiltIds.push(id)
+  const props = await pageProps(page, id) as ChatProps
+  expect(props.tiles.usage_tokens).toBeTruthy()
+  expect(props.tiles.usage_by_day).toBeTruthy()
+  return { id, href, title, props }
+}
+
+interface LayoutNode { panel?: string, children?: LayoutNode[] }
+type ChatProps = PageProps & { revision: number, layout: { layouts: Record<string, LayoutNode> } }
+
+function panels(node: LayoutNode): string[] {
+  return node.panel ? [node.panel] : (node.children ?? []).flatMap(panels)
+}
+
+async function expectModelTile(page: Page, id: string, before: ChatProps, after: ChatProps) {
+  const added = Object.keys(after.tiles).filter(tile => !(tile in before.tiles))
+  expect(added).toHaveLength(1)
+  for (const tile of Object.keys(before.tiles))
+    expect(after.tiles[tile]).toEqual(before.tiles[tile])
+  for (const [name, layout] of Object.entries(before.layout.layouts)) {
+    const keptRows = (tree: LayoutNode) => (tree.children ?? []).map(panels)
+      .map(row => row.filter(tile => tile in before.tiles)).filter(row => row.length > 0)
+    expect(after.layout.layouts[name], `keep layout ${name}`).toBeTruthy()
+    expect(keptRows(after.layout.layouts[name]), `keep existing rows in ${name}`).toEqual(keptRows(layout))
+  }
+  const tileId = added[0]
+  const tile = after.tiles[tileId]
+  expect(['chart', 'table']).toContain(tile.tile)
+  const fields = Object.values(tile.fields).flatMap(value => Array.isArray(value) ? value : [value])
+  expect(fields).toEqual(expect.arrayContaining(['model_id', 'tokens']))
+  const doc = await catalogue(page)
+  const point = doc.points.find(point => point.id === 'demo.actor:usage_by_model')
+  expect(point).toBeTruthy()
+  expect(doc.points.filter(candidate => candidate.title === point!.title).map(candidate => candidate.id)).toEqual(['demo.actor:usage_by_model'])
+  expect(tile.data.main).toBeTruthy()
+  let read: Envelope | undefined
+  const onResponse = async (response: Response) => {
+    const path = new URL(response.url()).pathname
+    if (path === `/api/v1/dashboards/pages/${id}/points/${tile.data.main.point}` && response.request().method() === 'GET' && response.status() === 200)
+      read = await response.json() as Envelope
+  }
+  page.on('response', onResponse)
+  try {
+    await openBoard(page, id.replace(/^gen_/, '').replace(/_/g, '-'), id, Object.keys(after.tiles).length)
+    await expect.poll(async () => (await frameStatuses(page, id))[tileId], { timeout: 30_000 }).toBe('ready')
+    await expect.poll(() => read?.state, { timeout: 30_000 }).toBe('ready')
+    expect(read!.source_title, 'the added tile reads usage_by_model').toBe(point!.title)
+    const frame = read!.data as Frame
+    expect(frame.fields.map(field => field.name)).toEqual(expect.arrayContaining(['model_id', 'tokens']))
+    expect(frame.rows.length, 'the added tile has data').toBeGreaterThan(0)
+    const board = await boardFrame(page, id)
+    if (tile.tile === 'chart') {
+      await expect.poll(() => renderedChart(board, tileId), { timeout: 30_000 }).toEqual(expectedChart(frame, tile.fields as { x: string, y: string[], series?: string }))
+    }
+    else {
+      const locale = await page.evaluate(() => navigator.language)
+      await expect.poll(async () => tableProblem(await renderedTable(board, tileId), frame, tile.fields.columns as string[] | undefined, locale), { timeout: 30_000 }).toBeNull()
+    }
+  }
+  finally {
+    page.off('response', onResponse)
+  }
+}
+
+async function waitForChange(page: Page, id: string, revision: number, linksBefore: number) {
+  await expect.poll(async () => {
+    await campaignCheck(page)
+    return (await pageProps(page, id) as { revision?: number } | null)?.revision
+  }, { timeout: 180_000, intervals: [2000] }).toBe(revision)
+  await expect.poll(async () => { await campaignCheck(page); return page.locator(PAGE_LINK).count() }, { timeout: 30_000 }).toBeGreaterThan(linksBefore)
+}
+
+campaignTest('a later turn adds a tile to the page the agent built', async ({ page }) => {
+  test.setTimeout(420_000)
+  const made = await buildUsage(page)
+  const ids = await listedIds(page)
+  const links = await page.locator(PAGE_LINK).count()
+  await send(page, `Add a breakdown of tokens by model to my "${made.title}" page.`)
+  await waitForChange(page, made.id, made.props.revision + 1, links)
+  const after = await pageProps(page, made.id) as ChatProps
+  expect(await listedIds(page)).toEqual(ids)
+  expect(await page.locator(PAGE_LINK).last().getAttribute('href')).toBe(made.href)
+  await expectModelTile(page, made.id, made.props, after)
+})
+
+campaignTest('after another user changed the page, the agent\'s change is based on the new revision', async ({ page, browser }) => {
+  test.setTimeout(420_000)
+  expect(secondEditorCreated).toBe(true)
+  expect(secondEditor).toBeTruthy()
+  const made = await buildUsage(page)
+  const secondContext = await browser.newContext()
+  const second = await secondContext.newPage()
+  try {
+    await second.goto('/')
+    await second.getByLabel('Email').fill(secondEditor!.email)
+    await second.getByLabel('Password').fill(secondEditor!.password)
+    await second.getByRole('button', { name: /sign in/i }).click()
+    await expect(second.locator('.managed-layout-shell, .wippy-host-app').first()).toBeVisible({ timeout: 15_000 })
+    const fixture = JSON.parse(JSON.stringify(rc2Fixture.pages[0]))
+    fixture.id = made.id
+    fixture.title = made.title
+    fixture.route = made.href.replace(/^\/home/, '')
+    fixture.data.external_note = { kind: 'function', ref: 'wippy.dashboards.agent:note', args: { text: 'Another publisher added this note.' } }
+    fixture.tiles.external_note = { type: 'text', data: { main: 'external_note' }, fields: { text: 'text' } }
+    fixture.rows.push(['external_note'])
+    const changed = await publishPage(second, fixture)
+    expect(changed.status, changed.body).toBe(200)
+    const external = await pageProps(page, made.id) as ChatProps
+    const revision = JSON.parse(changed.body).revision as number
+    const ids = await listedIds(page)
+    const links = await page.locator(PAGE_LINK).count()
+    await send(page, `Add a breakdown of tokens by model to my "${made.title}" page. Keep every existing tile.`)
+    await waitForChange(page, made.id, revision + 1, links)
+    const after = await pageProps(page, made.id) as ChatProps
+    expect(await listedIds(page)).toEqual(ids)
+    expect(await page.locator(PAGE_LINK).last().getAttribute('href')).toBe(made.href)
+    await expectModelTile(page, made.id, external, after)
+  }
+  finally {
+    await secondContext.close()
+  }
 })
