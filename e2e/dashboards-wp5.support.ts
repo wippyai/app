@@ -54,9 +54,43 @@ export async function refreshShell(page: Page): Promise<void> {
  * the page's route.
  */
 export async function publish(page: Page, spec: Record<string, unknown>): Promise<void> {
-  const res = await api(page, 'POST', '/api/v1/dashboards/pages', { spec: SPEC, publish: true, ...spec })
+  const res = await publishPage(page, { spec: SPEC, publish: true, ...spec })
   expect(res.status, res.body).toBe(200)
   await refreshShell(page)
+}
+
+const PAGES = '/api/v1/dashboards/pages'
+
+/**
+ * The revision of a page that exists, which `GET .../props` carries, or undefined for a page that does not. The
+ * read goes through the context's request client, not through the page, so the 404 of a page that is not
+ * there yet is not counted as a failed request of the page under test.
+ */
+export async function storedRevision(page: Page, id: string): Promise<number | undefined> {
+  const token = await page.evaluate(() => JSON.parse(localStorage.getItem('@wippy_token_info') || 'null')?.token)
+  const res = await page.request.get(`${new URL(page.url()).origin}${PAGES}/${id}/props`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status() !== 200)
+    return undefined
+  const revision = (await res.json()).revision
+  return typeof revision === 'number' ? revision : undefined
+}
+
+/**
+ * Posts a page body to the publish endpoint (RC2-01). A page that exists is published again with `base_revision`,
+ * the revision that it has now, so a spec that leaves a page of an earlier test behind is replaced and not
+ * refused; a page that does not exist, and a body that names its own `base_revision`, go as they are. The tests
+ * of the conflict itself name the base themselves. Returns what `api` returns.
+ */
+export async function publishPage(page: Page, body: Record<string, unknown>) {
+  let sent = body
+  if (body.base_revision === undefined && typeof body.id === 'string') {
+    const revision = await storedRevision(page, body.id)
+    if (revision !== undefined)
+      sent = { ...body, base_revision: revision }
+  }
+  return api(page, 'POST', PAGES, sent)
 }
 
 /**

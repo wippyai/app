@@ -2,7 +2,7 @@ import type { FrameLocator, Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
-import { expectHostRefusesPage } from './dashboards-wp5.support'
+import { expectHostRefusesPage, publishPage } from './dashboards-wp5.support'
 
 /**
  * Engine reads, access and actions of wippy/dashboards (RC1-05, RC1-06, RC1-08 and RC1-13, browser
@@ -121,7 +121,7 @@ test.beforeAll(async ({ browser }) => {
     await loginAsAdmin(page)
     await setAccess(page, true)
     for (const id of PAGES) {
-      const published = await api(page, 'POST', BASE, SPECS[id])
+      const published = await publishPage(page, SPECS[id] as Record<string, unknown>)
       expect(published.status, `${id}: ${published.body}`).toBe(200)
     }
   }

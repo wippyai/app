@@ -3,6 +3,7 @@ import type { Browser, FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
+import { publishPage } from './dashboards-wp5.support'
 
 /**
  * The app's own sidebar as a live nav (frontend/packages/app-nav, src/app/pages) in the default
@@ -212,7 +213,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     await loginAsAdmin(page)
     await shellReady(page)
     await markShell(page)
-    const published = await api(page, 'POST', '/api/v1/dashboards/pages', fixturePage(id, '/coord/nav-live', 'Nav live check'))
+    const published = await publishPage(page, fixturePage(id, '/coord/nav-live', 'Nav live check'))
     expect(published.status, published.body).toBe(200)
     // The backend sends `pages`; the sidebar reads the list again. No reload.
     const item = dashboardsGroup(page).getByRole('button', { name: 'Nav live check', exact: true })
@@ -244,7 +245,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
     // deny_check: a policy in src/dashboards/_index.yaml denies it to app.security:user.
     const id = 'deny_check'
     await loginAsAdmin(page)
-    const published = await api(page, 'POST', '/api/v1/dashboards/pages', fixturePage(id, '/coord/deny-check', 'Denied check'))
+    const published = await publishPage(page, fixturePage(id, '/coord/deny-check', 'Denied check'))
     expect(published.status, published.body).toBe(200)
     await expect(dashboardsGroup(page).getByRole('button', { name: 'Denied check', exact: true })).toBeVisible({ timeout: 5_000 })
 
