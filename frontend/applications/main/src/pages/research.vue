@@ -3,7 +3,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
-import { useApi, useWippy } from '../composables/useWippy'
+import { on } from '@wippy-fe/proxy'
+import { useApi } from '../composables/useWippy'
 
 /**
  * Web Research — one async end-to-end example. POST kicks off a background
@@ -30,7 +31,6 @@ interface StartResponse {
 }
 
 const api = useApi()
-const instance = useWippy()
 
 const query = ref('')
 const loading = ref(false)
@@ -103,8 +103,8 @@ function onAnswer(raw: unknown) {
 }
 
 onMounted(() => {
-  unbinds.push(instance.on('web:fetch', onFetch))
-  unbinds.push(instance.on('research:answer', onAnswer))
+  unbinds.push(on('web:fetch', onFetch))
+  unbinds.push(on('research:answer', onAnswer))
 })
 
 onUnmounted(() => {
@@ -188,8 +188,16 @@ function host(url: string): string {
         :label="loading ? 'Researching…' : 'Research'"
         :loading="loading"
         :disabled="!query.trim() || loading"
-        icon="tabler:world-search"
-      />
+      >
+        <!-- PrimeVue's icon prop takes a CSS class, so an Iconify icon goes in the slot. -->
+        <template #icon>
+          <Icon
+            icon="tabler:world-search"
+            class="w-4 h-4"
+            aria-hidden="true"
+          />
+        </template>
+      </Button>
     </form>
 
     <!-- Suggestions -->

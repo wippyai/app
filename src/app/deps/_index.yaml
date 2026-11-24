@@ -180,6 +180,16 @@ entries:
       - name: server
         value: app:gateway
 
+  # Dashboard pages declared as data, built by the chat agent (trait
+  # wippy.dashboards.agent:trait in src/app/agents). Its requirements default
+  # to this app's ids (app:db, app:api, app:gateway, app:processes,
+  # app.security:user). Not on the hub yet: a local checkout comes in through
+  # the gitignored .wippy.workspace.yaml (see README "Dashboards").
+  - name: dashboards
+    kind: ns.dependency
+    component: wippy/dashboards
+    version: '*'
+
   - name: wc-voice
     kind: ns.dependency
     component: wippy-swiss/voice

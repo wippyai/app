@@ -1,0 +1,494 @@
+version: "1.0"
+namespace: app.dashboards_fixtures
+
+# Test fixtures of the wippy/dashboards module, used by this app's browser
+# tests (e2e/dashboards.spec.ts): points that return fixed numbers, series and
+# options, fail, time out or return a wrong shape, placeholder tiles (the
+# dash-placeholder element ships in the module's dashboard-layout bundle), and
+# a denial check page. Every point and tile here sets catalog: false, so the
+# dashboards agent never offers them.
+
+entries:
+  # Test page for denial checks: a regular user may not view deny_check.
+  - name: deny_view_check
+    kind: security.policy
+    meta:
+      comment: app.security:user may not view the page deny_check
+    groups:
+      - app.security:user
+    policy:
+      resources: page:wippy.dashboards.pages:deny_check
+      actions: view
+      effect: deny
+
+  # ── functions ────────────────────────────────────────────────────────
+  - name: numbers_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: numbers
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: series_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: series
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: options_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: options
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: noop_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: noop
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: fails_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: fails
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: wrong_shape_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: wrong_shape
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: bad_cell_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: bad_cell
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: echo_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: echo
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: empty_series_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: empty_series
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: empty_record_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: empty_record
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: null_cells_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: null_cells
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: tree_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: tree
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: tree_empty_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: tree_empty
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: tree_bad_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: tree_bad
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  - name: empty_scalar_wrong_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: empty_scalar_wrong
+    modules:
+      - logger
+      - security
+    pool:
+      size: 1
+
+  # ── point declarations (contracts section 5.1) ───────────────────────
+  - name: numbers
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture numbers
+      func: app.dashboards_fixtures:numbers_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties: {}
+      output:
+        shape: scalar
+      refresh_ms: 60000
+      live_topic: dash.fixtures.changed
+
+  - name: series
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture series
+      func: app.dashboards_fixtures:series_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties:
+          model:
+            type: [string, "null"]
+      output:
+        shape: series
+
+  - name: options
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture options
+      func: app.dashboards_fixtures:options_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties: {}
+      output:
+        shape: options
+
+# ── stage C2 declarations ───────────────────────────────────────────
+  - name: fails
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture failure
+      func: app.dashboards_fixtures:fails_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: scalar }
+
+  - name: wrong_shape
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture wrong shape
+      func: app.dashboards_fixtures:wrong_shape_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: scalar }
+
+  - name: bad_cell
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture bad cell
+      func: app.dashboards_fixtures:bad_cell_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: series }
+
+  # args_schema with a required, server-bound limit and a $param-bound model.
+  - name: echo
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture echo
+      func: app.dashboards_fixtures:echo_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        required: [limit]
+        properties:
+          model: { type: string, enum: [alpha, beta] }
+          limit: { type: integer, minimum: 1, maximum: 100 }
+      output: { shape: record }
+      recipe: echo_recipe
+
+  - name: empty_series
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture empty frame
+      func: app.dashboards_fixtures:empty_series_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: series }
+
+  - name: empty_record
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture empty record
+      func: app.dashboards_fixtures:empty_record_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: record }
+
+  # Nullable cells: shows what the runtime encoder does with a nil cell.
+  - name: null_cells
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture null cells
+      func: app.dashboards_fixtures:null_cells_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: series }
+
+  # Follow-up fixtures. G3: empty arrays under a schema shape (plugin 1 returns
+  # nodes with children: []) and in args; the args_schema has required: [].
+  - name: tree
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture tree
+      func: app.dashboards_fixtures:tree_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        required: []
+        properties:
+          tags: { type: array, items: { type: string } }
+      output:
+        shape: schema
+        schema:
+          type: object
+          required: [name, tags, meta, children]
+          properties:
+            name: { type: string }
+            tags: { type: array, items: { type: string } }
+            meta: { type: object }
+            children:
+              type: array
+              items:
+                type: object
+                required: [name, children]
+                properties:
+                  name: { type: string }
+                  children: { type: array }
+
+  - name: tree_empty
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture tree (no children)
+      func: app.dashboards_fixtures:tree_empty_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        required: []
+        properties:
+          tags: { type: array, items: { type: string } }
+      output:
+        shape: schema
+        schema:
+          type: object
+          required: [name, tags, meta, children]
+          properties:
+            name: { type: string }
+            tags: { type: array, items: { type: string } }
+            meta: { type: object }
+            children: { type: array }
+
+  # Declares an array, returns a string.
+  - name: tree_bad
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture tree (bad children)
+      func: app.dashboards_fixtures:tree_bad_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: schema
+        schema:
+          type: object
+          required: [children]
+          properties:
+            children: { type: array }
+
+  # G4: no rows, and no number field for a scalar.
+  - name: empty_scalar_wrong
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture empty scalar (wrong fields)
+      func: app.dashboards_fixtures:empty_scalar_wrong_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output: { shape: scalar }
+
+  # G2: a point declaration with no args_schema. Publication must refuse it.
+  - name: no_schema
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture without args_schema
+      func: app.dashboards_fixtures:numbers_fn
+      output: { shape: scalar }
+
+  # ── action declaration (contracts section 5.2) ───────────────────────
+  - name: noop
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.action
+      title: Fixture action
+      func: app.dashboards_fixtures:noop_fn
+      args_schema:
+        type: object
+        additionalProperties: false
+        properties: {}
+      tile_args: []
+      result_schema:
+        type: object
+      permission:
+        action: dash.fixtures.noop
+        resource: app.dashboards_fixtures:noop
+      confirm: true
+      sensitive_fields: []
+      refreshes:
+        - numbers
+
+  # ── tile descriptors (contracts section 5.3) ─────────────────────────
+  - name: placeholder
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      catalog: false
+      tile_type: placeholder
+      tag: dash-placeholder
+      inputs:
+        main:
+          shape: none
+      fields: []
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size:
+        w: 160px
+        h: 96px
+      default_size:
+        w: 25%
+        h: 140px
+
+  # Variants for publication tests: a tile that needs a scalar, and a control.
+  - name: placeholder_scalar
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      catalog: false
+      tile_type: placeholder.scalar
+      tag: dash-placeholder
+      inputs:
+        main:
+          shape: scalar
+      fields:
+        - value
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size:
+        w: 160px
+        h: 96px
+      default_size:
+        w: 25%
+        h: 140px
+
+  - name: placeholder_select
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      catalog: false
+      tile_type: placeholder.select
+      tag: dash-placeholder
+      inputs:
+        main:
+          shape: options
+      fields: []
+      options_schema:
+        type: object
+      events:
+        change:
+          type: object
+      params: []
+      default_data: {}
+      default_actions: {}
+      min_size:
+        w: 160px
+        h: 96px
+      default_size:
+        w: 25%
+        h: 140px

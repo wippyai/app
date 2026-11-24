@@ -1,0 +1,55 @@
+version: "1.0"
+namespace: demo.seed
+
+entries:
+  # Local test accounts for the dashboards proof of concept. The passwords are
+  # random local test values, used only against a local database. They live
+  # only in this entry.
+  - name: test_users
+    kind: registry.entry
+    meta:
+      type: demo.seed.users
+      comment: Test users created by POST /api/v1/demo/seed-users
+      users:
+        - email: viewer@wippy.local
+          password: "dcbd256b82c727e43f5a0445"
+          name: Test Viewer
+          group: app.security:user
+        - email: target@wippy.local
+          password: "e7342f27988729395a8d1955"
+          name: Test Target
+          group: app.security:user
+
+  # Only the admin group may seed users. The user group is denied this action.
+  - name: deny_seed_users
+    kind: security.policy
+    meta:
+      comment: app.security:user may not seed test users
+    groups:
+      - app.security:user
+    policy:
+      resources: demo.seed:users
+      actions: demo.seed_users
+      effect: deny
+
+  - name: seed_users
+    kind: function.lua
+    source: file://seed_users.lua
+    method: handler
+    modules:
+      - http
+      - registry
+      - security
+    imports:
+      user_repo: userspace.user.persist:user_repo
+      user_groups_repo: userspace.user.persist:user_groups_repo
+    pool:
+      size: 1
+
+  - name: seed_users.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: seed_users
+    path: /demo/seed-users

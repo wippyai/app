@@ -25,6 +25,11 @@ entries:
       base_path: app/main
       entry_point: app.html
       mountRoute: /home/:part(.*)*
+      # This page is the app's shell: it shows other listed pages inside
+      # itself, under its sidebar, at /home<page route> (frontend/packages/
+      # app-nav). Modules that hand out page links, such as the dashboards
+      # agent, point them here so that opening a page keeps the sidebar.
+      page_outlet: true
 
   - name: iframe-demo
     kind: registry.entry

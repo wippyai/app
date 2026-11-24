@@ -31,6 +31,20 @@ Test:
   tags:
     - hetzner
 
+Frontend_checks:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  before_script:
+    - apk add --no-cache make
+  script:
+    # Typecheck and unit tests of the headless sidebar package.
+    - make test-pkg-app-nav NPM_INSTALL='npm ci'
+    # Lint needs each package's dependencies; the build installs them with npm ci.
+    - make build NPM_INSTALL='npm ci'
+    - make lint NPM_INSTALL='npm ci'
+  tags:
+    - hetzner
+
 Build_frontend:
   stage: build
   image: node:${NODE_VERSION}-alpine

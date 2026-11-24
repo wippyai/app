@@ -1,0 +1,57 @@
+{
+  "spec": "wippy.dashboard_page/v1",
+  "id": "coord_ph_two",
+  "title": "Placeholders two",
+  "route": "/coord/ph-two",
+  "params": {
+    "part": {
+      "type": "string",
+      "label": "Part",
+      "from_path": 0
+    }
+  },
+  "data": {},
+  "actions": {},
+  "tiles": {
+    "x1": {
+      "type": "placeholder"
+    },
+    "x2": {
+      "type": "placeholder"
+    }
+  },
+  "layout": {
+    "breakpoints": {
+      "lg": 1024
+    },
+    "layouts": {
+      "default": {
+        "direction": "vertical",
+        "children": [
+          {
+            "panel": "x1",
+            "size": "300px"
+          },
+          {
+            "panel": "x2",
+            "size": "300px"
+          }
+        ]
+      },
+      "lg": {
+        "direction": "horizontal",
+        "children": [
+          {
+            "panel": "x1",
+            "size": "50%"
+          },
+          {
+            "panel": "x2",
+            "size": "50%"
+          }
+        ]
+      }
+    }
+  },
+  "publish": true
+}

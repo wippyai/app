@@ -1,0 +1,164 @@
+version: "1.0"
+namespace: demo.run_timeline
+
+# Plugin 1 of the dashboards proof of concept: one module with a tile and its declared function.
+#   read_latest_run   function  reads the latest workflow run from app:db and returns it as a tree
+#   latest_run        point     wippy.dashboards.point declaration of that function (contracts 5.1)
+#   run_timeline      tile      wippy.dashboards.tile descriptor, tile_type demo.run_timeline (contracts 5.3)
+#   run-timeline      component view.component of the tag, built from frontend/web-components/run-timeline
+# A page places the tile with only { "type": "demo.run_timeline" }: the engine adds the default point.
+#
+# The JSON schema of the data appears twice, in the point's `output.schema` and in the tile's
+# `inputs.main.schema`. The two copies must stay equal. The test
+# frontend/web-components/run-timeline/src/plugin-fixture.test.ts reads both from this file,
+# checks that they are equal, and validates a saved function output against them.
+# The tree nests three levels in the schema because the engine's validator is not known to follow
+# $ref. Nodes below the third level are allowed but not checked.
+
+entries:
+  - name: read_latest_run
+    kind: function.lua
+    meta:
+      comment: Reads the latest dataflow run and its nodes from app:db and returns them as a tree
+    source: file://read_latest_run.lua
+    method: read_latest_run
+    modules:
+      - sql
+    pool:
+      size: 2
+
+  - name: latest_run
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Latest workflow run
+      func: demo.run_timeline:read_latest_run
+      live_read: true
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: schema
+        schema:
+          type: object
+          additionalProperties: false
+          required: [run, nodes]
+          properties:
+            run:
+              type: object
+              additionalProperties: false
+              required: [type, status, started_at, duration_ms, commits]
+              properties:
+                type: { type: string }
+                status: { type: string }
+                started_at: { type: string, pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$' }
+                duration_ms: { type: integer, minimum: 0 }
+                commits: { type: integer, minimum: 0 }
+            nodes:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [type, status, duration_ms, children]
+                properties:
+                  type: { type: string }
+                  status: { type: string }
+                  duration_ms: { type: integer, minimum: 0 }
+                  children:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [type, status, duration_ms, children]
+                      properties:
+                        type: { type: string }
+                        status: { type: string }
+                        duration_ms: { type: integer, minimum: 0 }
+                        children:
+                          type: array
+                          items:
+                            type: object
+                            additionalProperties: false
+                            required: [type, status, duration_ms, children]
+                            properties:
+                              type: { type: string }
+                              status: { type: string }
+                              duration_ms: { type: integer, minimum: 0 }
+                              children: { type: array }
+
+  - name: run_timeline
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      title: Run timeline
+      tile_type: demo.run_timeline
+      tag: run-timeline
+      inputs:
+        main:
+          shape: schema
+          schema:
+            type: object
+            additionalProperties: false
+            required: [run, nodes]
+            properties:
+              run:
+                type: object
+                additionalProperties: false
+                required: [type, status, started_at, duration_ms, commits]
+                properties:
+                  type: { type: string }
+                  status: { type: string }
+                  started_at: { type: string, pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$' }
+                  duration_ms: { type: integer, minimum: 0 }
+                  commits: { type: integer, minimum: 0 }
+              nodes:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [type, status, duration_ms, children]
+                  properties:
+                    type: { type: string }
+                    status: { type: string }
+                    duration_ms: { type: integer, minimum: 0 }
+                    children:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        required: [type, status, duration_ms, children]
+                        properties:
+                          type: { type: string }
+                          status: { type: string }
+                          duration_ms: { type: integer, minimum: 0 }
+                          children:
+                            type: array
+                            items:
+                              type: object
+                              additionalProperties: false
+                              required: [type, status, duration_ms, children]
+                              properties:
+                                type: { type: string }
+                                status: { type: string }
+                                duration_ms: { type: integer, minimum: 0 }
+                                children: { type: array }
+      fields: []
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data:
+        main: demo.run_timeline:latest_run
+      default_actions: {}
+      min_size: { w: 240px, h: 200px }
+      default_size: { w: 50%, h: 340px }
+
+  - name: run-timeline
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: run-timeline
+      tag_name: run-timeline
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/run-timeline
+      entry_point: run-timeline.js

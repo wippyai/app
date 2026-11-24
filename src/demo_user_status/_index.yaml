@@ -1,0 +1,209 @@
+version: "1.0"
+namespace: demo.user_status
+
+# Plugin 2 of the dashboards proof of concept (stage E2): the tile `user-status`
+# with its point, its live signal and its test endpoint, as one module.
+#   point       demo.user_status:users        wippy.dashboards.point, served by list_users
+#   tile        demo.user_status:user_status  wippy.dashboards.tile (tile_type demo.user_status)
+#   component   demo.user_status:user-status  view.component, frontend/web-components/user-status
+#   signal      topic dash.users.changed      sent by publish_signal; POST /api/v1/demo/signal/users
+#   action      demo.user_status:set_status   wippy.dashboards.action, served by set_user_status (stage E3)
+#
+# The JSON schema of the users object appears twice below: as the point's output
+# schema and as the tile's input schema. The unit test in
+# frontend/web-components/user-status (schema.test.ts) fails when the two differ,
+# or when the saved output of list_users does not match them.
+
+entries:
+  # ── function of the point ────────────────────────────────────────────
+  - name: list_users
+    kind: function.lua
+    meta:
+      comment: Lists the users with status and groups for the user-status tile
+    source: file://list_users.lua
+    method: list
+    imports:
+      user_repo: userspace.user.persist:user_repo
+      user_groups_repo: userspace.user.persist:user_groups_repo
+    pool:
+      size: 2
+
+  # ── point declaration (contracts section 5.1) ────────────────────────
+  - name: users
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      title: Users
+      func: demo.user_status:list_users
+      live_read: true
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: schema
+        schema:
+          type: object
+          additionalProperties: false
+          required: [users]
+          properties:
+            users:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [user_id, name, status, groups]
+                properties:
+                  user_id: { type: string }
+                  name: { type: string }
+                  status: { type: string, enum: [active, inactive, suspended, pending] }
+                  groups: { type: array, items: { type: string } }
+      live_topic: dash.users.changed
+
+  # ── tile descriptor (contracts section 5.3) ──────────────────────────
+  - name: user_status
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.tile
+      title: User status
+      tile_type: demo.user_status
+      tag: user-status
+      inputs:
+        main:
+          shape: schema
+          schema:
+            type: object
+            additionalProperties: false
+            required: [users]
+            properties:
+              users:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [user_id, name, status, groups]
+                  properties:
+                    user_id: { type: string }
+                    name: { type: string }
+                    status: { type: string, enum: [active, inactive, suspended, pending] }
+                    groups: { type: array, items: { type: string } }
+      fields: []
+      options_schema:
+        type: object
+      events: {}
+      params: []
+      default_data:
+        main: demo.user_status:users
+      default_actions:
+        set_status: demo.user_status:set_status
+      min_size: { w: 320px, h: 160px }
+      default_size: { w: 50%, h: 280px }
+
+  # ── web component ────────────────────────────────────────────────────
+  - name: user-status
+    kind: registry.entry
+    meta:
+      type: view.component
+      name: user-status
+      tag_name: user-status
+      announced: true
+      secure: false
+      auto_register: true
+      url: /app/wc/user-status
+      entry_point: user-status.js
+
+  # ── live signal (contracts section 9) ────────────────────────────────
+  - name: publish_signal
+    kind: function.lua
+    meta:
+      comment: Sends the signal dash.users.changed (no data) through wippy.central
+    source: file://signal.lua
+    method: publish
+    modules:
+      - http
+      - security
+      - logger
+    pool:
+      size: 1
+
+  - name: signal_handler
+    kind: function.lua
+    meta:
+      comment: POST /api/v1/demo/signal/users, admin only
+    source: file://signal.lua
+    method: signal_handler
+    modules:
+      - http
+      - security
+      - logger
+    pool:
+      size: 1
+
+  - name: signal_handler.endpoint
+    kind: http.endpoint
+    meta:
+      router: app:api
+    method: POST
+    func: signal_handler
+    path: /demo/signal/users
+
+  # Only the admin group may publish the test signal. The user group is denied.
+  - name: deny_signal_users
+    kind: security.policy
+    meta:
+      comment: app.security:user may not publish the test signal
+    groups:
+      - app.security:user
+    policy:
+      resources: demo.user_status:signal
+      actions: demo.signal_users
+      effect: deny
+
+  # ── action (stage E3, contracts section 5.2) ─────────────────────────
+  # The declaration is demo.user_status:set_status; its function is set_user_status.
+  - name: set_user_status
+    kind: function.lua
+    meta:
+      comment: Sets the status of a user (active or inactive); refuses the caller's own account
+    source: file://set_status.lua
+    method: set_status
+    modules:
+      - security
+      - funcs
+      - logger
+    imports:
+      user_repo: userspace.user.persist:user_repo
+    pool:
+      size: 2
+
+  - name: set_status
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.action
+      title: Set user status
+      func: demo.user_status:set_user_status
+      args_schema:
+        type: object
+        additionalProperties: false
+        required: [user_id, status]
+        properties:
+          user_id: { type: string }
+          status: { enum: [active, inactive] }
+      tile_args: [user_id, status]
+      result_schema:
+        type: object
+      permission:
+        action: dash.users.set_status
+        resource: demo.user_status:users
+      confirm: true
+      sensitive_fields: []
+      refreshes: [users]
+
+  # Only the admin group may set a user status. The user group is denied.
+  - name: deny_set_status
+    kind: security.policy
+    meta:
+      comment: app.security:user may not set a user status
+    groups:
+      - app.security:user
+    policy:
+      resources: demo.user_status:users
+      actions: dash.users.set_status
+      effect: deny

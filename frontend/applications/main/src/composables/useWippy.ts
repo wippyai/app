@@ -1,6 +1,7 @@
 import { inject } from 'vue'
-import { HOST_API, AXIOS_INSTANCE, WIPPY_INSTANCE } from '../constants'
-import type { HostApi, ProxyApiInstance } from '../types'
+import type { PageList } from '@example/app-nav'
+import { AXIOS_INSTANCE, HOST_API, PAGE_LIST } from '../constants'
+import type { ApiInstance, HostApi } from '../types'
 
 export function useHost(): HostApi {
   const host = inject(HOST_API)
@@ -8,14 +9,14 @@ export function useHost(): HostApi {
   return host
 }
 
-export function useApi(): ProxyApiInstance['api'] {
+export function useApi(): ApiInstance {
   const api = inject(AXIOS_INSTANCE)
-  if (!api) throw new Error('ProxyApiInstance not provided')
+  if (!api) throw new Error('Api instance not provided')
   return api
 }
 
-export function useWippy(): ProxyApiInstance {
-  const instance = inject(WIPPY_INSTANCE)
-  if (!instance) throw new Error('WIPPY_INSTANCE not provided')
-  return instance
+export function usePages(): PageList {
+  const pages = inject(PAGE_LIST)
+  if (!pages) throw new Error('Page list not provided')
+  return pages
 }
