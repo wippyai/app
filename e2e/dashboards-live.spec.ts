@@ -2,6 +2,7 @@ import type { FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
+import { publishPage } from './dashboards-wp5.support'
 
 /**
  * Real-time checks of wippy/dashboards RC1 (real-time contract, docs/contracts/live-v1.md,
@@ -67,7 +68,7 @@ test.beforeAll(async ({ browser }) => {
   try {
     await loginAsAdmin(page)
     for (const spec of [LIVE_SPEC, OTHER_SPEC]) {
-      const published = await api(page, 'POST', '/api/v1/dashboards/pages', spec)
+      const published = await publishPage(page, spec)
       expect(published.status, published.body).toBe(200)
     }
   }

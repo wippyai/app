@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
-import { WIDE, answerReads, frame, pageFrame, publish, ready, refreshShell, remove, routeOf } from './dashboards-wp5.support'
+import { WIDE, answerReads, frame, pageFrame, publish, publishPage, ready, refreshShell, remove, routeOf } from './dashboards-wp5.support'
 
 /**
  * RC1-21 browser tests: the built-in `artifact` tile shows a fixture artifact by id and a fixture web
@@ -129,7 +129,7 @@ test.describe('RC1-21: publish checks', () => {
     // The three refusals and the three missing pages afterwards are what this test proves.
     expectFailures(page, { status: 400, path: '/api/v1/dashboards/pages' }, { status: 404, path: '/props' })
     for (const [id, options] of cases) {
-      const res = await api(page, 'POST', '/api/v1/dashboards/pages', spec(id, options))
+      const res = await publishPage(page, spec(id, options))
       expect(res.status, `${id}: ${res.body}`).toBe(400)
     }
     // Each refusal left nothing behind.
@@ -142,7 +142,7 @@ test.describe('RC1-21: publish checks', () => {
       ['fx_art_ok_tag', { tag: 'fx-api' }],
       ['fx_art_ok_id', { artifact_id: 'app.views:iframe-demo', artifact_type: 'page' }],
     ] as Array<[string, Record<string, unknown>]>) {
-      const res = await api(page, 'POST', '/api/v1/dashboards/pages', spec(id, options))
+      const res = await publishPage(page, spec(id, options))
       expect(res.status, `${id}: ${res.body}`).toBe(200)
       await remove(page, id)
     }

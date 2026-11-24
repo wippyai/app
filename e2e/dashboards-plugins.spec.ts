@@ -2,7 +2,7 @@ import type { FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, monitor, openInShell, takeUnexpected } from './helpers/page-watch'
-import { refreshShell } from './dashboards-wp5.support'
+import { publishPage, refreshShell } from './dashboards-wp5.support'
 
 /**
  * RC1-03: a plugin adds a tile with no engine change. The two demo plugins ship a tile claim on their
@@ -39,7 +39,7 @@ function spec(id: string, route: string, tiles: Record<string, unknown>, rows: s
 const created: string[] = []
 
 async function publish(page: Page, body: { id: string }) {
-  const r = await api(page, 'POST', '/api/v1/dashboards/pages', body)
+  const r = await publishPage(page, body)
   if (r.status === 200)
     created.push(body.id)
   return { status: r.status, json: r.body ? JSON.parse(r.body) : null }

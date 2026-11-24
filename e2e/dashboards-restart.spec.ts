@@ -4,7 +4,7 @@ import type { FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, monitor, openInShell, takeUnexpected } from './helpers/page-watch'
-import { refreshShell } from './dashboards-wp5.support'
+import { publishPage, refreshShell } from './dashboards-wp5.support'
 
 /**
  * RC1-12 two-phase restart check: generated pages come back after a real restart of the Wippy
@@ -115,7 +115,7 @@ test.describe('dashboards restart: seed', () => {
     for (const p of [LIVE, GONE]) {
       // A leftover page of an earlier run would answer duplicate_route.
       await api(page, 'DELETE', `/api/v1/dashboards/pages/${p.id}`)
-      const published = await api(page, 'POST', '/api/v1/dashboards/pages', spec(p))
+      const published = await publishPage(page, spec(p))
       expect(published.status, published.body).toBe(200)
     }
     const removed = await api(page, 'DELETE', `/api/v1/dashboards/pages/${GONE.id}`)
@@ -166,7 +166,7 @@ test.describe('dashboards restart: verify', () => {
     await openAndCheckTiles(page, state.live)
 
     // The route of the removed page can be used by another page.
-    const reused = await api(page, 'POST', '/api/v1/dashboards/pages', spec(REUSE))
+    const reused = await publishPage(page, spec(REUSE))
     expect(reused.status, reused.body).toBe(200)
     expect(await routeList(page)).toContain(REUSE.route)
 

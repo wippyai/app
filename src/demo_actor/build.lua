@@ -1,17 +1,26 @@
 -- demo.actor:build_pages stands in for the agent: it publishes the two page
 -- specs of specs.lua through wippy.dashboards:publish, as the caller. Running
--- it again updates the same rows and entries (one per page).
+-- it again updates the same rows and entries (one per page): a page that exists is published again with
+-- base_revision, the revision that the build reads from the store first (RC2-01).
 -- POST /api/v1/demo/build runs it for a caller allowed dashboards.publish.
 local http = require("http")
 local json = require("json")
 local publish_lib = require("publish")
+local page_store = require("page_store")
 local specs = require("specs")
 
 -- Returns the list of publication results, or nil plus { status, code, message }.
 local function publish_all()
     local results = {}
     for _, spec in ipairs(specs.all()) do
-        local raw, jerr = json.encode(spec)
+        -- A page that exists names the revision that was read; a new page names none.
+        local stored = page_store.get(spec.id)
+        local body = {}
+        for k, v in pairs(spec) do
+            body[k] = v
+        end
+        body.base_revision = stored and stored.revision or nil
+        local raw, jerr = json.encode(body)
         if jerr or type(raw) ~= "string" then
             return nil, { status = 500, code = "internal", message = "Cannot encode page " .. tostring(spec.id) }
         end

@@ -29,6 +29,7 @@ entries:
       - json
     imports:
       publish: wippy.dashboards:publish
+      page_store: wippy.dashboards:page_store
       specs: demo.actor:specs
     pool:
       size: 1
@@ -42,6 +43,7 @@ entries:
       - json
     imports:
       publish: wippy.dashboards:publish
+      page_store: wippy.dashboards:page_store
       specs: demo.actor:specs
     pool:
       size: 1

@@ -3,6 +3,7 @@ import type { FrameLocator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, pathOf, takeUnexpected } from './helpers/page-watch'
+import { publishPage } from './dashboards-wp5.support'
 import { formatDuration } from '../frontend/web-components/run-timeline/src/lib/timeline'
 
 /** A node of the latest run, as the run point returns it (src/demo_run_timeline). */
@@ -30,7 +31,7 @@ test.beforeAll(async ({ browser }) => {
     expect(build.status, build.body).toBe(200)
     for (const name of ['coord_ph_one', 'coord_ph_two']) {
       const spec: unknown = JSON.parse(readFileSync(`e2e/fixtures/dashboards/${name}.json`, 'utf8'))
-      const published = await api(page, 'POST', '/api/v1/dashboards/pages', spec)
+      const published = await publishPage(page, spec as Record<string, unknown>)
       expect(published.status, published.body).toBe(200)
     }
   }

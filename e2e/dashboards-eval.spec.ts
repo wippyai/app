@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, openInShell } from './helpers/page-watch'
+import { publishPage } from './dashboards-wp5.support'
 import type { CatalogueDoc, Envelope, PageProps } from './dashboards-agent.support'
 import {
   PAGE_LINK,
@@ -234,7 +235,7 @@ test.beforeAll(async ({ browser }) => {
     await loginAsAdmin(page)
     for (const ref of REF_PAGES) {
       await removePage(page, ref.id)
-      const published = await api(page, 'POST', '/api/v1/dashboards/pages', refSpec(ref))
+      const published = await publishPage(page, refSpec(ref))
       expect(published.status, published.body).toBe(200)
     }
   }
