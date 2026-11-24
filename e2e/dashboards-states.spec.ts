@@ -706,3 +706,74 @@ test.describe('RC1-14: the request lifecycle', () => {
     never.open()
   })
 })
+
+/**
+ * RC2-06: a point with a source and a mapper, and an open point, follow the slow-result rules through the whole
+ * read path. The fixture source (app.dashboards_fixtures:slow_rows_fn) takes 5 seconds. The reads here are real
+ * (nothing is answered by the test): the tile shows `computing`, then the mapped rows. The engine's own rules
+ * (one run for the token, a new run without it, the timeout after 15 minutes) are proved by the Lua tests
+ * test/src/reads/slow_mapped_test.lua of wippy/dashboards.
+ */
+const SLOW_SUM = { ref: 'mock.mappers:sum_by', params: { by: 'model_id', values: ['prompt_tokens', 'completion_tokens'] } }
+const SLOW_OUTPUT = {
+  shape: 'category',
+  fields: [
+    { name: 'model_id', type: 'string', role: 'dimension', nullable: false },
+    { name: 'prompt_tokens', type: 'number', role: 'measure', additive: true, nullable: false },
+    { name: 'completion_tokens', type: 'number', role: 'measure', additive: true, nullable: false },
+  ],
+}
+
+/** A page with one table tile that reads a slow point: `slow_mapped` (a declared mapper) or `slow_open` (the page picks the mapper). */
+function slowPage(id: string, open: boolean) {
+  return {
+    id,
+    title: `Fixture slow ${id}`,
+    route: routeOf(id),
+    params: {},
+    data: {
+      rows: open
+        ? { ...POINT('slow_open'), mapper: SLOW_SUM, output: SLOW_OUTPUT }
+        : POINT('slow_mapped'),
+    },
+    actions: {},
+    tiles: { tb: { type: 'table', data: { main: 'rows' } } },
+    rows: [['tb']],
+  }
+}
+
+test.describe('RC2-06: slow mapped and open points', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize(WIDE)
+    await loginAsAdmin(page)
+    await publish(page, slowPage('fx_slow_mapped', false))
+    await publish(page, slowPage('fx_slow_open', true))
+  })
+
+  test.afterEach(async ({ page }) => {
+    await remove(page, 'fx_slow_mapped')
+    await remove(page, 'fx_slow_open')
+  })
+
+  /** The tile is computing first, and about 5 seconds later it shows the two mapped rows: a 40 and 20, b 20 and 10. */
+  async function expectComputingThenRows(page: Page, id: string) {
+    await openInShell(page, routeOf(id))
+    const tile = pageFrame(page, id).locator('[data-tile-id="tb"]')
+    await expect(tile).toHaveAttribute('data-frame-status', 'computing', { timeout: 20_000 })
+    await expect(tile).toHaveAttribute('data-frame-status', 'ready', { timeout: 30_000 })
+    await expect(tile.locator('tbody tr')).toHaveCount(2)
+    const rows = tile.locator('tbody tr')
+    await expect(rows.nth(0).locator('td')).toHaveText(['a', '40', '20'])
+    await expect(rows.nth(1).locator('td')).toHaveText(['b', '20', '10'])
+  }
+
+  test('a slow mapped point shows computing, then its rows', async ({ page }) => {
+    test.setTimeout(90_000)
+    await expectComputingThenRows(page, 'fx_slow_mapped')
+  })
+
+  test('a slow open point shows computing, then its rows', async ({ page }) => {
+    test.setTimeout(90_000)
+    await expectComputingThenRows(page, 'fx_slow_open')
+  })
+})

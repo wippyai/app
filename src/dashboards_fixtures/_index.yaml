@@ -213,6 +213,19 @@ entries:
     pool:
       size: 4
 
+  - name: slow_rows_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: slow_rows
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 4
+
   - name: slow_action_fn
     kind: function.lua
     source: file://fixtures.lua
@@ -499,6 +512,60 @@ entries:
       example:
         args: {}
         data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: number, role: measure, nullable: false }], rows: [[7]] }
+
+  # RC2-06: a point with a source and a mapper, and an open point, whose source is slow like `slow`.
+  - name: slow_mapped
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture slow mapped point
+      description: "A source that takes 5 seconds and a mapper: the read answers computing, then the tokens per model (a 40 and 20, b 20 and 10)."
+      source: app.dashboards_fixtures:slow_rows_fn
+      mapper: mock.mappers:sum_by
+      mapper_params: { by: model_id, values: [prompt_tokens, completion_tokens] }
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: category
+        fields:
+          - { name: model_id, type: string, role: dimension, nullable: false }
+          - { name: prompt_tokens, type: number, role: measure, additive: true, nullable: false }
+          - { name: completion_tokens, type: number, role: measure, additive: true, nullable: false }
+      example:
+        args: {}
+        data:
+          schema: wippy.dashboard_frame/v1
+          fields:
+            - { name: model_id, type: string, role: dimension, nullable: false }
+            - { name: prompt_tokens, type: number, role: measure, additive: true, nullable: false }
+            - { name: completion_tokens, type: number, role: measure, additive: true, nullable: false }
+          rows: [["a", 40, 20], ["b", 20, 10]]
+
+  - name: slow_open
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Fixture slow open point
+      description: "An open point whose source takes 5 seconds: the page picks the mapper, and the read answers computing, then the mapped rows."
+      source: app.dashboards_fixtures:slow_rows_fn
+      mapping: open
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      rows_schema:
+        type: array
+        items:
+          type: object
+          properties:
+            day: { type: string }
+            model_id: { type: string }
+            prompt_tokens: { type: integer }
+            completion_tokens: { type: integer }
+      example:
+        args: {}
+        rows:
+          - { day: "2026-11-17", model_id: a, prompt_tokens: 10, completion_tokens: 5 }
+          - { day: "2026-11-17", model_id: b, prompt_tokens: 20, completion_tokens: 10 }
+          - { day: "2026-11-18", model_id: a, prompt_tokens: 30, completion_tokens: 15 }
 
   - name: values
     kind: registry.entry
