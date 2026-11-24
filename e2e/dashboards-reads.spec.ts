@@ -640,11 +640,20 @@ test.describe('withdrawn access is refused on every read path (RC1-08)', () => {
 interface PointRead {
   point: string
   operation: string | null
+  /** The status of the answer, null while there is none (or when the read was aborted). */
+  status: number | null
+  /** True when the browser aborted the read (the tile starts a newer read of the same input and drops this one). */
+  aborted: boolean
 }
 
-/** Records every GET of a point of the page that the signed-in page sends, in order. */
+/**
+ * Records every GET of a point of the page that the signed-in page sends, in order, with how each one ended.
+ * The tests declare `ERR_ABORTED` to the page watch (the watch cannot tell which abort is expected), so the
+ * tests themselves check each abort with `expectAbortsSuperseded` and each final read with `lastReadAnswered`.
+ */
 function recordReads(page: Page, pageId: string): PointRead[] {
   const reads: PointRead[] = []
+  const byRequest = new Map<unknown, PointRead>()
   page.on('request', (r) => {
     if (r.method() !== 'GET')
       return
@@ -654,9 +663,37 @@ function recordReads(page: Page, pageId: string): PointRead[] {
     if (at < 0)
       return
     const point = decodeURIComponent(url.pathname.slice(at + marker.length)).split('/')[0] ?? ''
-    reads.push({ point, operation: url.searchParams.get('operation') })
+    const read: PointRead = { point, operation: url.searchParams.get('operation'), status: null, aborted: false }
+    reads.push(read)
+    byRequest.set(r, read)
+  })
+  page.on('response', (r) => {
+    const read = byRequest.get(r.request())
+    if (read)
+      read.status = r.status()
+  })
+  page.on('requestfailed', (r) => {
+    const read = byRequest.get(r)
+    if (read && r.failure()?.errorText === 'net::ERR_ABORTED')
+      read.aborted = true
   })
   return reads
+}
+
+/** An abort is allowed only for a read that a later read of the same input replaced. */
+function expectAbortsSuperseded(reads: PointRead[]) {
+  reads.forEach((read, index) => {
+    if (!read.aborted)
+      return
+    const replaced = reads.slice(index + 1).some(later => later.point === read.point)
+    expect(replaced, `the aborted read of ${read.point} has no later read of the same input`).toBe(true)
+  })
+}
+
+/** True when the newest read of the input has been answered with a 2xx status. */
+function lastReadAnswered(reads: PointRead[], point: string): boolean {
+  const last = reads.filter(r => r.point === point).slice(-1)[0]
+  return last !== undefined && last.status !== null && last.status >= 200 && last.status < 300
 }
 
 /** The points of the reads that start work (no operation token), since `from`, sorted. */
@@ -669,6 +706,7 @@ test.describe('refresh controls (RC2-07)', () => {
     test.setTimeout(90_000)
     const viewer = await signedIn(browser, 'viewer', 'viewer')
     // A refresh aborts a read of the same input that is still in flight (a poll of the slow point, a live read).
+    // The page watch cannot tell which abort is expected, so the test checks each abort itself (expectAbortsSuperseded).
     expectFailures(viewer, { text: 'points/slow net::ERR_ABORTED' }, { text: 'points/users net::ERR_ABORTED' }, { text: 'points/ok net::ERR_ABORTED' })
     await viewer.setViewportSize({ width: 1920, height: 1000 })
     const reads = recordReads(viewer, 'reads_toggle')
@@ -691,6 +729,8 @@ test.describe('refresh controls (RC2-07)', () => {
     await expect.poll(() => startedSince(reads, from), { timeout: 10_000 }).toEqual(['ok'])
     await viewer.waitForTimeout(1500)
     expect(startedSince(reads, from)).toEqual(['ok'])
+    // The read of the tile refresh ends with a 2xx answer, and the tile is ready again.
+    await expect.poll(() => lastReadAnswered(reads, 'ok'), { timeout: 10_000 }).toBe(true)
     await expect(f.locator('[data-tile-id="ok_kpi"]')).toHaveAttribute('data-frame-status', 'ready', { timeout: 10_000 })
     await expect(f.locator('[data-tile-id="ok_kpi"]')).toContainText('42')
 
@@ -702,6 +742,15 @@ test.describe('refresh controls (RC2-07)', () => {
     await expect.poll(() => startedSince(reads, from), { timeout: 10_000 }).toEqual(['ok', 'slow', 'users'])
     await viewer.waitForTimeout(1500)
     expect(startedSince(reads, from)).toEqual(['ok', 'slow', 'users'])
+    // Every final read ends with a 2xx answer and every tile is ready again (the slow point computes first, for about 5 s).
+    for (const point of ['ok', 'slow', 'users'])
+      await expect.poll(() => lastReadAnswered(reads, point), { timeout: 30_000 }).toBe(true)
+    for (const id of ['ok_kpi', 'slow_kpi', 'users_tile'])
+      await expect(f.locator(`[data-tile-id="${id}"]`)).toHaveAttribute('data-frame-status', 'ready', { timeout: 30_000 })
+    await expect(f.locator('[data-tile-id="slow_kpi"]')).toContainText('7')
+    // An abort is allowed only for a read that a later read of the same input replaced, and no read was refused.
+    expectAbortsSuperseded(reads)
+    expect(reads.filter(r => r.status !== null && r.status >= 400)).toEqual([])
   })
 
   test('a refresh during computing starts no second run', async ({ browser }) => {
@@ -746,8 +795,14 @@ test.describe('refresh controls (RC2-07)', () => {
     holding = false
     await Promise.all(held.splice(0).map(route => route.continue().catch(() => {})))
     await expect(slow).toContainText('7', { timeout: 30_000 })
+    await expect(slow).toHaveAttribute('data-frame-status', 'ready')
     expect(runs()).toBe(1)
     expect(new Set(followed().map(r => r.operation))).toEqual(new Set([token]))
+    // The newest read was answered with a 2xx status. The only abort is the read that was on hold, and the
+    // refresh read replaced it.
+    expect(lastReadAnswered(reads, 'slow')).toBe(true)
+    expectAbortsSuperseded(reads)
+    expect(reads.filter(r => r.aborted).map(r => r.point)).toEqual(['slow'])
   })
 
   test('a refresh past the read limit shows rate_limited', async ({ browser }) => {
@@ -755,9 +810,10 @@ test.describe('refresh controls (RC2-07)', () => {
     const viewer = await signedIn(browser, 'viewer', 'viewer')
     // The engine refuses reads past its limit on purpose (10 a second, burst 30); the page watch counts each 429.
     expectFailures(viewer, { status: 429, path: '/api/v1/dashboards/pages/reads_toggle/points/ok' })
-    // A new refresh aborts the read of the one before while it is in flight.
+    // A new refresh aborts the read of the one before while it is in flight (the test checks each abort itself).
     expectFailures(viewer, { text: 'points/ok net::ERR_ABORTED' })
     await viewer.setViewportSize({ width: 1920, height: 1000 })
+    const reads = recordReads(viewer, 'reads_toggle')
     await openInShell(viewer, '/reads/toggle')
     const f = pageFrame(viewer, 'reads_toggle')
     const ok = f.locator('[data-tile-id="ok_kpi"]')
@@ -784,6 +840,11 @@ test.describe('refresh controls (RC2-07)', () => {
     // After the bucket refills, the same control reads again and the tile is ready.
     await viewer.waitForTimeout(4000)
     await refresh.click()
+    await expect.poll(() => lastReadAnswered(reads, 'ok'), { timeout: 10_000 }).toBe(true)
     await expect(ok).toHaveAttribute('data-frame-status', 'ready', { timeout: 10_000 })
+    // The only refused reads are the ones that the limit refused, and every abort was replaced by a later read of the input.
+    expectAbortsSuperseded(reads)
+    expect(reads.filter(r => r.status === 429).every(r => r.point === 'ok')).toBe(true)
+    expect(reads.filter(r => r.status !== null && r.status >= 400 && r.status !== 429)).toEqual([])
   })
 })
