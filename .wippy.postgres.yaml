@@ -27,5 +27,10 @@ profiles:
       app:db:database: ${env:PGDATABASE}
       app:db:username: ${env:PGUSER}
       app:db:password: ${env:PGPASSWORD}
+      # Keep idle connections. Wippy keeps none by default, so every query opens a new TCP connection and a
+      # full browser regression ran Windows out of sockets (ERR_NO_BUFFER_SPACE, aborted page requests).
+      app:db:pool:
+        max_open: 25
+        max_idle: 5
       app:db:options:
         sslmode: disable
