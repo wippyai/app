@@ -1,4 +1,4 @@
-import type { FrameLocator, Page } from '@playwright/test'
+import type { FrameLocator, Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
@@ -624,5 +624,227 @@ test.describe('withdrawn access is refused on every read path (RC1-08)', () => {
     finally {
       await setAccess(admin, true)
     }
+  })
+})
+
+// ── RC2-07: refresh ──────────────────────────────────────────────────
+
+/**
+ * Browser tests of the refresh controls (RC2-07), on the page reads_toggle, as the regular user. The page has three
+ * tiles: ok_kpi ("Fixed number", point ok), slow_kpi ("Slow number", point slow, computing for about 5 s) and
+ * users_tile (point users, no label). A read is a GET of a point; a new run is a read without an `operation` token.
+ *
+ * NOT RUN by the builder (the coordinator runs browser tests at integration). They pass only after WP-READ (wave 2),
+ * which makes a read with a token follow the running operation and keeps the read limit.
+ */
+interface PointRead {
+  point: string
+  operation: string | null
+  /** The status of the answer, null while there is none (or when the read was aborted). */
+  status: number | null
+  /** True when the browser aborted the read (the tile starts a newer read of the same input and drops this one). */
+  aborted: boolean
+}
+
+/**
+ * Records every GET of a point of the page that the signed-in page sends, in order, with how each one ended.
+ * The tests declare `ERR_ABORTED` to the page watch (the watch cannot tell which abort is expected), so the
+ * tests themselves check each abort with `expectAbortsSuperseded` and each final read with `lastReadAnswered`.
+ */
+function recordReads(page: Page, pageId: string): PointRead[] {
+  const reads: PointRead[] = []
+  const byRequest = new Map<unknown, PointRead>()
+  page.on('request', (r) => {
+    if (r.method() !== 'GET')
+      return
+    const url = new URL(r.url())
+    const marker = `/pages/${pageId}/points/`
+    const at = url.pathname.indexOf(marker)
+    if (at < 0)
+      return
+    const point = decodeURIComponent(url.pathname.slice(at + marker.length)).split('/')[0] ?? ''
+    const read: PointRead = { point, operation: url.searchParams.get('operation'), status: null, aborted: false }
+    reads.push(read)
+    byRequest.set(r, read)
+  })
+  page.on('response', (r) => {
+    const read = byRequest.get(r.request())
+    if (read)
+      read.status = r.status()
+  })
+  page.on('requestfailed', (r) => {
+    const read = byRequest.get(r)
+    if (read && r.failure()?.errorText === 'net::ERR_ABORTED')
+      read.aborted = true
+  })
+  return reads
+}
+
+/** An abort is allowed only for a read that a later read of the same input replaced. */
+function expectAbortsSuperseded(reads: PointRead[]) {
+  reads.forEach((read, index) => {
+    if (!read.aborted)
+      return
+    const replaced = reads.slice(index + 1).some(later => later.point === read.point)
+    expect(replaced, `the aborted read of ${read.point} has no later read of the same input`).toBe(true)
+  })
+}
+
+/** True when the newest read of the input has been answered with a 2xx status. */
+function lastReadAnswered(reads: PointRead[], point: string): boolean {
+  const last = reads.filter(r => r.point === point).slice(-1)[0]
+  return last !== undefined && last.status !== null && last.status >= 200 && last.status < 300
+}
+
+/** The points of the reads that start work (no operation token), since `from`, sorted. */
+function startedSince(reads: PointRead[], from: number): string[] {
+  return reads.slice(from).filter(r => r.operation === null).map(r => r.point).sort()
+}
+
+test.describe('refresh controls (RC2-07)', () => {
+  test('a regular user refreshes a tile and a page', async ({ browser }) => {
+    test.setTimeout(90_000)
+    const viewer = await signedIn(browser, 'viewer', 'viewer')
+    // A refresh aborts a read of the same input that is still in flight (a poll of the slow point, a live read).
+    // The page watch cannot tell which abort is expected, so the test checks each abort itself (expectAbortsSuperseded).
+    expectFailures(viewer, { text: 'points/slow net::ERR_ABORTED' }, { text: 'points/users net::ERR_ABORTED' }, { text: 'points/ok net::ERR_ABORTED' })
+    await viewer.setViewportSize({ width: 1920, height: 1000 })
+    const reads = recordReads(viewer, 'reads_toggle')
+    await openInShell(viewer, '/reads/toggle')
+    const f = pageFrame(viewer, 'reads_toggle')
+    await expect(f.locator('[data-tile-id="ok_kpi"]')).toContainText('42', { timeout: 20_000 })
+    await expect(f.locator('[data-tile-id="slow_kpi"]')).toContainText('7', { timeout: 30_000 })
+    await expect(f.locator('[data-tile-id="users_tile"] tr[data-user-id]').first()).toBeVisible({ timeout: 20_000 })
+
+    // The controls need no right: the regular user sees one for each tile and one for the page, named after the tile.
+    await expect(f.locator('[data-tile-refresh]')).toHaveCount(3)
+    await expect(f.getByRole('button', { name: 'Refresh Fixed number' })).toBeVisible()
+    await expect(f.getByRole('button', { name: 'Refresh Slow number' })).toBeVisible()
+    await expect(f.getByRole('button', { name: 'Refresh page' })).toBeVisible()
+    await expect(f.locator('[data-page-refresh]')).toHaveCount(1)
+
+    // The refresh control of a tile reads only the inputs of that tile, once.
+    let from = reads.length
+    await f.getByRole('button', { name: 'Refresh Fixed number' }).click()
+    await expect.poll(() => startedSince(reads, from), { timeout: 10_000 }).toEqual(['ok'])
+    await viewer.waitForTimeout(1500)
+    expect(startedSince(reads, from)).toEqual(['ok'])
+    // The read of the tile refresh ends with a 2xx answer, and the tile is ready again.
+    await expect.poll(() => lastReadAnswered(reads, 'ok'), { timeout: 10_000 }).toBe(true)
+    await expect(f.locator('[data-tile-id="ok_kpi"]')).toHaveAttribute('data-frame-status', 'ready', { timeout: 10_000 })
+    await expect(f.locator('[data-tile-id="ok_kpi"]')).toContainText('42')
+
+    // The page refresh reads each input once, users included. users_tile (demo.user_status) is a plugin tile that
+    // takes the tile helper from the module build: this needs the demo's plugin tiles rebuilt against the new helper
+    // (the integration step does that), else the tile ignores the `refresh` counter and reads nothing.
+    from = reads.length
+    await f.getByRole('button', { name: 'Refresh page' }).click()
+    await expect.poll(() => startedSince(reads, from), { timeout: 10_000 }).toEqual(['ok', 'slow', 'users'])
+    await viewer.waitForTimeout(1500)
+    expect(startedSince(reads, from)).toEqual(['ok', 'slow', 'users'])
+    // Every final read ends with a 2xx answer and every tile is ready again (the slow point computes first, for about 5 s).
+    for (const point of ['ok', 'slow', 'users'])
+      await expect.poll(() => lastReadAnswered(reads, point), { timeout: 30_000 }).toBe(true)
+    for (const id of ['ok_kpi', 'slow_kpi', 'users_tile'])
+      await expect(f.locator(`[data-tile-id="${id}"]`)).toHaveAttribute('data-frame-status', 'ready', { timeout: 30_000 })
+    await expect(f.locator('[data-tile-id="slow_kpi"]')).toContainText('7')
+    // An abort is allowed only for a read that a later read of the same input replaced, and no read was refused.
+    expectAbortsSuperseded(reads)
+    expect(reads.filter(r => r.status !== null && r.status >= 400)).toEqual([])
+  })
+
+  test('a refresh during computing starts no second run', async ({ browser }) => {
+    test.setTimeout(90_000)
+    const viewer = await signedIn(browser, 'viewer', 'viewer')
+    await viewer.setViewportSize({ width: 1920, height: 1000 })
+    const reads = recordReads(viewer, 'reads_toggle')
+    // The fixture asks the tile to poll every second (retry_after_ms). Hold every poll read in the browser: the
+    // tile then waits for the answer and arms no next poll, so a read that carries the token and arrives after the
+    // click can only come from the refresh control.
+    let holding = true
+    const held: Route[] = []
+    // The refresh supersedes the read on hold: the tile aborts it, and the page watch sees the abort.
+    expectFailures(viewer, { text: 'points/slow net::ERR_ABORTED' })
+    await viewer.route('**/api/v1/dashboards/pages/reads_toggle/points/slow**', async (route) => {
+      if (holding && new URL(route.request().url()).searchParams.get('operation') !== null) {
+        held.push(route)
+        return
+      }
+      await route.continue().catch(() => {})
+    })
+    await openInShell(viewer, '/reads/toggle')
+    const f = pageFrame(viewer, 'reads_toggle')
+    const slow = f.locator('[data-tile-id="slow_kpi"]')
+    await expect(slow).toHaveAttribute('data-frame-status', 'computing', { timeout: 20_000 })
+    const runs = () => reads.filter(r => r.point === 'slow' && r.operation === null).length
+    const followed = () => reads.filter(r => r.point === 'slow' && r.operation !== null)
+    expect(runs()).toBe(1)
+    // The first poll is on hold. Nothing else can ask for this operation now.
+    await expect.poll(() => held.length, { timeout: 10_000 }).toBe(1)
+    const token = followed()[0].operation
+    await viewer.waitForTimeout(1500)
+    expect(followed()).toHaveLength(1)
+
+    await f.getByRole('button', { name: 'Refresh Slow number' }).click()
+    // The refresh follows the running operation at once, with its token, and starts no run.
+    await expect.poll(() => followed().length, { timeout: 3000 }).toBe(2)
+    expect(followed()[1].operation).toBe(token)
+    expect(runs()).toBe(1)
+
+    // Let the polls go. The run ends with its result, still the only run, and every read carries the one token.
+    holding = false
+    await Promise.all(held.splice(0).map(route => route.continue().catch(() => {})))
+    await expect(slow).toContainText('7', { timeout: 30_000 })
+    await expect(slow).toHaveAttribute('data-frame-status', 'ready')
+    expect(runs()).toBe(1)
+    expect(new Set(followed().map(r => r.operation))).toEqual(new Set([token]))
+    // The newest read was answered with a 2xx status. The only abort is the read that was on hold, and the
+    // refresh read replaced it.
+    expect(lastReadAnswered(reads, 'slow')).toBe(true)
+    expectAbortsSuperseded(reads)
+    expect(reads.filter(r => r.aborted).map(r => r.point)).toEqual(['slow'])
+  })
+
+  test('a refresh past the read limit shows rate_limited', async ({ browser }) => {
+    test.setTimeout(90_000)
+    const viewer = await signedIn(browser, 'viewer', 'viewer')
+    // The engine refuses reads past its limit on purpose (10 a second, burst 30); the page watch counts each 429.
+    expectFailures(viewer, { status: 429, path: '/api/v1/dashboards/pages/reads_toggle/points/ok' })
+    // A new refresh aborts the read of the one before while it is in flight (the test checks each abort itself).
+    expectFailures(viewer, { text: 'points/ok net::ERR_ABORTED' })
+    await viewer.setViewportSize({ width: 1920, height: 1000 })
+    const reads = recordReads(viewer, 'reads_toggle')
+    await openInShell(viewer, '/reads/toggle')
+    const f = pageFrame(viewer, 'reads_toggle')
+    const ok = f.locator('[data-tile-id="ok_kpi"]')
+    await expect(ok).toContainText('42', { timeout: 20_000 })
+
+    let refused = 0
+    viewer.on('response', (r) => {
+      if (r.url().includes('/pages/reads_toggle/points/ok') && r.status() === 429)
+        refused += 1
+    })
+    const refresh = f.getByRole('button', { name: 'Refresh Fixed number' })
+    // Refresh faster than the limit allows until the engine refuses a read, then a few times more.
+    for (let i = 0; i < 200 && refused === 0; i++)
+      await refresh.click()
+    expect(refused).toBeGreaterThan(0)
+    for (let i = 0; i < 5; i++)
+      await refresh.click()
+
+    // The refused read is the tile state error with the code rate_limited. The number from before stays on screen.
+    await expect.poll(() => ok.getAttribute('data-frame-error-code'), { timeout: 10_000 }).toBe('rate_limited')
+    await expect(ok).toHaveAttribute('data-frame-status', 'error')
+    await expect(ok).toContainText('42')
+
+    // After the bucket refills, the same control reads again and the tile is ready.
+    await viewer.waitForTimeout(4000)
+    await refresh.click()
+    await expect.poll(() => lastReadAnswered(reads, 'ok'), { timeout: 10_000 }).toBe(true)
+    await expect(ok).toHaveAttribute('data-frame-status', 'ready', { timeout: 10_000 })
+    // The only refused reads are the ones that the limit refused, and every abort was replaced by a later read of the input.
+    expectAbortsSuperseded(reads)
+    expect(reads.filter(r => r.status === 429).every(r => r.point === 'ok')).toBe(true)
+    expect(reads.filter(r => r.status !== null && r.status >= 400 && r.status !== 429)).toEqual([])
   })
 })
