@@ -10,8 +10,8 @@ import { api, openInShell } from './helpers/page-watch'
  * only with RUN_LLM_DEMO=1.
  */
 
-/** The cap of decision A: the evaluation and the Researcher test together spend at most this much. */
-export const SPEND_CAP_USD = 5
+/** The shared cap of the RC2 LLM campaign (owner, 23 November 2026): every LLM spec together spends at most this much. */
+export const SPEND_CAP_USD = 10
 
 const SPEND_FILE = '.local/tmp/dashboards-llm-spend.json'
 

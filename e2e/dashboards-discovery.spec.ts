@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api } from './helpers/page-watch'
+import { dataflowFailure, ProviderStopped } from './dashboards-run-failure'
 import {
   SPEND_CAP_USD,
   SpendCapReached,
@@ -39,7 +40,7 @@ import {
  * The test checks the tool calls, the request and the page, not the agent's wording.
  *
  * It calls a real LLM, so it runs only with RUN_LLM_DEMO=1, and it counts against the spend cap of
- * decision A ($5), shared with dashboards-eval.spec.ts through .local/tmp/dashboards-llm-spend.json.
+ * the RC2 campaign, shared with dashboards-eval.spec.ts through .local/tmp/dashboards-llm-spend.json.
  * The cap is checked before the run starts and on every poll of the run, which cancels the run when the
  * cap is reached. It passes in at least two of three runs: each run is one test of this file, and the
  * last test counts.
@@ -60,6 +61,7 @@ const RUNS = 3
 const REQUEST = 'Make a dashboard of token use by model.'
 
 const outcomes: Array<{ pass: boolean, skipped: boolean, reasons: string[] }> = []
+let providerStopped = false
 
 /** The sums per model that a tile of tokens by model may draw, from the raw rows. */
 function expectedSums(rows: Awaited<ReturnType<typeof rawUsage>>) {
@@ -89,6 +91,8 @@ for (let run = 1; run <= RUNS; run++) {
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
     const pageId = `gen_${slug.replace(/-/g, '_')}`
     try {
+      if (providerStopped)
+        throw new ProviderStopped('The provider stopped an earlier Researcher run.')
       // The cap is checked before the model is asked, and again on every poll of the run.
       await assertBudget(page)
       const doc = await catalogue(page)
@@ -99,6 +103,9 @@ for (let run = 1; run <= RUNS; run++) {
       const stored = await finishedRun(page, dataflowId, 360_000, async () => {
         await assertBudget(page, 0)
       })
+      const failure = dataflowFailure(stored)
+      if (failure)
+        throw failure
 
       // 1. The catalogue before the first build, and the dashboard tools for this question.
       const calls = toolCalls(stored)
@@ -177,10 +184,13 @@ for (let run = 1; run <= RUNS; run++) {
       outcomes.push({ pass: true, skipped: false, reasons })
     }
     catch (e) {
-      // A run that fails is not a failed test: the last test counts the runs.
+      // The last test counts verdicts. A cap or provider stop has no verdict.
+      const skipped = e instanceof SpendCapReached || e instanceof ProviderStopped
+      if (e instanceof ProviderStopped)
+        providerStopped = true
       reasons.push(String(e).slice(0, 600))
-      outcomes.push({ pass: false, skipped: e instanceof SpendCapReached, reasons })
-      console.log(`run ${run} ${e instanceof SpendCapReached ? 'not completed' : 'failed'}`, reasons.join(' '))
+      outcomes.push({ pass: false, skipped, reasons })
+      console.log(`run ${run} ${skipped ? 'NO VERDICT' : 'FAIL'}`, reasons.join(' '))
     }
     finally {
       await removePage(page, pageId)
@@ -191,6 +201,8 @@ for (let run = 1; run <= RUNS; run++) {
 
 test('the Researcher test passes in at least two of three runs', () => {
   const passed = outcomes.filter(o => o.pass).length
+  const failed = outcomes.filter(o => !o.pass && !o.skipped).length
   console.log('researcher runs', JSON.stringify(outcomes))
+  test.skip(passed < 2 && failed < 2, 'Needs owner review. The cap or provider stopped required Researcher runs.')
   expect(passed, `passed ${passed} of ${outcomes.length} runs`).toBeGreaterThanOrEqual(2)
 })
