@@ -60,6 +60,17 @@ async function shellReady(page: Page) {
   await expect(active(page)).toHaveText('Home', { timeout: 20_000 })
 }
 
+/**
+ * Waits until the home page runs and its sidebar has read the list of registry pages (the
+ * Dashboards group shows LLM usage). A link that is opened before the list arrived finds no page and
+ * goes Home, or waits on "Loading..." for a page the sidebar does not know yet. Call it before
+ * `openInShell`.
+ */
+async function navReady(page: Page) {
+  await shellReady(page)
+  await expect(dashboardsGroup(page).getByRole('button', { name: 'LLM usage', exact: true })).toBeVisible({ timeout: 20_000 })
+}
+
 /** Marks the home page's window, so a later check proves it was not reloaded. */
 async function markShell(page: Page) {
   await shell(page).locator('body').evaluate(() => { (window as unknown as { __shellMark?: number }).__shellMark = 1 })
@@ -132,6 +143,10 @@ test.afterEach(async () => {
 })
 
 test.describe('app nav: the app\'s own sidebar lists registry pages live', () => {
+  // The waits of one test add up (sign-in 15 s, the shell 20 s, the list 20 s, the hosted board 20 s),
+  // so the default 30 s of a test could end it before a wait reports what it was waiting for.
+  test.describe.configure({ timeout: 90_000 })
+
   test('the sidebar keeps its own items and adds the Dashboards group; the Host nav stays hidden', async ({ page }) => {
     await loginAsAdmin(page)
     await expect(dashboardsGroup(page).getByRole('button', { name: 'LLM usage', exact: true })).toBeVisible()
@@ -170,7 +185,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
 
   test('a link with a sub-path sets the filter; back and forward move the active item', async ({ page }) => {
     await loginAsAdmin(page)
-    await shellReady(page)
+    await navReady(page)
     await openInShell(page, '/home/reports/llm-usage/claude-haiku-4-5')
     const board = hosted(page, 'llm_usage')
     await expect(board.locator('[data-tile-id="model_picker"]')).toContainText('claude-haiku-4-5', { timeout: 20_000 })
@@ -219,7 +234,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
 
   test('a path that no page owns goes Home', async ({ page }) => {
     await loginAsAdmin(page)
-    await shellReady(page)
+    await navReady(page)
     await openInShell(page, '/home/no/such/page')
     await expect(page).toHaveURL(/\/home\/?$/)
     await expect(active(page)).toHaveText('Home')
@@ -235,8 +250,7 @@ test.describe('app nav: the app\'s own sidebar lists registry pages live', () =>
 
     const viewer = await newPage(browser, 'viewer')
     await loginAs(viewer, 'viewer@wippy.local')
-    await shellReady(viewer)
-    await expect(dashboardsGroup(viewer).getByRole('button', { name: 'LLM usage', exact: true })).toBeVisible()
+    await navReady(viewer)
     await expect(dashboardsGroup(viewer).getByRole('button', { name: 'Denied check', exact: true })).toHaveCount(0)
     // A direct link to the denied page finds no page for this viewer, even after a fresh read,
     // and goes Home.

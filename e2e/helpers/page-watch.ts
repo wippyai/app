@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import type { Browser, BrowserContext, Page } from '@playwright/test'
+import type { Browser, BrowserContext, Frame, Page, Request } from '@playwright/test'
 import { loginAsAdmin } from './login'
 
 /**
@@ -23,12 +23,30 @@ export interface ExpectedFailure {
   text?: string
 }
 
+/** An aborted request of a Host module bundle, decided when the test ends (see `takeUnexpected`). */
+interface Cancelled {
+  line: string
+  frame: Frame | undefined
+  startedAt: number
+  failedAt: number
+}
+
 interface Watch {
   name: string
   problems: Problem[]
   aborted: string[]
+  cancelled: Cancelled[]
+  /** When each frame navigated (also inside the same document), and when it was removed. */
+  navigated: Map<Frame, number[]>
+  detached: Map<Frame, number>
   expected: ExpectedFailure[]
 }
+
+/**
+ * How long after a request failed a navigation of its frame still counts as its cause. Chromium can
+ * report the abort a moment before the navigation event.
+ */
+const NAVIGATION_SETTLE_MS = 2000
 
 const watches = new Map<Page, Watch>()
 const contexts: BrowserContext[] = []
@@ -51,7 +69,11 @@ export function pathOf(url: string): string {
 export async function monitor(page: Page, name: string): Promise<void> {
   // Playwright turns off the HTTP cache of a page that routes its requests.
   await page.route('**/*', route => route.continue().catch(() => {}))
-  const watch: Watch = { name, problems: [], aborted: [], expected: [] }
+  const watch: Watch = { name, problems: [], aborted: [], cancelled: [], navigated: new Map(), detached: new Map(), expected: [] }
+  const startedAt = new WeakMap<Request, number>()
+  page.on('request', r => startedAt.set(r, Date.now()))
+  page.on('framenavigated', f => watch.navigated.set(f, [...(watch.navigated.get(f) ?? []), Date.now()]))
+  page.on('framedetached', f => watch.detached.set(f, Date.now()))
   page.on('console', (m) => {
     if (m.type() !== 'error')
       return
@@ -74,13 +96,30 @@ export async function monitor(page: Page, name: string): Promise<void> {
     // The expected failures: a navigation (sign-in, a direct link) cancels the Host's own loads, its
     // modules under /webcomponents-<version>/ and, since Host 1.0.69, its Iconify icon sets at the
     // site root (/tabler.json). This app serves no such file, so that request gets the app's HTML;
-    // a cancelled one is still the Host's, not the app's. Any other aborted request, such as a point
-    // read, an API call or a tile bundle, is a problem.
+    // a cancelled one is still the Host's, not the app's. The module bundles that the Host loads from
+    // a module's static files (/@static-<org>/<module>/..., such as the mermaid renderer) are
+    // cancelled the same way, but only when the frame that asked for one navigated or was removed
+    // while it loaded. That is decided when the test ends, because the navigation event can follow
+    // the abort. Any other aborted request, such as a point read, an API call or a tile bundle, is a
+    // problem.
     const hostLoad = /^\/webcomponents-[\d.]+\//.test(path) || /^\/[a-z0-9-]+\.json$/.test(path)
-    if (reason === 'net::ERR_ABORTED' && r.method() === 'GET' && hostLoad)
+    const hostModule = /^\/@static-[a-z0-9-]+\/[^/]+\//.test(path)
+    if (reason === 'net::ERR_ABORTED' && r.method() === 'GET' && hostLoad) {
       watch.aborted.push(line)
-    else
+    }
+    else if (reason === 'net::ERR_ABORTED' && r.method() === 'GET' && hostModule) {
+      let frame: Frame | undefined
+      try {
+        frame = r.frame()
+      }
+      catch {
+        frame = undefined
+      }
+      watch.cancelled.push({ line, frame, startedAt: startedAt.get(r) ?? 0, failedAt: Date.now() })
+    }
+    else {
       watch.problems.push({ text: `failed: ${line}` })
+    }
   })
   watches.set(page, watch)
 }
@@ -106,6 +145,12 @@ export async function newPage(browser: Browser, name: string, viewport = { width
 export async function takeUnexpected(): Promise<string[]> {
   const unexpected: string[] = []
   for (const watch of watches.values()) {
+    for (const c of watch.cancelled) {
+      if (cancelledByNavigation(watch, c))
+        watch.aborted.push(c.line)
+      else
+        watch.problems.push({ text: `failed: ${c.line}` })
+    }
     if (watch.aborted.length > 0)
       console.log(`${watch.name} aborted`, JSON.stringify(watch.aborted))
     for (const p of watch.problems) {
@@ -120,6 +165,17 @@ export async function takeUnexpected(): Promise<string[]> {
   for (const context of contexts.splice(0))
     await context.close()
   return unexpected
+}
+
+/** True when the frame of the request navigated or was removed while the request was loading. */
+function cancelledByNavigation(watch: Watch, c: Cancelled): boolean {
+  if (!c.frame)
+    return false
+  const until = c.failedAt + NAVIGATION_SETTLE_MS
+  const detachedAt = watch.detached.get(c.frame)
+  if (detachedAt !== undefined && detachedAt >= c.startedAt && detachedAt <= until)
+    return true
+  return (watch.navigated.get(c.frame) ?? []).some(at => at >= c.startedAt && at <= until)
 }
 
 /** Reads a seeded test account's password from src/demo_seed/_index.yaml (local test values). */
