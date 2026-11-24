@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useApi } from '../composables/useWippy'
+
+const VOICE_AGENT = 'app.attention_e2e:agent'
+
 const targets = [
   {
     side: 'left',
@@ -12,6 +17,18 @@ const targets = [
   },
 ] as const
 
+const api = useApi()
+
+// Only the Attention e2e fixtures register the voice agent. Without them the
+// voice orb cannot resolve it and logs an error (wippy-swiss/voice 0.2.0), so
+// the orb renders only when the agents list has the agent.
+const voiceAgentListed = ref(false)
+
+onMounted(async () => {
+  const { data } = await api.get('/api/v1/agents/list')
+  voiceAgentListed.value = Array.isArray(data?.agents)
+    && data.agents.some((agent: { name?: string }) => agent.name === VOICE_AGENT)
+})
 </script>
 
 <template>
@@ -51,6 +68,7 @@ const targets = [
     </div>
 
     <wippy-voice-orb
+      v-if="voiceAgentListed"
       data-testid="attention-voice-orb"
       data-wippy-attention="exclude"
       agent-name="app.attention_e2e:agent"
