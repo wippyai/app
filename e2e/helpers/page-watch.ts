@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import type { Browser, BrowserContext, Frame, Page, Request } from '@playwright/test'
 import { loginAsAdmin } from './login'
+import type { FrameEvents } from './navigation-noise'
+import { cancelledByNavigation } from './navigation-noise'
 
 /**
  * Shared by the dashboards and app-nav suites: a strict watch on every page a test opens, API
@@ -31,22 +33,16 @@ interface Cancelled {
   failedAt: number
 }
 
-interface Watch {
+interface Watch extends FrameEvents<Frame> {
   name: string
   problems: Problem[]
   aborted: string[]
   cancelled: Cancelled[]
-  /** When each frame navigated (also inside the same document), and when it was removed. */
-  navigated: Map<Frame, number[]>
-  detached: Map<Frame, number>
   expected: ExpectedFailure[]
 }
 
-/**
- * How long after a request failed a navigation of its frame still counts as its cause. Chromium can
- * report the abort a moment before the navigation event.
- */
-const NAVIGATION_SETTLE_MS = 2000
+/** The page function that every new document of every frame calls (see `monitor`). */
+const DOCUMENT_BINDING = '__wippyWatchDocumentStarted'
 
 const watches = new Map<Page, Watch>()
 const contexts: BrowserContext[] = []
@@ -69,11 +65,21 @@ export function pathOf(url: string): string {
 export async function monitor(page: Page, name: string): Promise<void> {
   // Playwright turns off the HTTP cache of a page that routes its requests.
   await page.route('**/*', route => route.continue().catch(() => {}))
-  const watch: Watch = { name, problems: [], aborted: [], cancelled: [], navigated: new Map(), detached: new Map(), expected: [] }
+  const watch: Watch = { name, problems: [], aborted: [], cancelled: [], documents: new Map(), detached: new Map(), expected: [] }
   const startedAt = new WeakMap<Request, number>()
   page.on('request', r => startedAt.set(r, Date.now()))
-  page.on('framenavigated', f => watch.navigated.set(f, [...(watch.navigated.get(f) ?? []), Date.now()]))
   page.on('framedetached', f => watch.detached.set(f, Date.now()))
+  // A new document in a frame. Playwright's `framenavigated` also fires for a history change inside
+  // one document, which cancels nothing, so it is not used. An init script runs once for each new
+  // document of each frame (also a srcdoc iframe) and never for a history change.
+  await page.exposeBinding(DOCUMENT_BINDING, (source) => {
+    watch.documents.set(source.frame, [...(watch.documents.get(source.frame) ?? []), Date.now()])
+  })
+  await page.addInitScript((binding) => {
+    const call = (window as unknown as Record<string, unknown>)[binding]
+    if (typeof call === 'function')
+      void (call as () => Promise<void>)()
+  }, DOCUMENT_BINDING)
   page.on('console', (m) => {
     if (m.type() !== 'error')
       return
@@ -98,10 +104,10 @@ export async function monitor(page: Page, name: string): Promise<void> {
     // site root (/tabler.json). This app serves no such file, so that request gets the app's HTML;
     // a cancelled one is still the Host's, not the app's. The module bundles that the Host loads from
     // a module's static files (/@static-<org>/<module>/..., such as the mermaid renderer) are
-    // cancelled the same way, but only when the frame that asked for one navigated or was removed
-    // while it loaded. That is decided when the test ends, because the navigation event can follow
-    // the abort. Any other aborted request, such as a point read, an API call or a tile bundle, is a
-    // problem.
+    // cancelled the same way, but only when the frame that asked for one got a new document or was
+    // removed while it loaded (a history change inside one document is not that). That is decided
+    // when the test ends, because the new document can report after the abort. Any other aborted
+    // request, such as a point read, an API call or a tile bundle, is a problem.
     const hostLoad = /^\/webcomponents-[\d.]+\//.test(path) || /^\/[a-z0-9-]+\.json$/.test(path)
     const hostModule = /^\/@static-[a-z0-9-]+\/[^/]+\//.test(path)
     if (reason === 'net::ERR_ABORTED' && r.method() === 'GET' && hostLoad) {
@@ -165,17 +171,6 @@ export async function takeUnexpected(): Promise<string[]> {
   for (const context of contexts.splice(0))
     await context.close()
   return unexpected
-}
-
-/** True when the frame of the request navigated or was removed while the request was loading. */
-function cancelledByNavigation(watch: Watch, c: Cancelled): boolean {
-  if (!c.frame)
-    return false
-  const until = c.failedAt + NAVIGATION_SETTLE_MS
-  const detachedAt = watch.detached.get(c.frame)
-  if (detachedAt !== undefined && detachedAt >= c.startedAt && detachedAt <= until)
-    return true
-  return (watch.navigated.get(c.frame) ?? []).some(at => at >= c.startedAt && at <= until)
 }
 
 /** Reads a seeded test account's password from src/demo_seed/_index.yaml (local test values). */

@@ -33,8 +33,11 @@ const RC1_SPECS = [
   'dashboards-live',
 ]
 
-/** The new spec files of RC2 (names without `e2e/` and `.spec.ts`). Add each one when it lands. */
-const RC2_SPECS: string[] = []
+/**
+ * The new spec files of RC2 (names without `e2e/` and `.spec.ts`). Add each one when it lands.
+ * `navigation-noise` needs no app and no browser: it proves the rule of the request watch.
+ */
+const RC2_SPECS: string[] = ['navigation-noise']
 
 export default defineConfig(base, {
   testMatch: [...RC1_SPECS, ...RC2_SPECS].map(name => `**/${name}.spec.ts`),
