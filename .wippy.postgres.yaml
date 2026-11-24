@@ -1,0 +1,31 @@
+version: "1.0"
+
+# Runs the demo on PostgreSQL instead of the SQLite file ./.wippy/app.db. The profile turns app:db into a
+# db.sql.postgres entry; every module that uses app:db (users, sessions, usage, dataflow, the dashboards
+# tables and the demo points) then runs its PostgreSQL migrations and queries.
+#
+#   - The connection comes from the environment variables PGHOST, PGDATABASE, PGUSER and PGPASSWORD. This file
+#     holds no value. ${env:NAME} is read when the file loads, so the file is loaded only when asked for.
+#   - The port is a number and ${env:PGPORT} is a string, so it goes in on the command line:
+#     -o app:db:port=$PGPORT
+#   - SSL is off: the database is a local test server.
+#   - Use a database of its own for the demo (for example wippy_dashboards_demo), not the database of the
+#     module's test harness. The tables go into its default schema (public).
+#
+# Start (PowerShell; the login is read from the gitignored file of the dashboards module, never printed):
+#   foreach ($l in Get-Content C:/Projects/wippy-dashboards/.local/pg-test.env) { if ($l -match '^\s*(PG\w+)=(.*)$') { Set-Item "env:$($Matches[1])" $Matches[2].Trim() } }
+#   $env:PGDATABASE = 'wippy_dashboards_demo'
+#   wippy run -c --config .wippy.yaml --config .wippy.workspace.yaml --config .wippy.postgres.yaml `
+#       --profile workspace --profile postgres -o "app:db:port=$env:PGPORT"
+# List .wippy.yaml first: any --config stops it from loading on its own. Leave out the workspace file and
+# profile when no module checkout replaces wippy/dashboards.
+profiles:
+  postgres:
+    override:
+      app:db:kind: db.sql.postgres
+      app:db:host: ${env:PGHOST}
+      app:db:database: ${env:PGDATABASE}
+      app:db:username: ${env:PGUSER}
+      app:db:password: ${env:PGPASSWORD}
+      app:db:options:
+        sslmode: disable

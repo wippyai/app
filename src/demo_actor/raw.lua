@@ -8,10 +8,10 @@
 local http = require("http")
 local security = require("security")
 local funcs = require("funcs")
-local sql = require("sql")
+local database = require("database")
 
 local function query(text)
-    local db, derr = sql.get("app:db")
+    local db, derr = database.open("app:db")
     if derr then
         return nil
     end
@@ -37,7 +37,7 @@ local function handler()
     local sessions = query("SELECT COUNT(*) AS n FROM sessions")
     local messages = query("SELECT COUNT(*) AS n FROM messages")
     local users = query("SELECT COUNT(*) AS n FROM app_users")
-    local months = query("SELECT substr(start_date, 1, 7) AS month, COUNT(*) AS n FROM sessions GROUP BY 1 ORDER BY 1")
+    local months = query("SELECT substr(CAST(start_date AS TEXT), 1, 7) AS month, COUNT(*) AS n FROM sessions GROUP BY 1 ORDER BY 1")
     local types = query("SELECT type, COUNT(*) AS n FROM messages GROUP BY 1 ORDER BY 1")
     if err ~= nil or type(rows) ~= "table" or not sessions or not messages or not users or not months or not types then
         res:set_status(http.STATUS.INTERNAL_ERROR)
