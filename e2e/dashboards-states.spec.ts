@@ -763,11 +763,8 @@ test.describe('RC2-06: slow mapped and open points', () => {
     await expect(tile).toHaveAttribute('data-frame-status', 'ready', { timeout: 30_000 })
     await expect(tile.locator('tbody tr')).toHaveCount(2)
     const rows = tile.locator('tbody tr')
-    await expect(rows.nth(0)).toContainText('a')
-    await expect(rows.nth(0)).toContainText('40')
-    await expect(rows.nth(0)).toContainText('20')
-    await expect(rows.nth(1)).toContainText('b')
-    await expect(rows.nth(1)).toContainText('10')
+    await expect(rows.nth(0).locator('td')).toHaveText(['a', '40', '20'])
+    await expect(rows.nth(1).locator('td')).toHaveText(['b', '20', '10'])
   }
 
   test('a slow mapped point shows computing, then its rows', async ({ page }) => {
