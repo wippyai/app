@@ -184,7 +184,7 @@ test.describe('RC2-08: the artifact tile bound to a parameter', () => {
     await publish(page, BOUND_PAGE)
     try {
       const calls = await answerReads(page, BOUND_PAGE.id, {
-        o: ready('o', frame([{ name: 'value', type: 'string' }, { name: 'label', type: 'string' }], [['app.views:iframe-demo', 'Demo'], ['app.views:iframe-demo-themed', 'Themed']])),
+        o: ready('o', frame([{ name: 'value', type: 'string' }, { name: 'label', type: 'string' }], [['app.views:iframe-demo', 'Demo'], ['app.views:session-forms-demo', 'Forms']])),
         n: ready('n', frame([{ name: 'value', type: 'number', role: 'measure' }], [[1]])),
         sm: ready('sm', frame([{ name: 'model', type: 'string' }, { name: 'n', type: 'number', role: 'measure' }], [['x', 1]])),
       })
@@ -208,17 +208,22 @@ test.describe('RC2-08: the artifact tile bound to a parameter', () => {
         await f.locator('[data-tile-id="sel"] [role="combobox"]').click()
         await f.getByRole('option', { name: label }).click()
       }
-      const choose = async (label: string, id: string) => {
+      // Each of the two artifacts has a heading of its own, so the test sees which one the Host loaded.
+      const choose = async (label: string, id: string, heading: string) => {
         const before = calls.length
         await pick(label)
         await expect(f.locator('[data-tile-id="art"] w-artifact')).toHaveAttribute('id', id, { timeout: 20_000 })
         await expect(art).toHaveAttribute('data-frame-status', 'ready')
+        // The Host loaded this artifact: <w-artifact> is ready and its page shows the heading that belongs to it.
+        await expect(f.locator('[data-tile-id="art"] w-artifact')).toHaveAttribute('status', 'ready', { timeout: 20_000 })
+        const nested = f.frameLocator('[data-tile-id="art"] w-artifact iframe:not([name^="wf:"])')
+        await expect(nested.getByRole('heading', { name: heading, exact: true })).toBeVisible({ timeout: 20_000 })
         await page.waitForTimeout(1500)
         // Only the input whose argument uses the parameter reads again, once. The picker's options, the kpi and the artifact read nothing.
         expect(counts(calls.slice(before))).toEqual({ sm: 1 })
       }
-      await choose('Demo', 'app.views:iframe-demo')
-      await choose('Themed', 'app.views:iframe-demo-themed')
+      await choose('Demo', 'app.views:iframe-demo', 'Theme Colors Chart')
+      await choose('Forms', 'app.views:session-forms-demo', 'Session forms')
     }
     finally {
       await remove(page, BOUND_PAGE.id)

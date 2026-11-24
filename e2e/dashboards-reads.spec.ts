@@ -1,4 +1,4 @@
-import type { FrameLocator, Page } from '@playwright/test'
+import type { FrameLocator, Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './helpers/login'
 import { api, expectFailures, loginAs, monitor, newPage, openInShell, takeUnexpected } from './helpers/page-watch'
@@ -668,6 +668,8 @@ test.describe('refresh controls (RC2-07)', () => {
   test('a regular user refreshes a tile and a page', async ({ browser }) => {
     test.setTimeout(90_000)
     const viewer = await signedIn(browser, 'viewer', 'viewer')
+    // A refresh aborts a read of the same input that is still in flight (a poll of the slow point, a live read).
+    expectFailures(viewer, { text: 'points/slow net::ERR_ABORTED' }, { text: 'points/users net::ERR_ABORTED' }, { text: 'points/ok net::ERR_ABORTED' })
     await viewer.setViewportSize({ width: 1920, height: 1000 })
     const reads = recordReads(viewer, 'reads_toggle')
     await openInShell(viewer, '/reads/toggle')
@@ -692,16 +694,14 @@ test.describe('refresh controls (RC2-07)', () => {
     await expect(f.locator('[data-tile-id="ok_kpi"]')).toHaveAttribute('data-frame-status', 'ready', { timeout: 10_000 })
     await expect(f.locator('[data-tile-id="ok_kpi"]')).toContainText('42')
 
-    // The page refresh reads each input once. users_tile is a demo tile that carries its own copy of the tile
-    // helper, so its read is allowed but not required; the built-in tiles must read exactly once.
+    // The page refresh reads each input once, users included. users_tile (demo.user_status) is a plugin tile that
+    // takes the tile helper from the module build: this needs the demo's plugin tiles rebuilt against the new helper
+    // (the integration step does that), else the tile ignores the `refresh` counter and reads nothing.
     from = reads.length
     await f.getByRole('button', { name: 'Refresh page' }).click()
-    await expect.poll(() => startedSince(reads, from).filter(p => p !== 'users'), { timeout: 10_000 }).toEqual(['ok', 'slow'])
+    await expect.poll(() => startedSince(reads, from), { timeout: 10_000 }).toEqual(['ok', 'slow', 'users'])
     await viewer.waitForTimeout(1500)
-    const started = startedSince(reads, from)
-    expect(started.filter(p => p === 'ok')).toEqual(['ok'])
-    expect(started.filter(p => p === 'slow')).toEqual(['slow'])
-    expect(started.filter(p => p === 'users').length).toBeLessThanOrEqual(1)
+    expect(startedSince(reads, from)).toEqual(['ok', 'slow', 'users'])
   })
 
   test('a refresh during computing starts no second run', async ({ browser }) => {
@@ -709,6 +709,20 @@ test.describe('refresh controls (RC2-07)', () => {
     const viewer = await signedIn(browser, 'viewer', 'viewer')
     await viewer.setViewportSize({ width: 1920, height: 1000 })
     const reads = recordReads(viewer, 'reads_toggle')
+    // The fixture asks the tile to poll every second (retry_after_ms). Hold every poll read in the browser: the
+    // tile then waits for the answer and arms no next poll, so a read that carries the token and arrives after the
+    // click can only come from the refresh control.
+    let holding = true
+    const held: Route[] = []
+    // The refresh supersedes the read on hold: the tile aborts it, and the page watch sees the abort.
+    expectFailures(viewer, { text: 'points/slow net::ERR_ABORTED' })
+    await viewer.route('**/api/v1/dashboards/pages/reads_toggle/points/slow**', async (route) => {
+      if (holding && new URL(route.request().url()).searchParams.get('operation') !== null) {
+        held.push(route)
+        return
+      }
+      await route.continue().catch(() => {})
+    })
     await openInShell(viewer, '/reads/toggle')
     const f = pageFrame(viewer, 'reads_toggle')
     const slow = f.locator('[data-tile-id="slow_kpi"]')
@@ -716,17 +730,24 @@ test.describe('refresh controls (RC2-07)', () => {
     const runs = () => reads.filter(r => r.point === 'slow' && r.operation === null).length
     const followed = () => reads.filter(r => r.point === 'slow' && r.operation !== null)
     expect(runs()).toBe(1)
-    const followedBefore = followed().length
+    // The first poll is on hold. Nothing else can ask for this operation now.
+    await expect.poll(() => held.length, { timeout: 10_000 }).toBe(1)
+    const token = followed()[0].operation
+    await viewer.waitForTimeout(1500)
+    expect(followed()).toHaveLength(1)
 
     await f.getByRole('button', { name: 'Refresh Slow number' }).click()
-    // The refresh follows the running operation at once, with its token.
-    await expect.poll(() => followed().length, { timeout: 10_000 }).toBeGreaterThan(followedBefore)
+    // The refresh follows the running operation at once, with its token, and starts no run.
+    await expect.poll(() => followed().length, { timeout: 3000 }).toBe(2)
+    expect(followed()[1].operation).toBe(token)
     expect(runs()).toBe(1)
 
-    // The run ends with its result, still the only run, and every follow-up read carries the one token.
+    // Let the polls go. The run ends with its result, still the only run, and every read carries the one token.
+    holding = false
+    await Promise.all(held.splice(0).map(route => route.continue().catch(() => {})))
     await expect(slow).toContainText('7', { timeout: 30_000 })
     expect(runs()).toBe(1)
-    expect(new Set(followed().map(r => r.operation)).size).toBe(1)
+    expect(new Set(followed().map(r => r.operation))).toEqual(new Set([token]))
   })
 
   test('a refresh past the read limit shows rate_limited', async ({ browser }) => {
@@ -734,6 +755,8 @@ test.describe('refresh controls (RC2-07)', () => {
     const viewer = await signedIn(browser, 'viewer', 'viewer')
     // The engine refuses reads past its limit on purpose (10 a second, burst 30); the page watch counts each 429.
     expectFailures(viewer, { status: 429, path: '/api/v1/dashboards/pages/reads_toggle/points/ok' })
+    // A new refresh aborts the read of the one before while it is in flight.
+    expectFailures(viewer, { text: 'points/ok net::ERR_ABORTED' })
     await viewer.setViewportSize({ width: 1920, height: 1000 })
     await openInShell(viewer, '/reads/toggle')
     const f = pageFrame(viewer, 'reads_toggle')
