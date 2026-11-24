@@ -13,23 +13,29 @@ local NODE_SUFFIX = ":node"
 -- timestamps are read as text: SQLite stores ISO 8601 text with nanosecond digits and an offset (for
 -- example 2026-06-16T20:43:42.3955074+02:00), PostgreSQL a timestamp that casts to
 -- "2026-06-16 20:43:42.395507". duration() reads both. The ids are cast to text because PostgreSQL
--- keeps them as uuid. Order is by creation time, then by id.
-local RUN_SQL = [[
+-- keeps them as uuid.
+-- Order: by the instant of the creation time (database.instant: SQLite reads the offset of the stored text,
+-- as RC1 did with julianday; PostgreSQL sorts the timestamp), and for equal instants by insertion order on
+-- SQLite (rowid) and by id on PostgreSQL, which keeps no insertion order (database.tie_order).
+local function run_sql(db)
+    return [[
     SELECT CAST(d.dataflow_id AS TEXT) AS dataflow_id, d.type, d.status,
            CAST(d.created_at AS TEXT) AS created_at, CAST(d.updated_at AS TEXT) AS updated_at,
            (SELECT COUNT(*) FROM dataflow_commits c WHERE c.dataflow_id = d.dataflow_id) AS commits
     FROM dataflows d
-    ORDER BY d.created_at DESC, d.dataflow_id DESC
+    ORDER BY ]] .. database.instant(db, "d.created_at") .. " DESC, " .. database.tie_order(db, "d", "dataflow_id") .. [[ DESC
     LIMIT 1
 ]]
+end
 
-local NODES_SQL = [[
+local function nodes_sql(db)
+    return [[
     SELECT CAST(n.node_id AS TEXT) AS node_id, CAST(n.parent_node_id AS TEXT) AS parent_node_id, n.type, n.status,
            CAST(n.created_at AS TEXT) AS created_at, CAST(n.updated_at AS TEXT) AS updated_at
     FROM dataflow_nodes n
     WHERE CAST(n.dataflow_id AS TEXT) = ?
-    ORDER BY n.created_at, n.node_id
-]]
+    ORDER BY ]] .. database.instant(db, "n.created_at") .. ", " .. database.tie_order(db, "n", "node_id")
+end
 
 -- A stored timestamp as RFC 3339: a space between date and time becomes T, and a time with no
 -- zone is UTC.
@@ -75,7 +81,7 @@ local function read_latest_run()
         return nil, "database unavailable"
     end
 
-    local runs, rerr = db:query(RUN_SQL, {})
+    local runs, rerr = db:query(run_sql(db), {})
     if rerr then
         db:release()
         return nil, "query failed: " .. tostring(rerr)
@@ -86,7 +92,7 @@ local function read_latest_run()
         return nil, "no workflow run"
     end
 
-    local rows, nerr = db:query(NODES_SQL, { r.dataflow_id })
+    local rows, nerr = db:query(nodes_sql(db), { r.dataflow_id })
     db:release()
     if nerr then
         return nil, "query failed: " .. tostring(nerr)
