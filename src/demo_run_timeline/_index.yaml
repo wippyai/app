@@ -24,6 +24,9 @@ entries:
     method: read_latest_run
     modules:
       - sql
+      - time
+    imports:
+      database: wippy.dashboards:database
     pool:
       size: 2
 

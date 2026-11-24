@@ -3,31 +3,59 @@
 -- It reads the latest row of `dataflows` and the rows of `dataflow_nodes` of that run, and
 -- returns { run = {...}, nodes = [ { type, status, duration_ms, children } ] } as the tile's
 -- input schema describes. Top-level nodes keep their creation order.
-local sql = require("sql")
+local database = require("database")
+local time = require("time")
 
 local NODE_PREFIX = "userspace.dataflow.node."
 local NODE_SUFFIX = ":node"
 
--- Durations come from the ISO 8601 timestamps the engine stores as text (nanosecond digits and an
--- offset, for example 2026-06-16T20:43:42.3955074+02:00). SQLite's julianday reads that form.
-local DURATION_MS = "CAST(ROUND((julianday(%s.updated_at) - julianday(%s.created_at)) * 86400000) AS INTEGER)"
-
-local RUN_SQL = [[
-    SELECT d.dataflow_id, d.type, d.status, d.created_at,
-           ]] .. DURATION_MS:format("d", "d") .. [[ AS duration_ms,
+-- The same SQL runs on SQLite and on PostgreSQL (the database seam of wippy/dashboards). The
+-- timestamps are read as text: SQLite stores ISO 8601 text with nanosecond digits and an offset (for
+-- example 2026-06-16T20:43:42.3955074+02:00), PostgreSQL a timestamp that casts to
+-- "2026-06-16 20:43:42.395507". duration() reads both. The ids are cast to text because PostgreSQL
+-- keeps them as uuid.
+-- Order: by the instant of the creation time (database.instant: SQLite reads the offset of the stored text,
+-- as RC1 did with julianday; PostgreSQL sorts the timestamp), and for equal instants by insertion order on
+-- SQLite (rowid) and by id on PostgreSQL, which keeps no insertion order (database.tie_order).
+local function run_sql(db)
+    return [[
+    SELECT CAST(d.dataflow_id AS TEXT) AS dataflow_id, d.type, d.status,
+           CAST(d.created_at AS TEXT) AS created_at, CAST(d.updated_at AS TEXT) AS updated_at,
            (SELECT COUNT(*) FROM dataflow_commits c WHERE c.dataflow_id = d.dataflow_id) AS commits
     FROM dataflows d
-    ORDER BY julianday(d.created_at) DESC, d.rowid DESC
+    ORDER BY ]] .. database.instant(db, "d.created_at") .. " DESC, " .. database.tie_order(db, "d", "dataflow_id") .. [[ DESC
     LIMIT 1
 ]]
+end
 
-local NODES_SQL = [[
-    SELECT n.node_id, n.parent_node_id, n.type, n.status,
-           ]] .. DURATION_MS:format("n", "n") .. [[ AS duration_ms
+local function nodes_sql(db)
+    return [[
+    SELECT CAST(n.node_id AS TEXT) AS node_id, CAST(n.parent_node_id AS TEXT) AS parent_node_id, n.type, n.status,
+           CAST(n.created_at AS TEXT) AS created_at, CAST(n.updated_at AS TEXT) AS updated_at
     FROM dataflow_nodes n
-    WHERE n.dataflow_id = ?
-    ORDER BY julianday(n.created_at), n.rowid
-]]
+    WHERE CAST(n.dataflow_id AS TEXT) = ?
+    ORDER BY ]] .. database.instant(db, "n.created_at") .. ", " .. database.tie_order(db, "n", "node_id")
+end
+
+-- A stored timestamp as RFC 3339: a space between date and time becomes T, and a time with no
+-- zone is UTC.
+local function rfc3339(stamp)
+    local text = tostring(stamp):gsub("^(%d%d%d%d%-%d%d%-%d%d) ", "%1T")
+    if not (text:find("[Zz]$") or text:find("[+-]%d%d:%d%d$")) then
+        text = text .. "Z"
+    end
+    return text
+end
+
+-- The milliseconds between two stored timestamps, or nil when one of them does not parse.
+local function duration(from, to)
+    local a = time.parse(time.RFC3339NANO, rfc3339(from))
+    local b = time.parse(time.RFC3339NANO, rfc3339(to))
+    if not a or not b then
+        return nil
+    end
+    return math.floor(b:sub(a):milliseconds() + 0.5)
+end
 
 -- "userspace.dataflow.node.agent:node" is shown as "agent". Other types ("tool.call") stay.
 local function node_type(raw)
@@ -43,17 +71,17 @@ end
 
 -- "2026-06-16T20:43:42.3955074+02:00" becomes "2026-06-16T20:43:42+02:00".
 local function whole_seconds(stamp)
-    local trimmed = tostring(stamp):gsub("(%d%d:%d%d:%d%d)%.%d+", "%1")
+    local trimmed = rfc3339(stamp):gsub("(%d%d:%d%d:%d%d)%.%d+", "%1")
     return trimmed
 end
 
 local function read_latest_run()
-    local db, derr = sql.get("app:db")
+    local db, derr = database.open("app:db")
     if derr then
         return nil, "database unavailable"
     end
 
-    local runs, rerr = db:query(RUN_SQL, {})
+    local runs, rerr = db:query(run_sql(db), {})
     if rerr then
         db:release()
         return nil, "query failed: " .. tostring(rerr)
@@ -64,7 +92,7 @@ local function read_latest_run()
         return nil, "no workflow run"
     end
 
-    local rows, nerr = db:query(NODES_SQL, { r.dataflow_id })
+    local rows, nerr = db:query(nodes_sql(db), { r.dataflow_id })
     db:release()
     if nerr then
         return nil, "query failed: " .. tostring(nerr)
@@ -77,7 +105,7 @@ local function read_latest_run()
         local node = {
             type = node_type(row.type),
             status = row.status,
-            duration_ms = row.duration_ms,
+            duration_ms = duration(row.created_at, row.updated_at),
             children = {},
         }
         by_id[row.node_id] = node
@@ -99,7 +127,7 @@ local function read_latest_run()
             type = r.type,
             status = r.status,
             started_at = whole_seconds(r.created_at),
-            duration_ms = r.duration_ms,
+            duration_ms = duration(r.created_at, r.updated_at),
             commits = r.commits,
         },
         nodes = roots,
