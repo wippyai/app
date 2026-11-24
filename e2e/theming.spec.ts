@@ -49,11 +49,12 @@ test.describe('facade theming: fs:// resolution', () => {
     expect(css).toContain('--e2e-primary: #e2e003;')
   })
 
-  test('GET /facade/variables.css carries Cache-Control header', async ({ page }) => {
+  test('GET /facade/variables.css is not cached', async ({ page }) => {
+    // The facade sends no-store because an app-bound resolver can change the
+    // variables per request (framework b8d8f6a, facade 0.6.x).
     const res = await page.request.get(CSS_VARS_PATH)
     expect(res.status()).toBe(200)
-    expect(res.headers()['cache-control']).toContain('public')
-    expect(res.headers()['cache-control']).toContain('max-age=3600')
+    expect(res.headers()['cache-control']).toBe('no-store')
   })
 
   test('GET /facade/config resolves fs:// custom_css to file content', async ({ page }) => {
