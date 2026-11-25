@@ -96,8 +96,11 @@ entries:
         value: app.env:store
       - name: delegation_func_id
         value: userspace.dataflow.session:delegate
+      # Must stay above the chat agent's fixed prompt (system prompt, traits and tool schemas: about 50,000
+      # tokens with the dashboards trait). Below it, every step compacts the conversation, the agent loses the
+      # tool result it just got, and it repeats the call (ReadDashboardPage loop of 2026-11-25).
       - name: token_checkpoint_threshold
-        value: "32000"
+        value: "120000"
       - name: max_message_limit
         value: "500"
       - name: gc_interval
