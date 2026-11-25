@@ -819,8 +819,9 @@ test.describe('refresh controls (RC2-07)', () => {
   test('a refresh past the read limit shows rate_limited', async ({ browser }) => {
     test.setTimeout(90_000)
     const viewer = await signedIn(browser, 'viewer', 'viewer')
-    // The engine refuses reads past its limit on purpose (10 a second, burst 30); the page watch counts each 429.
-    expectFailures(viewer, { status: 429, path: '/api/v1/dashboards/pages/reads_toggle/points/ok' })
+    // All points of this page share the viewer's read limit (10 a second, burst 30), including slow polls.
+    // Allow their 429 responses and console lines only in this test.
+    expectFailures(viewer, { status: 429, path: '/api/v1/dashboards/pages/reads_toggle/points/' })
     // A new refresh aborts the read of the one before while it is in flight (the test checks each abort itself).
     expectFailures(viewer, { text: 'points/ok net::ERR_ABORTED' })
     await viewer.setViewportSize({ width: 1920, height: 1000 })
@@ -856,14 +857,22 @@ test.describe('refresh controls (RC2-07)', () => {
     await expect(ok).toContainText('42')
     expect(newestOk().status).toBe(429)
 
-    // After the bucket refills, the same control reads again and the tile is ready.
-    await viewer.waitForTimeout(4000)
-    await refresh.click()
-    await expect.poll(() => lastReadAnswered(reads, 'ok'), { timeout: 10_000 }).toBe(true)
-    await expect(ok).toHaveAttribute('data-frame-status', 'ready', { timeout: 10_000 })
+    // Retry refused tiles until reads succeed after the burst. A refused slow poll stops polling, so that tile
+    // needs its own refresh too. Wait for every tile to recover and clear its error instead of sleeping.
+    for (const [point, id] of [['ok', 'ok_kpi'], ['slow', 'slow_kpi'], ['users', 'users_tile']]) {
+      const tile = f.locator(`[data-tile-id="${id}"]`)
+      await expect(async () => {
+        if (await tile.getAttribute('data-frame-error-code') === 'rate_limited')
+          await tile.getByRole('button', { name: /^Refresh / }).click()
+        await expect(tile).toHaveAttribute('data-frame-status', 'ready', { timeout: 1000 })
+      }).toPass({ timeout: 30_000, intervals: [1000] })
+      await expect.poll(() => lastReadAnswered(reads, point), { timeout: 10_000 }).toBe(true)
+      await expect(tile).not.toHaveAttribute('data-frame-error-code', /.+/)
+    }
+    await expect(ok).toContainText('42')
+    await expect(f.locator('[data-tile-id="slow_kpi"]')).toContainText('7')
     // The only refused reads are the ones that the limit refused, and every abort was replaced by a later read of the input.
     expectAbortsSuperseded(reads)
-    expect(reads.filter(r => r.status === 429).every(r => r.point === 'ok')).toBe(true)
     expect(reads.filter(r => r.status !== null && r.status >= 400 && r.status !== 429)).toEqual([])
   })
 })
