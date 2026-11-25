@@ -105,7 +105,7 @@ wippy run -c                                   # server
 
 ## Session Forms demo
 
-The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks a delivery-preference question with a form. The agent uses the `wippy.session.forms:ask_user` trait from the `wippy/session` module and the same model as Ask Wippy.
+The Session Forms Demo page (`/session-forms-demo`) starts a chat with the Forms demo agent, which asks for delivery details or delivery preferences with a form. The agent uses the `wippy.session.forms:ask_user_fields` trait from the `wippy/session` module, whose `ask_user_fields` tool takes choice questions and the standard fields (text, textarea, number, email, date and checkbox). The `wippy.session.forms:ask_user` trait has the `ask_user` tool, which takes choice questions only. The agent has one forms trait, because attaching both would offer the model two form tools. It uses the same model as Ask Wippy.
 
 ### Dev fixtures
 
@@ -119,13 +119,19 @@ make run-dev
 
 `SESSION_FORMS_DEV_FIXTURES=true` also enables the test-only endpoint, which answers 404 otherwise and is open to admin users only. Passing `--config` replaces the default `.wippy.yaml`, so when you pass your own config file, add `--config .wippy.yaml` before it so the fixtures stay off.
 
-The fixture agents reply to these phrases, and anything else gets "Say 'ask me' to get a form." The plain fixture agent has no forms trait, so it answers "ask me" with "I can't create forms here." A form answer gets "Thanks, noted:" followed by the answer, or a late-answer notice when the form was answered after the conversation moved on.
+The fixture agent has both forms traits because it exercises both tools, and a real agent should have only one of them. The steering fixture agent has only `wippy.session.forms:ask_user`, and the plain fixture agent has neither.
+
+The fixture agents reply to these phrases, and anything else gets "Say 'ask me' to get a form." A phrase that needs a tool the agent does not have gets "I can't create forms here." for `ask_user` and "I can't create forms with these fields here." for `ask_user_fields`. A tool result other than `read_form`, such as a form the server refused, gets "Tool result from <tool>:" followed by the result on one line. A form answer gets "Thanks, noted:" followed by the answer, or a late-answer notice when the form was answered after the conversation moved on. For a form with a field that is not a choice, the answer is each answered field as `id=value`, separated by `; `, with a checkbox as `yes` or `no` and a skipped field left out.
 
 | Phrase | Reply |
 |---|---|
-| `ask me` | Asks a single-question delivery form. |
-| `ask me many` | Asks a four-question order form. |
-| `ask me several` | Asks one required several-answer question with an Other box, so Enter with nothing ticked shows the tick-one message. |
+| `ask me` | Asks a single-question delivery form through `ask_user`. |
+| `ask me many` | Asks a four-question order form through `ask_user`. |
+| `ask me several` | Asks one required several-answer question with an Other box through `ask_user`, so Enter with nothing ticked shows the tick-one message. |
+| `ask me delivery` | Asks a delivery-details form with text, email, date, number, textarea and checkbox fields through `ask_user_fields`. |
+| `ask me preferences` | Asks a form with one choice question, three checkboxes and a short text note through `ask_user_fields`. |
+| `ask me limits` | Asks a form with a number that has a step of 0.25 and bounds, a text capped at 2000 characters, a textarea capped at 8000 characters, and an optional email and date, through `ask_user_fields`. |
+| `ask me delivery via ask_user` | Sends the delivery-details form to `ask_user`. The server refuses it with `unsupported_type`, and the reply quotes the refusal. |
 | `propose action` | Replies with a plan that waits for confirmation. |
 | `work slowly` | Replies after 25 seconds. |
 | `read form <id>` | Calls `read_form` for that form id. |
@@ -136,7 +142,46 @@ The fixture agents reply to these phrases, and anything else gets "Say 'ask me' 
 | `limit after text` | Writes "Starting the quick job again." and calls a quick tool. Use the Session Forms Limit Fixture agent, whose turn allows one model step: the next step hits the turn limit. On the other agents the reply after the tool is "Quick job finished." |
 | `artifact and ask` | In one model round, calls a tool that returns an inline artifact and calls `ask_user`. The round has no text. |
 
-The four job phrases (`slow tool`, `fail after text`, `limit after text`, `artifact and ask`) also work in a form answer. Type one as the Other text of a question and the next turn runs that phrase, the same way `work slowly` delays the reply. A late answer keeps its late-answer reply. The plain fixture agent has no job tools and replies "I can't run jobs here."
+The four job phrases (`slow tool`, `fail after text`, `limit after text`, `artifact and ask`) also work in a form answer. Type one as the Other text of a question and the next turn runs that phrase, the same way `work slowly` delays the reply. A late answer keeps its late-answer reply, and the answer to a form with standard fields gets the id=value reply above even if a field holds one of the phrases. The plain fixture agent has no job tools and replies "I can't run jobs here."
+
+## Tool approval demo
+
+The tool approval fixtures show how an agent asks a person before a tool call runs. They need a `wippy/session` release that has the `wippy.session.traits:tool_approval` trait and a Web Host that has the approval card. They belong to the `app.tool_approval_demo` namespace, which holds a deterministic model and provider, six fixture tools and seven agents. `.wippy.yaml` removes the namespace unless the `tool-approval-fixtures` profile is selected, so a release has none of it.
+
+```bash
+wippy run -c --profile tool-approval-fixtures
+# or, with TOOL_APPROVAL_DEV_FIXTURES=true in the environment or .env:
+make run-dev
+```
+
+Passing `--config` replaces the default `.wippy.yaml`, so add `--config .wippy.yaml` before your own config file. The profile can be combined with `session-forms-fixtures`. The Session Forms Demo page (`/session-forms-demo`) lists the six public fixture agents next to the forms agents, and the e2e specs start their chats from it (see [e2e/README.md](e2e/README.md#tool-approval-cells)).
+
+| Agent | Trait setting | Use |
+|---|---|---|
+| Tool Approval Fixture (`agent`) | defaults: `require: marked`, `approve_all: off`, 900 s | Most scenarios |
+| Tool Approval Batch Fixture (`batch_agent`) | `approve_all: batch` | One Approve all covers a step |
+| Tool Approval Session Fixture (`session_agent`) | `approve_all: session` | One Approve all covers the agent's tools |
+| Tool Approval Expiry Fixture (`expiry_agent`) | `timeout_seconds: 30` | A card that expires |
+| Tool Approval All Fixture (`all_agent`) | `require: all`, delegate `ask_analyst` | Private and delegation calls ask |
+| Tool Approval Plain Fixture (`plain_agent`) | no approval trait | An unprotected agent, and the old Session cell |
+
+The tools return `{ ran: true, tool, record }` when they run, and the Session stores that result in the call row, so a test can tell a call that ran from a call that did not. Delete record asks (`approval: required`). Send invoice asks and offers Approve all for the tool (`approve_all: true`). Wire funds asks and never offers Approve all (`approve_all: false`). Look up record needs no approval under `require: marked`. Write audit entry is private and asks. Make forged decision page needs no approval and returns an interactive artifact. Its script waits until a test calls window.__forge(command) with the real ids of the pending request, and then tries to approve the call in six ways (click, key events, relay message, token read, proxy API and socket).
+
+The model picks a script from the newest user message and a step from the number of tool results that follow it. A phrase may end with `#<tag>`, which the model adds to the record names. Anything else gets "Say 'approve one' to get an approval card."
+
+| Phrase | Agent | Script |
+|---|---|---|
+| `approve one` | any with the tools | One Delete record call. Then "Done: delete_record <record> ran." |
+| `deny reason` | any with the tools | The same call. After a denial with a reason: "Following your instruction: <reason>" |
+| `approve three` | Batch | Three Delete record calls in one step, then a fourth step that asks again, then "Batch finished." |
+| `grant tool` | Fixture | Send invoice in two steps, then "Invoices finished." |
+| `grant tool again` | Fixture | One more Send invoice call, then "Invoice finished." |
+| `grant session` | Session | Delete record, then Delete record and Send invoice together, then Wire funds, then "Session grant checked." |
+| `stop denial` | Fixture | One step with Delete record, Look up record and Send invoice |
+| `ask everything` | All | One step with Write audit entry, the delegation call to the analyst and Look up record, then "Everything ran." |
+| `forge decision` | Fixture | Make forged decision page, then a Delete record call that waits. The test starts the page's attack once the card is pending. Then "Forge check finished." |
+| `lookup one` | Fixture, Plain | One Look up record call, then "Looked up <record>." |
+| `steer: <text>` | any | "Steering read: <text>" |
 
 ## Frontend & theming
 

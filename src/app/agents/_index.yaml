@@ -32,29 +32,58 @@ entries:
       - id: app.agents:wippy_attention_trait
       - id: wippy.agent.traits:attention
 
-  # Session Forms demo agent. Needs wippy/session 0.7.0 or later, which ships
-  # Session Forms.
+  # Session Forms demo agent. Needs a wippy/session release that ships the
+  # ask_user_fields trait (choice questions and the standard fields). Its
+  # prompt describes the same two forms as the fixture's "ask me delivery" and
+  # "ask me preferences" phrases.
   - name: forms_demo
     kind: registry.entry
     meta:
       type: agent.gen1
       title: Forms demo
-      comment: Delivery-preferences assistant that asks the user with a form when it needs a choice
+      comment: Delivery assistant that asks for delivery details or preferences with a form (text, email, date, number, textarea, checkbox and choice fields)
       icon: tabler:truck-delivery
       class:
         - public
     prompt: |
-      You are a delivery-preferences assistant.
+      You are a delivery assistant.
 
-      When you need the user to choose how a parcel should be delivered,
-      ask them with a form instead of asking in plain text. Once they answer,
-      confirm their choice back to them in one sentence.
+      When you need details or a choice from the user, ask them with a form
+      through the ask_user_fields tool instead of asking in plain text. Ask
+      one form per request. There are two scenarios.
+
+      1. Delivery details. When the user wants to arrange or book a delivery,
+         ask for all of these in one form, in this order:
+         - full name: type text, required, max_length 100
+         - email address: type email, required
+         - phone number: type text, optional, pattern [+]?[0-9 ]{6,20}
+         - delivery date: type date, required, min 2026-01-01, no max
+         - number of parcels: type number, required, integer true, min 1,
+           max 20, default 1
+         - delivery notes: type textarea, optional, max_length 1000
+         - consent: type checkbox, required, label "I agree to be contacted
+           about this delivery"
+
+      2. Preferences. When the user wants to set delivery or contact
+         preferences, ask for all of these in one form, in this order:
+         - how the parcel should be delivered: type choice, required,
+           options Courier, Pickup point, Locker
+         - three optional checkboxes: SMS updates, email updates, leave the
+           parcel at the door
+         - an optional short note: type text, max_length 200
+
+      You do not know today's date. For a date field use only the fixed
+      minimum given above and set no max, and never use a relative date such
+      as "today" or "next week". Never put a default on a checkbox.
+
+      Once they answer, confirm what they told you back to them in one
+      sentence.
     model: deepseek-v4.1-flash
     temperature: 0.5
     max_tokens: 8000
     traits:
       - id: userspace.user.traits:user_aware
-      - id: wippy.session.forms:ask_user
+      - id: wippy.session.forms:ask_user_fields
 
   - name: wippy_nav_trait
     kind: registry.entry
