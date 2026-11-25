@@ -56,6 +56,19 @@ local function options()
     }
 end
 
+-- Two real pages of this app to choose from, for an artifact tile bound to a select (RC2-08 demo page).
+local function artifact_options()
+    ran("artifact_options")
+    return {
+        schema = FRAME,
+        fields = {
+            { name = "value", type = "string", role = "dimension", nullable = false },
+            { name = "label", type = "string", role = "dimension", nullable = false },
+        },
+        rows = { { "app.views:iframe-demo", "Demo" }, { "app.views:session-forms-demo", "Forms" } },
+    }
+end
+
 local function noop()
     ran("noop")
     return { ok = true }
@@ -309,7 +322,7 @@ local function mapper_modes(input)
 end
 
 return {
-    numbers = numbers, series = series, options = options, noop = noop,
+    numbers = numbers, series = series, options = options, artifact_options = artifact_options, noop = noop,
     fails = fails, wrong_shape = wrong_shape, bad_cell = bad_cell, empty_series = empty_series,
     echo = echo, sleepy = sleepy, slow = slow, slow_rows = slow_rows, slow_action = slow_action,
     values = values, null_strict = null_strict, record_nulls = record_nulls, schema_nulls = schema_nulls,

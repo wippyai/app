@@ -109,6 +109,19 @@ entries:
     pool:
       size: 1
 
+  - name: artifact_options_fn
+    kind: function.lua
+    source: file://fixtures.lua
+    method: artifact_options
+    modules:
+      - logger
+      - security
+      - time
+    imports:
+      clock: wippy.dashboards:clock
+    pool:
+      size: 1
+
   - name: noop_fn
     kind: function.lua
     source: file://fixtures.lua
@@ -387,6 +400,24 @@ entries:
       example:
         args: {}
         data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: string, role: dimension, nullable: false }, { name: label, type: string, role: dimension, nullable: false }], rows: [["a", "Option A"]] }
+
+  - name: artifact_options
+    kind: registry.entry
+    meta:
+      type: wippy.dashboards.point
+      catalog: false
+      title: Demo artifact options
+      description: "Two pages of this app, for an artifact tile bound to a select."
+      func: app.dashboards_fixtures:artifact_options_fn
+      args_schema: { type: object, additionalProperties: false, properties: {} }
+      output:
+        shape: options
+        fields:
+          - { name: value, type: string, role: dimension, nullable: false }
+          - { name: label, type: string, role: dimension, nullable: false }
+      example:
+        args: {}
+        data: { schema: wippy.dashboard_frame/v1, fields: [{ name: value, type: string, role: dimension, nullable: false }, { name: label, type: string, role: dimension, nullable: false }], rows: [["app.views:iframe-demo", "Demo"]] }
 
   - name: empty_series
     kind: registry.entry
