@@ -171,7 +171,7 @@ function digitsOf(text: string | null): string {
 }
 
 async function openLive(page: Page, id = PAGE, route = '/live-demo') {
-  await openInShell(page, route, id)
+  await openInShell(page, route)
   return pageFrame(page, id)
 }
 

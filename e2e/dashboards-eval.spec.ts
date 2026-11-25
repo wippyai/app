@@ -366,11 +366,16 @@ async function chooseModel(page: Page, boardReads: BoardReads, pageId: string, p
     return null
   }
   const param = picker[1].param as string
+  // Each tile input that uses the filter reads once when it changes. Two tiles can share one page data entry
+  // (the planner reuses identical entries), so a point is expected as many times as tile inputs bind it.
   const bound = new Set<string>()
+  const expected = new Map<string, number>()
   for (const tile of Object.values(props.tiles)) {
     for (const source of Object.values(tile.data)) {
-      if (Object.values(source.args).some(x => (x as { $param?: string } | null)?.$param === param))
+      if (Object.values(source.args).some(x => (x as { $param?: string } | null)?.$param === param)) {
         bound.add(source.point)
+        expected.set(source.point, (expected.get(source.point) ?? 0) + 1)
+      }
     }
   }
   if (bound.size === 0) {
@@ -395,8 +400,8 @@ async function chooseModel(page: Page, boardReads: BoardReads, pageId: string, p
   if (JSON.stringify([...counts.keys()].sort()) !== JSON.stringify([...bound].sort()))
     reasons.push(`request 3: choosing a model re-read ${JSON.stringify([...counts])}, expected exactly ${JSON.stringify([...bound])}`)
   for (const [name, n] of counts) {
-    if (n !== 1)
-      reasons.push(`request 3: ${name} was read ${n} times after the filter changed`)
+    if (n !== (expected.get(name) ?? 0))
+      reasons.push(`request 3: ${name} was read ${n} times after the filter changed, expected ${expected.get(name) ?? 0} (one per tile input that uses the filter)`)
   }
   return boardReads.get(pageId, [...bound][0])?.args?.model as string
 }
@@ -767,11 +772,24 @@ async function evaluateChange(page: Page, req: typeof rc2Fixture.requests[number
     const other = row?.children?.find(node => node.panel === 'message_types')
     if (!main || !other || parseFloat(main.size ?? '0') <= parseFloat(other.size ?? '0'))
       reasons.push('messages_by_day is not wider than message_types in the 1024 px layout')
+    // Draw where that layout applies. At 1400 px with the chat panel open the board itself is narrower than
+    // 1024 px and correctly picks a stacked layout, so widen the window and wait until the board picks lg.
     const board = await boardFrame(page, base.id)
-    const a = await board.locator('[data-tile-id="messages_by_day"]').boundingBox()
-    const b = await board.locator('[data-tile-id="message_types"]').boundingBox()
-    if (!a || !b || a.width <= b.width)
-      reasons.push('the board did not draw the main chart wider than message_types')
+    await page.setViewportSize({ width: 1920, height: 1000 })
+    let lg = true
+    try {
+      await expect(board.locator('[data-board-canvas]')).toHaveAttribute('data-breakpoint', 'lg', { timeout: 15_000 })
+    }
+    catch {
+      lg = false
+      reasons.push('the board did not reach its 1024 px layout in a 1920 px window')
+    }
+    if (lg) {
+      const a = await board.locator('[data-tile-id="messages_by_day"]').boundingBox()
+      const b = await board.locator('[data-tile-id="message_types"]').boundingBox()
+      if (!a || !b || a.width <= b.width)
+        reasons.push('the board did not draw the main chart wider than message_types')
+    }
   }
   if (req.n === 4) {
     const list = tileData.find(t => t.id === 'users')!

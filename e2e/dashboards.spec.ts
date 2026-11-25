@@ -702,7 +702,7 @@ test.describe('stage B: page host and dashboard-layout', () => {
   })
 
   test('reflow, kept state, scroll and timeout on one page', async ({ page }) => {
-    await openInShell(page, '/coord/ph-one', 'coord_ph_one')
+    await openInShell(page, '/coord/ph-one')
     const frame = pageFrame(page, 'coord_ph_one')
     await expect(frame.locator('[data-tile-id="t1"]')).toBeVisible({ timeout: 20_000 })
 
