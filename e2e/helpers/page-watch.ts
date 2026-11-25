@@ -218,10 +218,29 @@ export async function api(page: Page, method: string, path: string, body?: unkno
   }, { method, path, body })
 }
 
-/** Navigate inside the running Host, because deep links can race the Host's start. */
-export async function openInShell(page: Page, path: string) {
-  await page.evaluate((p) => {
+/**
+ * Navigate inside the running Host, because deep links can race the Host's start. With `dashboardPageId`, the
+ * navigation is sent again while that page's frame is not attached.
+ */
+export async function openInShell(page: Page, path: string, dashboardPageId?: string) {
+  const navigate = () => page.evaluate((p) => {
     history.pushState({}, '', p)
     window.dispatchEvent(new PopStateEvent('popstate'))
   }, path)
+  if (!dashboardPageId) {
+    await navigate()
+    return
+  }
+  // Right after sign-in the Host can still be starting, and a navigation sent then is lost (the shell stays on
+  // Home). Send it again while the page frame is not attached: a lost navigation mounted nothing and read nothing,
+  // so repeating it changes no count a test checks. The caller's own assertions report a final failure.
+  const frame = page.locator(`iframe[name="wippy:page:wippy.dashboards.pages:${dashboardPageId}"]`)
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await navigate()
+    try {
+      await frame.waitFor({ state: 'attached', timeout: 5000 })
+      return
+    }
+    catch {}
+  }
 }
