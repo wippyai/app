@@ -295,7 +295,7 @@ test.describe('values keep their meaning from point to tile (RC1-13)', () => {
   test('the table tile shows an empty cell as missing, never as 0 or text, and keeps decimals exact', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1000 })
     await loginAsAdmin(page)
-    await openInShell(page, '/reads/values', 'reads_values')
+    await openInShell(page, '/reads/values')
     const frame = pageFrame(page, 'reads_values')
 
     const valid = frame.locator('[data-tile-id="t_valid"]')

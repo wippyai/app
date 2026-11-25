@@ -7,6 +7,7 @@ import { api, loginAs } from './helpers/page-watch'
 import type { Envelope, Frame, PageProps } from './dashboards-agent.support'
 import { SPEND_CAP_USD, boardFrame, catalogue, expectedChart, frameStatuses, openBoard, pageProps, renderedChart, renderedTable, spendStart, spentUsd, tableProblem } from './dashboards-agent.support'
 import { publishPage } from './dashboards-wp5.support'
+import { ProviderStopped, turnFailure } from './dashboards-run-failure'
 import rc2Fixture from './fixtures/rc2-eval-pages.json'
 
 /**
@@ -84,8 +85,13 @@ test.beforeAll(async ({ browser }) => {
 async function campaignCheck(page: Page, reserve = 0) {
   const spent = await spentUsd(budgetPage)
   test.skip(spent + reserve >= SPEND_CAP_USD, 'No verdict. The shared RC2 campaign cap was reached.')
-  const failed = page.getByText(/Turn failed/i)
-  test.skip(await failed.count() > 0, 'No verdict. The model provider stopped the turn.')
+  // Only a confirmed provider or cap stop has no verdict (the shared classifier of the eval and Researcher specs).
+  // Any other failed turn (a dashboards, tool or session error) is a failure of the test.
+  const failures = (await page.getByText(/Turn failed/i).allTextContents()).map(text => turnFailure(text.trim()))
+  const real = failures.find(failure => !(failure instanceof ProviderStopped))
+  if (real)
+    throw real
+  test.skip(failures.length > 0, 'No verdict. The model provider stopped the turn.')
 }
 
 test.afterEach(async ({ page }) => {
