@@ -841,12 +841,40 @@ test.describe('refresh controls (RC2-07)', () => {
     expect(reads.some(r => r.point === 'ok' && r.status === 429)).toBe(true)
     // Stop the burst and look at the newest read. A click that came after the refused answer may have been
     // allowed and replaced the error. Then click again, one click at a time and only after the newest read has an
-    // answer (the bucket is empty, so the read is refused), until the newest read is the refused one.
-    for (let i = 0; i < 20; i++) {
+    // answer, until the newest read is the refused one. The bucket refills at 10 reads a second, so single clicks
+    // alone are often allowed. While they run, fast reads of another point of this page (the same viewer, so the
+    // same limit) keep the bucket empty, and a refresh read finds no token left.
+    await viewer.evaluate(() => {
+      const token = JSON.parse(localStorage.getItem('@wippy_token_info') || 'null')?.token
+      const state = { stop: false, done: Promise.resolve() }
+      state.done = (async () => {
+        while (!state.stop) {
+          await Promise.all(Array.from({ length: 4 }, () =>
+            fetch('/api/v1/dashboards/pages/reads_toggle/points/users', { headers: { Authorization: `Bearer ${token}` } })
+              .then(r => r.text()).catch(() => '')))
+        }
+      })();
+      (window as unknown as { __drainReads: typeof state }).__drainReads = state
+    })
+    try {
+      for (let i = 0; i < 20; i++) {
+        await expect.poll(() => newestOk().status, { timeout: 10_000 }).not.toBeNull()
+        if (newestOk().status === 429)
+          break
+        await refresh.click()
+      }
+      // The last try may have ended with a click: wait for its answer before judging it.
       await expect.poll(() => newestOk().status, { timeout: 10_000 }).not.toBeNull()
-      if (newestOk().status === 429)
-        break
-      await refresh.click()
+    }
+    finally {
+      // Every drain read ends before the test goes on, so none is left in flight or aborted.
+      await viewer.evaluate(async () => {
+        const state = (window as unknown as { __drainReads?: { stop: boolean, done: Promise<void> } }).__drainReads
+        if (state) {
+          state.stop = true
+          await state.done
+        }
+      })
     }
     expect(newestOk().status).toBe(429)
 
