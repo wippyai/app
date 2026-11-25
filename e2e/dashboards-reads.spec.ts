@@ -835,16 +835,15 @@ test.describe('refresh controls (RC2-07)', () => {
     const refresh = f.getByRole('button', { name: 'Refresh Fixed number' })
     // Nothing else reads ok: the point has no timed refresh and no live signal, so only this control does.
     const newestOk = () => reads.filter(r => r.point === 'ok').slice(-1)[0]
-    // Refresh faster than the limit allows (10 reads a second, burst 30) until the engine refuses a read. Clicks
-    // come in a burst: each one replaces the read before it, which is aborted.
-    for (let i = 0; i < 200 && !reads.some(r => r.point === 'ok' && r.status === 429); i++)
+    // A burst of clicks: each one replaces the read before it, which is aborted. The burst alone does not reliably
+    // reach the limit (10 reads a second, burst 30), because the browser can cancel a replaced read before it
+    // reaches the server.
+    for (let i = 0; i < 40; i++)
       await refresh.click()
-    expect(reads.some(r => r.point === 'ok' && r.status === 429)).toBe(true)
-    // Stop the burst and look at the newest read. A click that came after the refused answer may have been
-    // allowed and replaced the error. Then click again, one click at a time and only after the newest read has an
-    // answer, until the newest read is the refused one. The bucket refills at 10 reads a second, so single clicks
-    // alone are often allowed. While they run, fast reads of another point of this page (the same viewer, so the
-    // same limit) keep the bucket empty, and a refresh read finds no token left.
+    // Then click one at a time, only after the newest read has an answer, until the newest read is refused. The
+    // bucket refills at 10 reads a second, so single clicks alone are often allowed. While they run, fast reads of
+    // another point of this page (the same viewer, so the same limit) keep the bucket empty, and a refresh read
+    // finds no token left.
     await viewer.evaluate(() => {
       const token = JSON.parse(localStorage.getItem('@wippy_token_info') || 'null')?.token
       const state = { stop: false, done: Promise.resolve() }
