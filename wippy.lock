@@ -51,8 +51,8 @@ modules:
       version: 0.4.3
       hash: f636859979e88b23647a78fb9aa8a553799de18750b0fb5fb085cbe21542c86c
     - name: wippy/session
-      version: 0.7.2
-      hash: b76352f3ce633bc8e1a2953084a9002959cf15dd1d5192881aef68f5e3b0734c
+      version: 0.7.3
+      hash: a67e90fbc281424a099b28210d7a90071adc4a0c0bb21e59d76f89e626e3187e
     - name: wippy/session-util
       version: 0.0.1
       hash: df4ea7121356a32bb2ca02618a2027408a337e93ab5ecb272d0e6e977f9c101d
