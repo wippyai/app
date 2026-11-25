@@ -366,11 +366,16 @@ async function chooseModel(page: Page, boardReads: BoardReads, pageId: string, p
     return null
   }
   const param = picker[1].param as string
+  // Each tile input that uses the filter reads once when it changes. Two tiles can share one page data entry
+  // (the planner reuses identical entries), so a point is expected as many times as tile inputs bind it.
   const bound = new Set<string>()
+  const expected = new Map<string, number>()
   for (const tile of Object.values(props.tiles)) {
     for (const source of Object.values(tile.data)) {
-      if (Object.values(source.args).some(x => (x as { $param?: string } | null)?.$param === param))
+      if (Object.values(source.args).some(x => (x as { $param?: string } | null)?.$param === param)) {
         bound.add(source.point)
+        expected.set(source.point, (expected.get(source.point) ?? 0) + 1)
+      }
     }
   }
   if (bound.size === 0) {
@@ -395,8 +400,8 @@ async function chooseModel(page: Page, boardReads: BoardReads, pageId: string, p
   if (JSON.stringify([...counts.keys()].sort()) !== JSON.stringify([...bound].sort()))
     reasons.push(`request 3: choosing a model re-read ${JSON.stringify([...counts])}, expected exactly ${JSON.stringify([...bound])}`)
   for (const [name, n] of counts) {
-    if (n !== 1)
-      reasons.push(`request 3: ${name} was read ${n} times after the filter changed`)
+    if (n !== (expected.get(name) ?? 0))
+      reasons.push(`request 3: ${name} was read ${n} times after the filter changed, expected ${expected.get(name) ?? 0} (one per tile input that uses the filter)`)
   }
   return boardReads.get(pageId, [...bound][0])?.args?.model as string
 }
