@@ -580,7 +580,9 @@ test.describe('withdrawn access is refused on every read path (RC1-08)', () => {
   test('the read that a live signal triggers is refused after the withdrawal', async ({ browser }) => {
     const admin = await signedIn(browser, 'admin', 'admin')
     const viewer = await signedIn(browser, 'viewer', 'viewer')
-    expectFailures(viewer, { status: 403, path: '/api/v1/dashboards/pages/reads_toggle/points/users' })
+    // After the withdrawal every read of this page is refused, also a slow tile's own check that falls in the
+    // window; the test proves the refusal of the read that the signal triggers.
+    expectFailures(viewer, { status: 403, path: '/api/v1/dashboards/pages/reads_toggle/points/' })
     await viewer.setViewportSize({ width: 1920, height: 1000 })
     await openInShell(viewer, '/reads/toggle')
     const rows = pageFrame(viewer, 'reads_toggle').locator('[data-tile-id="users_tile"] tr[data-user-id]')

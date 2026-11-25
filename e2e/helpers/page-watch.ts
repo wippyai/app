@@ -109,7 +109,10 @@ export async function monitor(page: Page, name: string): Promise<void> {
     // when the test ends, because the new document can report after the abort. Any other aborted
     // request, such as a point read, an API call or a tile bundle, is a problem.
     const hostLoad = /^\/webcomponents-[\d.]+\//.test(path) || /^\/[a-z0-9-]+\.json$/.test(path)
-    const hostModule = /^\/@static-[a-z0-9-]+\/[^/]+\//.test(path)
+    // The Host's own page list and route fetches are cancelled the same way when the sign-in flow loads a new
+    // document while they run (trace of 2026-11-25: list aborted at .544, new /home document at .604). Like the
+    // module bundles, they are excused only when the frame really got a new document or was removed.
+    const hostModule = /^\/@static-[a-z0-9-]+\/[^/]+\//.test(path) || /^\/api\/public\/pages\/(list|routes)$/.test(path)
     if (reason === 'net::ERR_ABORTED' && r.method() === 'GET' && hostLoad) {
       watch.aborted.push(line)
     }
