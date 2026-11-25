@@ -224,8 +224,9 @@ export async function api(page: Page, method: string, path: string, body?: unkno
  * navigation sent earlier is lost and the shell stays on Home. So wait for that, then navigate exactly once.
  */
 export async function openInShell(page: Page, path: string) {
-  const home = page.locator('iframe[name="wippy:page:app.views:main"]')
-  if (await home.count() > 0) {
+  // The compat shell hosts the home page in an iframe that may not be attached yet right after sign-in; the
+  // frame locator waits for it. The managed layout has no home page and navigates at once.
+  if (await page.locator('.managed-layout-shell').count() === 0) {
     await page.frameLocator('iframe[name="wippy:page:app.views:main"]')
       .getByRole('navigation', { name: 'Main navigation' })
       .locator('[aria-current="page"]')
