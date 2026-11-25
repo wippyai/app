@@ -655,7 +655,8 @@ function recordReads(page: Page, pageId: string): PointRead[] {
   const reads: PointRead[] = []
   const byRequest = new Map<unknown, PointRead>()
   page.on('request', (r) => {
-    if (r.method() !== 'GET')
+    // Reads the test sends itself only to empty the read bucket are not tile reads.
+    if (r.method() !== 'GET' || r.headers()['x-test-drain'] === '1')
       return
     const url = new URL(r.url())
     const marker = `/pages/${pageId}/points/`
@@ -850,7 +851,7 @@ test.describe('refresh controls (RC2-07)', () => {
       state.done = (async () => {
         while (!state.stop) {
           await Promise.all(Array.from({ length: 4 }, () =>
-            fetch('/api/v1/dashboards/pages/reads_toggle/points/users', { headers: { Authorization: `Bearer ${token}` } })
+            fetch('/api/v1/dashboards/pages/reads_toggle/points/users', { headers: { 'Authorization': `Bearer ${token}`, 'X-Test-Drain': '1' } })
               .then(r => r.text()).catch(() => '')))
         }
       })();
