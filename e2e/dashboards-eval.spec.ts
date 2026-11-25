@@ -772,11 +772,24 @@ async function evaluateChange(page: Page, req: typeof rc2Fixture.requests[number
     const other = row?.children?.find(node => node.panel === 'message_types')
     if (!main || !other || parseFloat(main.size ?? '0') <= parseFloat(other.size ?? '0'))
       reasons.push('messages_by_day is not wider than message_types in the 1024 px layout')
+    // Draw where that layout applies. At 1400 px with the chat panel open the board itself is narrower than
+    // 1024 px and correctly picks a stacked layout, so widen the window and wait until the board picks lg.
     const board = await boardFrame(page, base.id)
-    const a = await board.locator('[data-tile-id="messages_by_day"]').boundingBox()
-    const b = await board.locator('[data-tile-id="message_types"]').boundingBox()
-    if (!a || !b || a.width <= b.width)
-      reasons.push('the board did not draw the main chart wider than message_types')
+    await page.setViewportSize({ width: 1920, height: 1000 })
+    let lg = true
+    try {
+      await expect(board.locator('[data-board-canvas]')).toHaveAttribute('data-breakpoint', 'lg', { timeout: 15_000 })
+    }
+    catch {
+      lg = false
+      reasons.push('the board did not reach its 1024 px layout in a 1920 px window')
+    }
+    if (lg) {
+      const a = await board.locator('[data-tile-id="messages_by_day"]').boundingBox()
+      const b = await board.locator('[data-tile-id="message_types"]').boundingBox()
+      if (!a || !b || a.width <= b.width)
+        reasons.push('the board did not draw the main chart wider than message_types')
+    }
   }
   if (req.n === 4) {
     const list = tileData.find(t => t.id === 'users')!
