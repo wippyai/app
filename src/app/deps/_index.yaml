@@ -180,6 +180,16 @@ entries:
       - name: server
         value: app:gateway
 
+  # Dashboard pages declared as data (pages API, page app, board and built-in
+  # tiles). Its requirements default to this app's ids (app:db, app:api,
+  # app:gateway, app:processes, app.security:user), so it needs no parameters.
+  # It needs wippy-swiss/chartjs 0.2.0 or later (chart tile) and
+  # wippy-swiss/markdown (text tile), which this app already declares above.
+  - name: dashboards
+    kind: ns.dependency
+    component: wippy/dashboards
+    version: '>=v0.0.3'
+
   - name: wc-voice
     kind: ns.dependency
     component: wippy-swiss/voice
