@@ -14,6 +14,7 @@ for (const state of ['pending', 'approved', 'denied', 'denied-reason', 'expired'
     if (state === 'pending') {
       // Contract exception: a pending reviewer still sees a masked preview.
       await expect(cards(scope).locator('.chat-approval__summary')).toContainText('rec-')
+      await capture.settled()
       await page.reload()
       await expect(cards(scope)).toHaveCount(1)
       await expect(cards(scope).locator('.chat-approval__summary')).toContainText('rec-')
@@ -34,6 +35,7 @@ for (const state of ['pending', 'approved', 'denied', 'denied-reason', 'expired'
       if (display) for (const key of ['arguments', 'summary', 'cut', 'numbers']) expect(display[key]).toBeUndefined()
     }
     await sessionRead(page, 'get')
+    await capture.settled()
     await page.reload()
     await expect(scope.locator(D.row)).toHaveCount(state === 'auto' ? 2 : 1)
     await noDetails(scope)
@@ -50,6 +52,7 @@ for (const text of ['lookup one', 'fail one', 'masked email', 'sensitive result'
     expect(rows[0].data).toBeNull()
     expect(rows[0].metadata.result).toBeNull()
     await sessionRead(page, 'get')
+    await capture.settled()
     await page.reload()
     await expect(scope.locator(D.row)).toHaveCount(1)
     await noDetails(scope)

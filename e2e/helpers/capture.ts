@@ -32,9 +32,16 @@ export class Capture {
   private readonly lookups: Promise<void>[] = []
   private readonly consoleLines: string[] = []
   private readonly networkLines: string[] = []
+  private readonly inFlight = new Set<Request>()
 
   /** Starts watching one page. Call it for every extra tab or context page. */
   watch(page: Page, label = 'page') {
+    page.on('request', (request: Request) => {
+      this.inFlight.add(request)
+    })
+    page.on('requestfinished', (request: Request) => {
+      this.inFlight.delete(request)
+    })
     page.on('console', (message: ConsoleMessage) => {
       // The browser names the script or the resource a message belongs to. It is part of the
       // line, so an allowance can name the URL and not only the text.
@@ -62,6 +69,7 @@ export class Capture {
         this.problemList.push(`[${label}] HTTP ${status} ${request}`)
     })
     page.on('requestfailed', (request: Request) => {
+      this.inFlight.delete(request)
       const failure = request.failure()?.errorText ?? 'unknown failure'
       // The frame that made the request is part of the line: a failure in the Host frame is not
       // the same as one in an isolated artifact frame (`about:srcdoc`).
@@ -123,6 +131,25 @@ export class Capture {
     for (const problem of taken)
       this.problemList.splice(this.problemList.indexOf(problem), 1)
     return taken
+  }
+
+  /**
+   * Resolves once no request of a watched page has been in flight for `quietMs`. A test
+   * calls it before its own reload or navigation, so the navigation cancels no fetch and a
+   * strict check of failed requests stays meaningful. Throws with the pending URLs when the
+   * page does not settle in `timeoutMs`.
+   */
+  async settled(quietMs = 300, timeoutMs = 15_000) {
+    const deadline = Date.now() + timeoutMs
+    let quietSince = Date.now()
+    while (Date.now() < deadline) {
+      if (this.inFlight.size > 0)
+        quietSince = Date.now()
+      else if (Date.now() - quietSince >= quietMs)
+        return
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    throw new Error(`Requests still in flight after ${timeoutMs} ms: ${[...this.inFlight].map(request => request.url()).join(', ')}`)
   }
 
   /** Forgets everything captured so far, problems and logs. */
