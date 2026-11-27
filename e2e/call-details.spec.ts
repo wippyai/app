@@ -124,7 +124,7 @@ test('private details: no row, card, name, arguments or reference in REST or liv
   await expect(cards(scope)).toHaveCount(0)
   expect(await detailRows(page)).toEqual([])
   await sessionRead(page, 'get')
-  await page.waitForLoadState('networkidle')
+  await capture.settled()
   await page.reload()
   await expect(scope.locator(SEL.textarea)).toBeVisible()
   await expect(scope.locator(D.row)).toHaveCount(0)
