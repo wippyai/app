@@ -180,6 +180,76 @@ entries:
     pool:
       size: 4
 
+  # Phase 0 gallery tool. Unmarked; require: all still asks.
+  - name: fail_record_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Fail record lookup
+      comment: Deterministic failed call for the current chat gallery
+      llm_alias: fail_record
+      llm_description: Returns a fixed fixture failure.
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "record": { "type": "string", "description": "Name of the record." }
+          },
+          "required": ["record"]
+        }
+    source: file://tools.lua
+    modules: []
+    method: fail_record
+    pool:
+      size: 4
+
+  # Phase 0 gallery tool. Unmarked; require: all still asks.
+  - name: slow_record_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Slow record lookup
+      comment: Waits twenty seconds for running and stopped captures
+      llm_alias: slow_record
+      llm_description: Reads a fixture record after twenty seconds.
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "record": { "type": "string", "description": "Name of the record." }
+          },
+          "required": ["record"]
+        }
+    source: file://tools.lua
+    modules:
+      - time
+    method: slow_record
+    pool:
+      size: 4
+
+  # Phase 0 gallery tool. Unmarked; require: all still asks.
+  - name: big_result_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Large record result
+      comment: Returns a nested object with a twenty KB string
+      llm_alias: big_result
+      llm_description: Reads a fixture record with a large nested JSON result.
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "record": { "type": "string", "description": "Name of the record." }
+          },
+          "required": ["record"]
+        }
+    source: file://tools.lua
+    modules: []
+    method: big_result
+    pool:
+      size: 4
+
   # Private and marked: its call has no tool chip, and it still asks.
   - name: write_audit_tool
     kind: function.lua
@@ -247,6 +317,9 @@ entries:
       - app.tool_approval_demo:lookup_record_tool
       - app.tool_approval_demo:write_audit_tool
       - app.tool_approval_demo:make_forger_tool
+      - app.tool_approval_demo:fail_record_tool
+      - app.tool_approval_demo:slow_record_tool
+      - app.tool_approval_demo:big_result_tool
 
   # Agent A: the trait with its defaults (require marked, approve_all off,
   # timeout 900 s, 10 requests per turn). The steering trait lets a person type
@@ -412,6 +485,9 @@ entries:
     max_tokens: 4096
     tools:
       - app.tool_approval_demo:lookup_record_tool
+      - app.tool_approval_demo:fail_record_tool
+      - app.tool_approval_demo:slow_record_tool
+      - app.tool_approval_demo:big_result_tool
 
   # Scenario 18 of EE2-2713: a real model (the one the app's own agents use)
   # with the approval trait defaults and two fixture tools. lookup_record is not

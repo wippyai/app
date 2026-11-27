@@ -32,6 +32,36 @@ local function write_audit(params: any)
     return ran("write_audit", "entry", params)
 end
 
+-- Phase 0 gallery tools. Only the slow entry imports the time module.
+local function fail_record(_params: any)
+    error("TOOL_DETAILS_FIXTURE_FAILURE: The fixture record could not be read. No record was changed.")
+end
+
+local function slow_record(params: any)
+    local time = require("time")
+    time.sleep("20s")
+    local result = ran("slow_record", "record", params)
+    result.wait_seconds = 20
+    return result
+end
+
+local function big_result(params: any)
+    local result = ran("big_result", "record", params)
+    result.payload = {
+        schema_version = 1,
+        record = {
+            title = "Deterministic large fixture result",
+            details = {
+                -- 1024 copies of a 20-byte string make 20,480 ASCII bytes.
+                long_text = string.rep("0123456789abcdefghij", 1024),
+                tags = { "fixture", "phase0", "nested-json" },
+                summary = { count = 1, complete = true },
+            },
+        },
+    }
+    return result
+end
+
 -- The page of the forged-decision fixture. Its script waits. A test calls
 -- window.__forge(command) once the approval card is pending, and the script
 -- then tries every way a script in a frame could decide for the user: it clicks
@@ -128,4 +158,7 @@ return {
     lookup_record = lookup_record,
     write_audit = write_audit,
     make_forger = make_forger,
+    fail_record = fail_record,
+    slow_record = slow_record,
+    big_result = big_result,
 }

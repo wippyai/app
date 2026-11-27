@@ -17,6 +17,9 @@ local WIRE_FUNDS_TOOL = "app.tool_approval_demo:wire_funds_tool"
 local LOOKUP_RECORD_TOOL = "app.tool_approval_demo:lookup_record_tool"
 local WRITE_AUDIT_TOOL = "app.tool_approval_demo:write_audit_tool"
 local MAKE_FORGER_TOOL = "app.tool_approval_demo:make_forger_tool"
+local FAIL_RECORD_TOOL = "app.tool_approval_demo:fail_record_tool"
+local SLOW_RECORD_TOOL = "app.tool_approval_demo:slow_record_tool"
+local BIG_RESULT_TOOL = "app.tool_approval_demo:big_result_tool"
 -- The delegate tool of an agent is named by its `delegates` entry.
 local DELEGATE_TOOL_NAME = "ask_analyst"
 
@@ -341,6 +344,48 @@ local function handler(contract_args: any): any
             return round("", { { tool = DELETE_RECORD_TOOL, arguments = { record = record("rec", 1) } } })
         end
         return reply(single_call_text())
+    end
+
+    -- Phase 0 gallery phrases. Keep the earlier approval scripts unchanged.
+    if string.find(lower, "think demo", 1, true) then
+        return reply("<think>\nI will read the fixture request.\nI will compare the available records.\nI will check the result before answering.\nI can now give a short answer.\n</think>\nThe fixture record is ready.")
+    end
+
+    if string.find(lower, "think open", 1, true) then
+        return reply("<think>\nI will read the fixture request.\nI am still comparing the available records.\nThe reasoning tag is deliberately left open.")
+    end
+
+    if string.find(lower, "fail one", 1, true) then
+        if done == 0 then
+            return round("", { { tool = FAIL_RECORD_TOOL, arguments = { record = record("fail", 1) } } })
+        end
+        return reply("The fixture failed. No record was changed.")
+    end
+
+    if string.find(lower, "slow one", 1, true) then
+        if done == 0 then
+            return round("", { { tool = SLOW_RECORD_TOOL, arguments = { record = record("slow", 1) } } })
+        end
+        return reply("The slow fixture finished.")
+    end
+
+    if string.find(lower, "big result", 1, true) then
+        if done == 0 then
+            return round("", { { tool = BIG_RESULT_TOOL, arguments = { record = record("big", 1) } } })
+        end
+        return reply("The large fixture result is ready.")
+    end
+
+    if string.find(lower, "many tools", 1, true) then
+        if done == 0 then
+            return round("", {
+                { tool = LOOKUP_RECORD_TOOL, arguments = { record = record("many", 1) } },
+                { tool = LOOKUP_RECORD_TOOL, arguments = { record = record("many", 2) } },
+                { tool = LOOKUP_RECORD_TOOL, arguments = { record = record("many", 3) } },
+                { tool = LOOKUP_RECORD_TOOL, arguments = { record = record("many", 4) } },
+            })
+        end
+        return reply("Looked up all four fixture records.")
     end
 
     -- The analyst agent that "ask everything" delegates to. It answers the
