@@ -17,6 +17,10 @@ const fixtures = [
 for (const fixture of fixtures) {
   test(`${fixture.phrase}: collapsed icon, panel, Copy, dialog and keyboard`, async ({ page, capture }) => {
     test.skip(fixture.phrase === 'invalid details' && process.env.CALL_DETAILS_INVALID_FIXTURE_PENDING_RESTART === 'true', 'Malformed-JSON fixture changed after the live run; orchestrator restart required')
+    const invalidRequests: string[] = []
+    page.on('request', request => {
+      if (new URL(request.url()).hostname === 'invalid.example') invalidRequests.push(request.url())
+    })
     const scope = await openDetailsChat(page, capture)
     const row = await phrase(page, scope, fixture.phrase, fixture.status)
     await assertRow(row, fixture.status, fixture.label, 'note' in fixture ? fixture.note : undefined)
@@ -51,12 +55,26 @@ for (const fixture of fixtures) {
       await expect(row.locator('[part="tool-panel-result"] pre')).toHaveText('null')
     }
     if (fixture.phrase === 'text details') {
+      const expected = String.raw`{"text":"<img src=\"https://invalid.example/b3.png\"><script>window.__b3Executed=true</script><artifact>plain</artifact>","unicode":"visible\u202etext\u200b"}`
+      expect(await row.locator('[part="tool-panel-result"] pre').textContent()).toBe(expected)
+      await panelActions(page, row, expected)
+      await row.locator(D.dialogButton).click()
+      const dialog = row.getByRole('dialog')
+      await expect(dialog).toBeVisible()
+      expect(await dialog.locator('[part="tool-panel-result"] pre').textContent()).toBe(expected)
+      await expect(dialog.locator('img, script, artifact')).toHaveCount(0)
+      await dialog.locator(D.copy).click()
+      expect(await page.evaluate(() => (window as unknown as { __b3Copy: string }).__b3Copy)).toContain(`Result\n${expected}`)
+      await page.keyboard.press('Escape')
+      await expect(dialog).toBeHidden()
       await expect(row.locator(`${D.panel} img,${D.panel} script,${D.panel} artifact`)).toHaveCount(0)
       expect(await page.evaluate(() => (window as unknown as { __b3Executed?: boolean }).__b3Executed)).toBeUndefined()
       expect(page.url()).not.toContain('invalid.example')
       const visible = await row.locator(D.panel).innerText()
       expect(visible).not.toContain('\u202e')
       expect(visible).not.toContain('\u200b')
+      await page.waitForLoadState('networkidle')
+      expect(invalidRequests).toEqual([])
     }
     await sessionRead(page, 'get')
     if ('reload' in fixture) await reloadRow(page, scope, row, fixture.content)
