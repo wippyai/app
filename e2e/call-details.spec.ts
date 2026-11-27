@@ -16,7 +16,6 @@ const fixtures = [
 
 for (const fixture of fixtures) {
   test(`${fixture.phrase}: collapsed icon, panel, Copy, dialog and keyboard`, async ({ page, capture }) => {
-    test.skip(fixture.phrase === 'invalid details' && process.env.CALL_DETAILS_INVALID_FIXTURE_PENDING_RESTART === 'true', 'Malformed-JSON fixture changed after the live run; orchestrator restart required')
     const invalidRequests: string[] = []
     page.on('request', request => {
       if (new URL(request.url()).hostname === 'invalid.example') invalidRequests.push(request.url())
@@ -25,7 +24,8 @@ for (const fixture of fixtures) {
     const row = await phrase(page, scope, fixture.phrase, fixture.status)
     await assertRow(row, fixture.status, fixture.label, 'note' in fixture ? fixture.note : undefined)
     await expand(row, 'Enter')
-    await expect(row.locator(D.panel)).toContainText('Arguments')
+    // Undecodable argument text is never echoed: its arguments part is not captured (contract 5.3).
+    await expect(row.locator(D.panel)).toContainText(fixture.phrase === 'invalid details' ? 'Details are not available for this step.' : 'Arguments')
     await panelActions(page, row, fixture.content, 'copy' in fixture ? fixture.copy : fixture.content)
     await row.locator(D.toggle).press('Space')
     await expect(row.locator(D.panel)).toHaveCount(0)
@@ -33,7 +33,11 @@ for (const fixture of fixtures) {
     await expand(row, 'Space')
     const rows = await detailRows(page)
     expect(rows).toHaveLength(1)
-    if (fixture.phrase === 'invalid details') expect(rows[0].metadata.outcome).toBe('invalid_arguments')
+    if (fixture.phrase === 'invalid details') {
+      expect(rows[0].metadata.outcome).toBe('invalid_arguments')
+      expect(rows[0].details.arguments.availability).toBe('not_captured')
+      await expect(row.locator(D.panel)).toContainText('Failed to parse arguments')
+    }
     if (fixture.phrase === 'masked email') {
       expect(rows[0].details.arguments.masked_paths).toContain('/email')
       await expect(row.locator(D.panel)).toContainText('Public contact')
