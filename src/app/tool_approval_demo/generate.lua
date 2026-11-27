@@ -410,7 +410,8 @@ local function handler(contract_args: any): any
 
     if string.find(lower, "invalid details", 1, true) then
         if done == 0 then
-            return round("", { { tool = LOOKUP_RECORD_TOOL, arguments = { record = 42 } } })
+            -- The caller rejects malformed JSON, but does not validate input_schema.
+            return round("", { { tool = LOOKUP_RECORD_TOOL, arguments = "{" } })
         end
         return reply("The invalid fixture was not run.")
     end

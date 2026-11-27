@@ -4,8 +4,8 @@ import type { Scope } from './tool-approval'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { test as base, expect } from './capture'
-import { getHostFrame, pageIframeSelector } from './login'
-import { AGENTS, action, approveWhenArmed, cards, FIXTURES_ON, FIXTURES_SKIP_REASON, newTag, openToolApprovalChat, SEL, sendMessage, sessionCapabilities, sessionIdOf, settle } from './tool-approval'
+import { getHostFrame, loginAsAdmin, pageIframeSelector } from './login'
+import { AGENTS, action, approveWhenArmed, cards, FIXTURES_ON, FIXTURES_SKIP_REASON, newTag, SEL, sendMessage, sessionCapabilities, sessionIdOf, settle } from './tool-approval'
 
 export { expect, AGENTS, action, approveWhenArmed, cards, newTag, SEL, sendMessage, sessionIdOf }
 export const CELL = process.env.CALL_DETAILS_CELL ?? 'current'
@@ -101,17 +101,19 @@ export class DetailsWire {
 
 const pageWires = new WeakMap<Page, DetailsWire>()
 export const test = base.extend<{ wire: DetailsWire }>({
-  wire: [async ({ page }, use, info) => {
+  wire: [async ({ page, capture }, use, info) => {
     const wire = new DetailsWire()
     pageWires.set(page, wire)
     wire.watch(page)
     await use(wire)
+    await page.waitForLoadState('networkidle')
     await wire.idle()
     pageWires.delete(page)
     await mkdir(resolve('.local/b3/logs'), { recursive: true })
     const name = `${CELL}-${info.titlePath.join('-').replace(/[^a-z0-9-]/gi, '_').slice(-150)}-${info.retry}`
     await writeFile(resolve('.local/b3/logs', `${name}.json`), JSON.stringify({ lifecycle: 'completed', frames: wire.frames, bodies: wire.bodies, problems: wire.problems }, null, 2))
     expect(wire.problems, 'no internal fields, private calls, tool_call chunks or unmasked values in any incoming payload').toEqual([])
+    expect(capture.networkLog().split('\n').filter(line => line.includes(' FAILED ')), 'no failed requests, including navigation cancellations').toEqual([])
   }, { auto: true }],
 })
 
@@ -124,12 +126,19 @@ export function gate(cell: string) {
 const signedInPages = new WeakSet<Page>()
 export async function openDetailsChat(page: Page, capture: Capture, agent: string = AGENTS.plain): Promise<Scope> {
   const signedIn = signedInPages.has(page)
-  const scope = signedIn ? await getHostFrame(page) : await openToolApprovalChat(page, capture, agent === SUMMARY_AGENT ? AGENTS.plain : agent)
+  if (!signedIn) {
+    await loginAsAdmin(page)
+    await page.waitForLoadState('networkidle')
+    capture.reset()
+  }
+  await page.waitForLoadState('networkidle')
+  const scope = await getHostFrame(page)
   signedInPages.add(page)
   if (agent === SUMMARY_AGENT) {
     // The existing demo deliberately lists a fixed set. Use its real proxy API
     // for the new fixture rather than changing production frontend assets.
     await page.goto('/session-forms-demo')
+    await page.waitForLoadState('networkidle')
     await page.frameLocator(pageIframeSelector('app.views:session-forms-demo')).locator('body').evaluate(async () => {
       const wippy = (window as unknown as { $W: { instance: () => Promise<{ api: { get: (url: string) => Promise<{ data: { agents: Array<{ title: string, start_token: string }> } }> } }>, host: () => Promise<{ startChat: (token: string, options: { sidebar: boolean }) => void }> } }).$W
       const api = await wippy.instance()
@@ -141,13 +150,15 @@ export async function openDetailsChat(page: Page, capture: Capture, agent: strin
     })
     await expect(page.locator(SEL.textarea)).toBeVisible()
   }
-  else if (signedIn) {
+  else {
     await page.goto('/session-forms-demo')
     const card = page.frameLocator(pageIframeSelector('app.views:session-forms-demo')).locator('.rounded-lg').filter({ hasText: agent })
     await expect(card).toHaveCount(1)
+    await page.waitForLoadState('networkidle')
     await card.getByRole('button', { name: /start chat/i }).click()
     await expect(page.locator(SEL.textarea)).toBeVisible()
   }
+  await page.waitForLoadState('networkidle')
   const capabilities = await sessionCapabilities(page)
   if (CELL === 'old-session') expect(capabilities.call_details).toBeUndefined()
   else {
@@ -180,12 +191,15 @@ export async function idle(scope: Scope) {
   await expect(scope.locator(SEL.textarea)).toBeEnabled()
 }
 export async function phrase(page: Page, scope: Scope, text: string, status = 'done'): Promise<Locator> {
-  const before = await scope.locator(D.row).count()
+  const previous = await scope.locator(D.row).evaluateAll(rows => rows.map(row => row.getAttribute('data-message-id')))
   await sendMessage(scope, `${text} #${newTag()}`)
-  await expect(scope.locator(D.row)).toHaveCount(before + (text === 'many tools' ? 4 : 1), { timeout: 30_000 })
+  await expect(scope.locator(D.row)).toHaveCount(previous.length + (text === 'many tools' ? 4 : 1), { timeout: 30_000 })
   if (status !== 'running') await idle(scope)
-  const row = scope.locator(`${D.row}[data-status="${status}"]`).last()
-  await expect(row).toBeVisible({ timeout: 30_000 })
+  const ids = await scope.locator(D.row).evaluateAll(rows => rows.map(row => row.getAttribute('data-message-id')))
+  const id = ids.find(id => id && !previous.includes(id))
+  expect(id, 'live row has a stable stored message ID').toBeTruthy()
+  const row = scope.locator(`${D.row}[data-message-id="${id}"]`)
+  await expect(row).toHaveAttribute('data-status', status, { timeout: 30_000 })
   return row
 }
 
@@ -245,7 +259,7 @@ export async function expand(row: Locator, key?: 'Enter' | 'Space') {
   await expect(row.locator(D.panel)).toHaveAttribute('id', id!)
   await expect(row.locator(D.panel)).toBeVisible()
 }
-export async function panelActions(page: Page, row: Locator, expected: string | RegExp) {
+export async function panelActions(page: Page, row: Locator, expected: string | RegExp, copyExpected: string | RegExp = expected) {
   const panel = row.locator(D.panel)
   await expect(panel).toContainText(expected)
   // Only clipboard is replaced. The content still comes from the real panel.
@@ -254,7 +268,7 @@ export async function panelActions(page: Page, row: Locator, expected: string | 
   })
   await panel.locator(D.copy).click()
   const copied = await page.evaluate(() => (window as unknown as { __b3Copy: string }).__b3Copy)
-  expect(copied).toMatch(expected)
+  expect(copied).toMatch(copyExpected)
   expect(disclosureProblems(copied)).toEqual([])
   const opener = panel.locator(D.dialogButton)
   await opener.click()
@@ -270,6 +284,7 @@ export async function reloadRow(page: Page, scope: Scope, row: Locator, expected
   expect(id).toBeTruthy()
   await sessionRead(page, 'get')
   const before = (await detailRows(page)).find(item => item.message_id === id)
+  await page.waitForLoadState('networkidle')
   await page.reload()
   const restored = scope.locator(`${D.row}[data-message-id="${id}"]`)
   await expect(restored).toHaveAttribute('data-display', 'compact')
@@ -369,20 +384,43 @@ export async function injectMissingResult(page: Page, row: Locator, frames: Reco
   frames.inject(await sessionIdOf(page), id, { type: 'function_success', function_name: stored.metadata.function_name, outcome: null, details, details_revision: stored.details_revision, duration_ms: stored.metadata.duration_ms ?? null })
 }
 
+/** The corrected malformed-JSON fixture needs a runtime restart. */
+export async function injectInvalidArguments(page: Page, row: Locator, frames: RecoveryFrames) {
+  const id = (await row.getAttribute('data-message-id'))!
+  const stored = (await detailRows(page)).find(item => item.message_id === id)!
+  const details = {
+    ...stored.details,
+    result: { ...stored.details.result, availability: 'not_captured', preview: null, summary: null, has_full: false },
+    error: { ...stored.details.error, availability: 'available', preview: { value: 'Failed to parse arguments: injected malformed JSON', cut: [], numbers: [] }, has_full: false },
+    timing: { ...stored.details.timing, availability: 'not_captured', preview: null, summary: null, has_full: false },
+  }
+  frames.inject(await sessionIdOf(page), id, { type: 'function_error', function_name: stored.metadata.function_name, outcome: 'invalid_arguments', details, details_revision: stored.details_revision, duration_ms: null })
+  await expect(row).toHaveAttribute('data-status', 'not_run')
+}
+
 export async function setTheme(page: Page, theme: 'light' | 'dark') {
   await page.setViewportSize({ width: 1280, height: 1000 })
+  await page.waitForLoadState('networkidle')
   await page.goto('/home')
   const home = page.frameLocator(pageIframeSelector('app.views:main'))
   await home.getByRole('button', { name: theme === 'light' ? 'Light' : 'Dark', exact: true }).click()
   await expect(page.locator('.wippy-host-app')).toBeVisible()
 }
 
-export interface Shot { state: string, group: string, width: number, theme: string, injected: boolean, file: string, measurements: Awaited<ReturnType<typeof measure>> }
+export interface Shot { state: string, group: string, width: number, theme: string, injected: boolean, file: string, problems: string[], measurements: Awaited<ReturnType<typeof measure>> }
 export async function measure(element: Locator) {
   return element.evaluate(root => {
     const rect = (node: Element) => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height } }
     const parent = (node: Element): Element | null => node.parentElement ?? (node.getRootNode() instanceof ShadowRoot ? (node.getRootNode() as ShadowRoot).host : null)
-    const visible = (node: Element) => !!node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden'
+    const visible = (node: Element) => {
+      const box = rect(node)
+      if (!node.getClientRects().length || getComputedStyle(node).visibility === 'hidden') return false
+      for (let n = parent(node); n; n = parent(n)) {
+        const style = getComputedStyle(n), clip = rect(n)
+        if (/(hidden|clip|auto|scroll)/.test(style.overflowY) && (box.bottom <= clip.y || box.y >= clip.bottom)) return false
+      }
+      return box.bottom > 0 && box.y < innerHeight
+    }
     const rgba = (color: string): number[] => {
       const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1
       const ctx = canvas.getContext('2d', { willReadFrequently: true })!
@@ -409,23 +447,35 @@ export async function measure(element: Locator) {
       }
       return { class: node.className, bounds, clipped: clipping.length > 0, clipping }
     })
-    const contrasts = Array.from(root.querySelectorAll('.chat-tool-row__note,.chat-tool-row__timer,.chat-tool-row__auto-text,.chat-tool-panel__duration,.chat-tool-panel__hidden-note,.chat-tool-panel__masked-note,.chat-tool-panel__cut-note,.chat-tool-panel__decision,.chat-approval-key')).filter(visible).map(node => {
+    const contrasts = Array.from(root.querySelectorAll('.chat-tool-row__name,.chat-tool-row__note,.chat-tool-row__timer,.chat-tool-row__auto-text,.chat-tool-panel__duration,.chat-tool-panel__hidden-note,.chat-tool-panel__masked-note,.chat-tool-panel__cut-note,.chat-tool-panel__decision,.chat-tool-panel__value,.chat-tool-panel__heading,.chat-approval-key')).filter(visible).map(node => {
       const bg = background(node), fg = over(rgba(getComputedStyle(node).color), bg)
       const a = luminance(fg), b = luminance(bg)
       return { class: node.className, text: node.textContent?.trim(), ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), color: getComputedStyle(node).color, background: bg }
     })
-    return { bounds: rect(root), rowHeight: root.matches('.chat-tool-row') ? rect(root).height : null, controls, contrasts }
+    const overlaps: string[] = []
+    for (const line of root.querySelectorAll('.chat-tool-row__line,.chat-tool-panel__actions')) {
+      const children = Array.from(line.children).filter(visible)
+      children.forEach((a, i) => children.slice(i + 1).forEach(b => {
+        const x = rect(a), y = rect(b)
+        if (Math.min(x.right, y.right) - Math.max(x.x, y.x) > 1 && Math.min(x.bottom, y.bottom) - Math.max(x.y, y.y) > 1)
+          overlaps.push(`${a.className} / ${b.className}`)
+      }))
+    }
+    return { bounds: rect(root), rowHeight: root.matches('.chat-tool-row') ? rect(root).height : null, rowCount: root.querySelectorAll('.chat-tool-row').length + Number(root.matches('.chat-tool-row')), display: root.getAttribute('data-display'), themeClass: root.closest('[class*="w-theme-"]')?.className ?? null, controls, contrasts, overlaps }
   })
 }
 
-export async function shot(page: Page, shots: Shot[], state: string, group: string, width: number, theme: string, element: Locator, injected = false) {
+export async function shot(page: Page, shots: Shot[], state: string, group: string, width: number, theme: string, element: Locator, injected = false, capture?: Capture) {
   await mkdir(resolve('.local/b3/visual'), { recursive: true })
   await element.scrollIntoViewIfNeeded()
+  if (await element.locator(D.icon).count()) await expect(element.locator(`${D.icon} svg`).first()).toBeVisible()
   await element.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   const file = `${state}-${width}-${theme}.png`
   const measurements = await measure(element)
   await element.screenshot({ path: resolve('.local/b3/visual', file) })
-  shots.push({ state, group, width, theme, injected, file, measurements })
+  await capture?.idle()
+  const problems = capture ? [...capture.problems(), ...capture.networkLog().split('\n').filter(line => line.includes(' FAILED '))] : []
+  shots.push({ state, group, width, theme, injected, file, problems, measurements })
   await writeFile(resolve('.local/b3/visual/index.json'), JSON.stringify({ lifecycle: 'in-progress', shots }, null, 2))
 }
 

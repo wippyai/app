@@ -597,7 +597,8 @@ $env:WIPPY_URL = 'http://127.0.0.1:8097'
 $env:TOOL_APPROVAL_DEV_FIXTURES = 'true'
 $env:CALL_DETAILS_CELL = 'current' # or switch-off, old-host, old-session
 pnpm test:e2e:call-details --list
-pnpm test:e2e:call-details --project=chromium --output=.local/b3/playwright
+pnpm exec playwright test e2e/call-details.spec.ts --project=chromium --workers=1
+pnpm exec playwright test e2e/call-details-visual.spec.ts --project=chromium --workers=1
 ```
 
 With pnpm, pass `--list` directly. An extra `--` before it makes Playwright
@@ -631,7 +632,7 @@ checkout should install the dependencies declared in `package.json` and run
 | `sensitive result` | Masked `/token`, with public `label` and `count` |
 | `empty details`, `null details` | Empty string and captured JSON null |
 | `private details` | Unmarked private call, no public row, name, arguments or event |
-| `invalid details` | Schema-invalid arguments, `invalid_arguments`, no dispatch |
+| `invalid details` | Malformed argument JSON, `invalid_arguments`, no dispatch; needs restart after the B3b fixture correction |
 | `hidden details` | Tool result hidden; summary agent also proves the agent layer |
 | `hidden error` | Result full and error none, with no error disclosure |
 | `text details` | HTML and invisible Unicode rendered as escaped text |
@@ -652,24 +653,39 @@ it does not fabricate those frames.
 labelled injected frames through `page.routeWebSocket` on the real facade
 socket. Missing-result availability also uses an injected descriptor because
 the current Session marks every successful return captured. Loading and failed
-loading use a delayed history response and an injected envelope missing the
-requested row. Visibility-revision invalidation uses an injected update while
+loading use a delayed history response and an injected envelope naming another
+session. Visibility-revision invalidation uses an injected update while
 a real View all response is held. Test names, screenshot filenames and the
 visual index identify injected cases.
 
 Every test captures console errors, page errors, failed requests and HTTP
-errors through `capture.ts`. The current, switch-off and old-host cells also
+errors through `capture.ts`. Call-details also rejects navigation-cancelled
+requests and waits for network idle before navigation and reload. The current,
+switch-off and old-host cells also
 inspect every received socket frame and every session `get`/`messages` body
 for internal fields, tool_call chunks, checkpoint summaries, private values and
 unmasked fixture sentinels. Raw payload logs go to `.local/b3/logs/`. The old
 Session keeps its legacy payloads and is checked for compatibility only.
 
+The live specs keep Playwright's configured `test-results` output folder.
+Archive evidence under `.local/b3/` before another run replaces that folder.
+The B3b invalid-arguments fixture uses malformed JSON. The caller does not
+validate values against `input_schema`, so the earlier numeric `record` value
+ran successfully. Until the orchestrator restarts the corrected fixture, set
+`CALL_DETAILS_INVALID_FIXTURE_PENDING_RESTART=true` to skip only that functional
+case. Remove the flag after the restart. The visual invalid-arguments state is
+explicitly injected and does not prove the corrected fixture ran.
+
 The visual matrix captures light and dark themes at 1280 and 390 px viewport
-widths. PNGs go to `.local/b3/visual/<state>-<width>-<theme>.png`.
+widths. It covers masked arguments/results, empty/null results, hidden results
+and errors, escaped text, summary with the hidden-part line, dialog, 50 calls,
+and labelled injected invalid arguments, recovery, visibility and load states.
+Ordinary tools and approvals already captured in B2c are excluded.
+PNGs go to `.local/b3/visual/<state>-<width>-<theme>.png`.
 `.local/b3/visual/index.json` records each shot's source, row height, caret/Copy
-and focus-ring clipping, and muted/status-text contrast. Contact sheets go to
-`.local/b3/sheets/`, grouped by tools, panels, approvals, dialogs, load states
-and recovery. Measurements are saved before clipping or contrast assertions
+and focus-ring clipping, overlaps, console/request problems and text contrast.
+Contact sheets go to `.local/b3/sheets/`, grouped by tools, panels, dialogs,
+load states, size and recovery. Measurements are saved before visual assertions
 fail. Thinking is phase 2 and is outside this matrix.
 
 ## Adding tests
