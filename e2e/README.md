@@ -538,6 +538,140 @@ pnpm test:e2e:headed
      answered, and the disabled cell sends no automatic context and installs no
      overlay.
 
+### Call details cells
+
+`pnpm test:e2e:call-details` selects the four version-cell files and the visual
+matrix in `call-details-visual.spec.ts`. Each file skips with a reason outside
+its `CALL_DETAILS_CELL`. The default is `current`. Set
+`TOOL_APPROVAL_DEV_FIXTURES=true` in both the runtime and Playwright processes.
+Tests sign in through the Demo facade and reuse the approval and capture
+helpers. They never navigate directly to the Host dev server.
+
+Run the cells one at a time. They share port 8097 and the run card's databases.
+The orchestrator owns restarts through `.local/wippy-run.md`. New Lua and YAML
+require a restart. Do not start another runtime beside `p1`.
+
+| Cell | Run-card instance | Session workspace layer | Facade URL | Runtime visibility |
+|---|---|---|---|---|
+| `current` | `p1` | `--config .wippy.yaml --config .local/wippy.workspace.yaml` | `http://localhost:5173` | `SESSION_SHOW_TOOL_DETAILS=full` |
+| `switch-off` | `p1-off` | Same workspace layer | `http://localhost:5173` | `SESSION_SHOW_TOOL_DETAILS=none` |
+| `old-host` | `p1-old-host` | Same workspace layer | `https://web-host.wippy.ai/webcomponents-1.0.72` | `SESSION_SHOW_TOOL_DETAILS=full` |
+| `old-session` | `p1-old-session` | `--config .wippy.yaml` only, no replacement | `http://localhost:5173` | `SESSION_SHOW_TOOL_DETAILS=full`, ignored by Session 0.7.3 |
+
+The workspace layer replaces `wippy/session` with
+`C:/Projects/gen-2-chat/.local/worktrees/session-details/src`. The old-session
+cell uses Session 0.7.3 from `wippy.lock`. The old-host version is fixed at
+1.0.72. Its check excludes only the exact login stylesheet URLs read from
+`src/app/api/login.jet` and `static/login.html`, and rejects local Host bundles.
+
+All instances use the run card's binary and these common arguments:
+
+```text
+run -c --config .wippy.yaml
+--profile tool-approval-fixtures
+-o wippy.facade:fe_mode:default=compat
+-o wippy.facade:render_engine:default=iframe
+-o app:gateway:addr=:8097
+-o wippy.facade:fe_facade_url:default=<facade URL from the table>
+```
+
+Add `--config .local/wippy.workspace.yaml` after the first config for all cells
+except `old-session`. Keep `TOOL_APPROVAL_DEV_FIXTURES=true` and the visibility
+variable from the table in the instance environment. The local `.env` endpoint
+settings must agree with the port override: `APP_PORT=8097`,
+`WIPPY_URL=http://127.0.0.1:8097`, and the project's `APP_BASE_URL` and
+`PUBLIC_API_URL` on port 8097. The checked-in dependency sets the details
+default to `full`; an explicit environment value still wins.
+
+The published Session has no `session_show_tool_details` requirement. The
+[framework linking contract](https://wippy.ai/en/guides/components#when-values-resolve)
+resolves declared requirements, rather than requiring every supplied parameter
+to be consumed. Combined with the successful non-live lint against the locked
+Session, this supports keeping the forward-compatible default. Boot compatibility
+and the environment override must still be verified during B3b.
+
+After the orchestrator selects and restarts a cell, run from this worktree:
+
+```powershell
+$env:WIPPY_URL = 'http://127.0.0.1:8097'
+$env:TOOL_APPROVAL_DEV_FIXTURES = 'true'
+$env:CALL_DETAILS_CELL = 'current' # or switch-off, old-host, old-session
+pnpm test:e2e:call-details --list
+pnpm test:e2e:call-details --project=chromium --output=.local/b3/playwright
+```
+
+With pnpm, pass `--list` directly. An extra `--` before it makes Playwright
+treat the option as a positional argument and can start live tests. Listing
+shows all files, including tests that will skip in the selected cell.
+
+B3a only prepares sources, type-checks and lists tests. B3b runs them live after
+the restart. On the current machine, this checkout uses the ancestor workspace's
+Playwright and TypeScript. Its missing `dotenv` dependency can be supplied for
+static checks without changing a lockfile:
+
+```powershell
+node .local/b3/tmp-prepare-static.mjs
+$env:NODE_PATH = (Resolve-Path .local/b3/node_modules).Path
+pnpm exec tsc --noEmit -p .local/b3/tsconfig.json
+pnpm test:e2e:call-details --list
+```
+
+That preparation script uses an already installed local dependency. A fresh
+checkout should install the dependencies declared in `package.json` and run
+`pnpm exec tsc --noEmit -p tsconfig.json`.
+
+| Phrase and action | State |
+|---|---|
+| `lookup one` | Done; use Call Details Summary Fixture for summary-only arguments and result |
+| `fail one` | Failed |
+| `slow one`; optionally Stop | Running timer, pending result, final duration or stopped |
+| `big result` | Cut preview, View all, full value and dialog |
+| `masked email` | Input `email` marked `writeOnly`, masked as `[hidden: sensitive]` |
+| `masked approval`; Approve | Masked pending and decided approval previews, also on Host 1.0.72 |
+| `sensitive result` | Masked `/token`, with public `label` and `count` |
+| `empty details`, `null details` | Empty string and captured JSON null |
+| `private details` | Unmarked private call, no public row, name, arguments or event |
+| `invalid details` | Schema-invalid arguments, `invalid_arguments`, no dispatch |
+| `hidden details` | Tool result hidden; summary agent also proves the agent layer |
+| `hidden error` | Result full and error none, with no error disclosure |
+| `text details` | HTML and invisible Unicode rendered as escaped text |
+| `fifty calls` | One round of 50 distinct record arguments, then the final reply |
+| `approve one`; wait, Approve, Deny, or reason | Pending, approved, denied, denied with reason |
+| `approve one` on Tool Approval Expiry Fixture; wait | Expired after 30 seconds |
+| `grant tool`; Approve all | First manual approval, then Auto-approved |
+| `approve one`; Stop or `steer: use a different record` | Cancelled or superseded approval |
+
+The 50-call round uses two model steps, including the final reply. Session's
+default turn limit is 1000. Its repeated-call limit of 50 counts repeated
+identical rounds, so distinct arguments in one round need no override. The size
+test delays delivery of real tool frames by 30 ms to make arrival measurable;
+it does not fabricate those frames.
+
+`Checking…` is a pending call after an idle-turn signal, before REST settles it.
+`Outcome unknown` requires a recovery outcome, not a disconnection. Both use
+labelled injected frames through `page.routeWebSocket` on the real facade
+socket. Missing-result availability also uses an injected descriptor because
+the current Session marks every successful return captured. Loading and failed
+loading use a delayed history response and an injected envelope missing the
+requested row. Visibility-revision invalidation uses an injected update while
+a real View all response is held. Test names, screenshot filenames and the
+visual index identify injected cases.
+
+Every test captures console errors, page errors, failed requests and HTTP
+errors through `capture.ts`. The current, switch-off and old-host cells also
+inspect every received socket frame and every session `get`/`messages` body
+for internal fields, tool_call chunks, checkpoint summaries, private values and
+unmasked fixture sentinels. Raw payload logs go to `.local/b3/logs/`. The old
+Session keeps its legacy payloads and is checked for compatibility only.
+
+The visual matrix captures light and dark themes at 1280 and 390 px viewport
+widths. PNGs go to `.local/b3/visual/<state>-<width>-<theme>.png`.
+`.local/b3/visual/index.json` records each shot's source, row height, caret/Copy
+and focus-ring clipping, and muted/status-text contrast. Contact sheets go to
+`.local/b3/sheets/`, grouped by tools, panels, approvals, dialogs, load states
+and recovery. Measurements are saved before clipping or contrast assertions
+fail. Thinking is phase 2 and is outside this matrix.
+
 ## Adding tests
 
 - Use `helpers/login.ts` (`loginAsAdmin`, `navigateHostTo`) to skip boilerplate.

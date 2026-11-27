@@ -100,6 +100,9 @@ entries:
         value: "32000"
       - name: max_message_limit
         value: "500"
+      # Call-details demo default. The environment still overrides this value.
+      - name: session_show_tool_details
+        value: full
       - name: gc_interval
         value: 300s
 

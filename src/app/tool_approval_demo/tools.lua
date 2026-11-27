@@ -37,14 +37,6 @@ local function fail_record(_params: any)
     error("TOOL_DETAILS_FIXTURE_FAILURE: The fixture record could not be read. No record was changed.")
 end
 
-local function slow_record(params: any)
-    local time = require("time")
-    time.sleep("20s")
-    local result = ran("slow_record", "record", params)
-    result.wait_seconds = 20
-    return result
-end
-
 local function big_result(params: any)
     local result = ran("big_result", "record", params)
     result.payload = {
@@ -60,6 +52,27 @@ local function big_result(params: any)
         },
     }
     return result
+end
+
+-- Call-details fixtures never echo sensitive inputs into the model's answer.
+local function masked_email(_params: any)
+    return { saved = true, label = "Public contact" }
+end
+
+local function sensitive_result(_params: any)
+    return { token = "B3_SENSITIVE_RESULT_8f02", label = "Public result", count = 7 }
+end
+
+local function private_details(_params: any)
+    return { completed = true }
+end
+
+local function hidden_result(params: any)
+    return { record = params.record, value = "B3_HIDDEN_RESULT_927c" }
+end
+
+local function text_result(_params: any)
+    return { text = '<img src="https://invalid.example/b3.png"><script>window.__b3Executed=true</script><artifact>plain</artifact>', unicode = "visible\226\128\174text\226\128\139" }
 end
 
 -- The page of the forged-decision fixture. Its script waits. A test calls
@@ -159,6 +172,10 @@ return {
     write_audit = write_audit,
     make_forger = make_forger,
     fail_record = fail_record,
-    slow_record = slow_record,
     big_result = big_result,
+    masked_email = masked_email,
+    sensitive_result = sensitive_result,
+    private_details = private_details,
+    hidden_result = hidden_result,
+    text_result = text_result,
 }

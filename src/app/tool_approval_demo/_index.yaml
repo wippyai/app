@@ -220,7 +220,7 @@ entries:
           },
           "required": ["record"]
         }
-    source: file://tools.lua
+    source: file://slow_record.lua
     modules:
       - time
     method: slow_record
@@ -249,6 +249,134 @@ entries:
     method: big_result
     pool:
       size: 4
+
+  # Phase 1: writeOnly is masked before previews, summaries and history.
+  - name: masked_email_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Save masked email
+      llm_alias: masked_email
+      llm_description: Saves a fixture contact without returning its email.
+      input_schema: |
+        { "type": "object", "properties": {
+          "email": { "type": "string", "writeOnly": true },
+          "label": { "type": "string" }
+        }, "required": ["email", "label"] }
+    source: file://tools.lua
+    modules: []
+    method: masked_email
+
+  # Phase 1 old-Host control: its existing approval viewer renders masked text.
+  - name: masked_email_approval_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Approve masked email
+      llm_alias: masked_email_approval
+      llm_description: Saves a masked fixture contact after approval.
+      approval: required
+      input_schema: |
+        { "type": "object", "properties": {
+          "email": { "type": "string", "writeOnly": true },
+          "label": { "type": "string" }
+        }, "required": ["email", "label"] }
+    source: file://tools.lua
+    modules: []
+    method: masked_email
+
+  # Phase 1: sensitive result paths belong in meta.display.sensitive.result.
+  - name: sensitive_result_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Read sensitive result
+      llm_alias: sensitive_result
+      llm_description: Returns a masked token and public result fields.
+      display:
+        sensitive:
+          result: ["/token"]
+      input_schema: |
+        { "type": "object", "properties": { "record": { "type": "string" } }, "required": ["record"] }
+    source: file://tools.lua
+    modules: []
+    method: sensitive_result
+
+  # Phase 1: empty string and explicit JSON null stay distinct.
+  - name: empty_result_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Empty fixture result
+      llm_alias: empty_result
+      llm_description: Returns the requested empty fixture value.
+      input_schema: |
+        { "type": "object", "properties": { "kind": { "type": "string", "enum": ["empty", "null"] } }, "required": ["kind"] }
+    source: file://empty_result.lua
+    modules: [json]
+    method: empty_result
+
+  # Phase 1: unmarked private call. Use plain/summary or require: marked agents.
+  - name: private_details_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: B3 private details sentinel
+      llm_alias: private_details_sentinel
+      llm_description: Runs an invisible fixture operation without approval.
+      private: true
+      input_schema: |
+        { "type": "object", "properties": { "entry": { "type": "string" } }, "required": ["entry"] }
+    source: file://tools.lua
+    modules: []
+    method: private_details
+
+  # Phase 1: a tool layer hides the result while arguments remain readable.
+  - name: hidden_result_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Hidden fixture result
+      llm_alias: hidden_result
+      llm_description: Returns a result hidden by the tool display layer.
+      display:
+        result: none
+      input_schema: |
+        { "type": "object", "properties": { "record": { "type": "string" } }, "required": ["record"] }
+    source: file://tools.lua
+    modules: []
+    method: hidden_result
+
+  # Phase 1: full result permission must not expose a hidden error.
+  - name: hidden_error_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Hidden fixture error
+      llm_alias: hidden_error
+      llm_description: Fails with its error part hidden.
+      display:
+        result: full
+        error: none
+      input_schema: |
+        { "type": "object", "properties": { "record": { "type": "string" } }, "required": ["record"] }
+    source: file://tools.lua
+    modules: []
+    method: fail_record
+
+  # Phase 1: escaped text must never create HTML elements or network requests.
+  - name: text_result_tool
+    kind: function.lua
+    meta:
+      type: tool
+      title: Text fixture result
+      llm_alias: text_result
+      llm_description: Returns HTML and invisible characters as plain fixture text.
+      input_schema: |
+        { "type": "object", "properties": { "record": { "type": "string" } }, "required": ["record"] }
+    source: file://tools.lua
+    modules: []
+    method: text_result
 
   # Private and marked: its call has no tool chip, and it still asks.
   - name: write_audit_tool
@@ -320,6 +448,15 @@ entries:
       - app.tool_approval_demo:fail_record_tool
       - app.tool_approval_demo:slow_record_tool
       - app.tool_approval_demo:big_result_tool
+      # Phase 1 call-details scenarios for the approval fixture agents.
+      - app.tool_approval_demo:masked_email_tool
+      - app.tool_approval_demo:masked_email_approval_tool
+      - app.tool_approval_demo:sensitive_result_tool
+      - app.tool_approval_demo:empty_result_tool
+      - app.tool_approval_demo:private_details_tool
+      - app.tool_approval_demo:hidden_result_tool
+      - app.tool_approval_demo:hidden_error_tool
+      - app.tool_approval_demo:text_result_tool
 
   # Agent A: the trait with its defaults (require marked, approve_all off,
   # timeout 900 s, 10 requests per turn). The steering trait lets a person type
@@ -488,6 +625,40 @@ entries:
       - app.tool_approval_demo:fail_record_tool
       - app.tool_approval_demo:slow_record_tool
       - app.tool_approval_demo:big_result_tool
+
+      # Phase 1 plain scenarios also run on the published Session cell.
+      - app.tool_approval_demo:masked_email_tool
+      - app.tool_approval_demo:sensitive_result_tool
+      - app.tool_approval_demo:empty_result_tool
+      - app.tool_approval_demo:private_details_tool
+      - app.tool_approval_demo:hidden_result_tool
+      - app.tool_approval_demo:hidden_error_tool
+      - app.tool_approval_demo:text_result_tool
+
+  # Phase 1 agent layer: summary arguments/results, hidden error, readable time.
+  # The hidden_result tool additionally supplies the hidden-part-line case.
+  - name: summary_agent
+    kind: registry.entry
+    meta:
+      name: call-details-summary-fixture-agent
+      type: agent.gen1
+      title: Call Details Summary Fixture
+      comment: Deterministic agent with summary-only call details
+      icon: tabler:list-details
+      group: Test fixtures
+      class: [public]
+    prompt: Say lookup one or hidden details for summary-only tool details.
+    model: tool-approval-deterministic
+    max_tokens: 4096
+    traits:
+      - id: wippy.session.traits:call_details
+        context:
+          arguments: summary
+          result: summary
+          error: none
+          timing: summary
+      - id: wippy.session.traits:tool_approval
+      - id: app.tool_approval_demo:fixture_tools
 
   # Scenario 18 of EE2-2713: a real model (the one the app's own agents use)
   # with the approval trait defaults and two fixture tools. lookup_record is not

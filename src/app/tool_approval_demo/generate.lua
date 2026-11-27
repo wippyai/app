@@ -20,6 +20,12 @@ local MAKE_FORGER_TOOL = "app.tool_approval_demo:make_forger_tool"
 local FAIL_RECORD_TOOL = "app.tool_approval_demo:fail_record_tool"
 local SLOW_RECORD_TOOL = "app.tool_approval_demo:slow_record_tool"
 local BIG_RESULT_TOOL = "app.tool_approval_demo:big_result_tool"
+local MASKED_EMAIL_TOOL = "app.tool_approval_demo:masked_email_tool"
+local SENSITIVE_RESULT_TOOL = "app.tool_approval_demo:sensitive_result_tool"
+local EMPTY_RESULT_TOOL = "app.tool_approval_demo:empty_result_tool"
+local PRIVATE_DETAILS_TOOL = "app.tool_approval_demo:private_details_tool"
+local HIDDEN_RESULT_TOOL = "app.tool_approval_demo:hidden_result_tool"
+local TEXT_RESULT_TOOL = "app.tool_approval_demo:text_result_tool"
 -- The delegate tool of an agent is named by its `delegates` entry.
 local DELEGATE_TOOL_NAME = "ask_analyst"
 
@@ -386,6 +392,60 @@ local function handler(contract_args: any): any
             })
         end
         return reply("Looked up all four fixture records.")
+    end
+
+    -- Phase 1 call-details phrases. Keep all existing scripts above unchanged.
+    if string.find(lower, "fifty calls", 1, true) then
+        if done == 0 then
+            local wanted: {Wanted} = {}
+            -- One round, two model steps including the final reply. Distinct
+            -- arguments cannot trip the repeated-identical-round guard.
+            for number = 1, 50 do
+                table.insert(wanted, { tool = LOOKUP_RECORD_TOOL, arguments = { record = record("fifty", number) } })
+            end
+            return round("", wanted)
+        end
+        return reply("All 50 fixture calls finished.")
+    end
+
+    if string.find(lower, "invalid details", 1, true) then
+        if done == 0 then
+            return round("", { { tool = LOOKUP_RECORD_TOOL, arguments = { record = 42 } } })
+        end
+        return reply("The invalid fixture was not run.")
+    end
+
+    local details_tool = nil
+    local details_arguments: any = { record = record("details", 1) }
+    if string.find(lower, "masked email", 1, true) then
+        details_tool = MASKED_EMAIL_TOOL
+        details_arguments = { email = "b3-writeonly-41c9@example.test", label = "Public contact" }
+    elseif string.find(lower, "masked approval", 1, true) then
+        details_tool = "app.tool_approval_demo:masked_email_approval_tool"
+        details_arguments = { email = "b3-writeonly-41c9@example.test", label = "Public contact" }
+    elseif string.find(lower, "sensitive result", 1, true) then
+        details_tool = SENSITIVE_RESULT_TOOL
+    elseif string.find(lower, "empty details", 1, true) then
+        details_tool = EMPTY_RESULT_TOOL
+        details_arguments = { kind = "empty" }
+    elseif string.find(lower, "null details", 1, true) then
+        details_tool = EMPTY_RESULT_TOOL
+        details_arguments = { kind = "null" }
+    elseif string.find(lower, "private details", 1, true) then
+        details_tool = PRIVATE_DETAILS_TOOL
+        details_arguments = { entry = "B3_PRIVATE_ARGUMENT_61ad" }
+    elseif string.find(lower, "hidden details", 1, true) then
+        details_tool = HIDDEN_RESULT_TOOL
+    elseif string.find(lower, "hidden error", 1, true) then
+        details_tool = "app.tool_approval_demo:hidden_error_tool"
+    elseif string.find(lower, "text details", 1, true) then
+        details_tool = TEXT_RESULT_TOOL
+    end
+    if details_tool then
+        if done == 0 then
+            return round("", { { tool = details_tool, arguments = details_arguments } })
+        end
+        return reply("The details fixture finished.")
     end
 
     -- The analyst agent that "ask everything" delegates to. It answers the
